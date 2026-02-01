@@ -63,10 +63,14 @@ export async function handleJiraWebhook(
 
   switch (event) {
     case 'jira:issue_created':
-    case 'issue_created':
+  // Normalize Jira event key to standard "jira:*" format
+  const normalizedEvent =
+    event && event.startsWith('jira:') ? event : `jira:${event}`;
+
+  switch (normalizedEvent) {
+    case 'jira:issue_created':
       return handleIssueCreatedEvent(payload);
     case 'jira:issue_updated':
-    case 'issue_updated':
       return handleIssueUpdatedEvent(payload);
     default:
       console.log(`[Jira Webhook] Unhandled event: ${event}`);
