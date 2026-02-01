@@ -101,6 +101,7 @@ export class DefaultAgentRegistry implements AgentRegistry {
 
     // Score each adapter
     const scores: Array<{ adapter: AgentAdapter; score: number }> = [];
+    const taskType = this.inferTaskType(task);
 
     for (const [id, config] of this.configs) {
       if (!config.enabled) continue;
@@ -120,7 +121,6 @@ export class DefaultAgentRegistry implements AgentRegistry {
 
       // Task type matching
       if (config.taskTypes && config.taskTypes.length > 0) {
-        const taskType = this.inferTaskType(task);
         if (config.taskTypes.includes(taskType)) {
           score += 20;
         }
