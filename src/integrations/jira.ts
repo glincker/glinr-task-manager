@@ -62,8 +62,10 @@ export async function handleJiraWebhook(
   const payload = JSON.parse(rawBody);
 
   switch (event) {
+    case 'jira:issue_created':
     case 'issue_created':
       return handleIssueCreatedEvent(payload);
+    case 'jira:issue_updated':
     case 'issue_updated':
       return handleIssueUpdatedEvent(payload);
     default:
