@@ -12,8 +12,6 @@ import type { CreateTaskInput } from '../types/task.js';
  * - issue.updated - Issue updated
  */
 
-// Label that triggers AI task creation
-const AI_TASK_LABEL = process.env.LINEAR_AI_TASK_LABEL || 'ai-task';
 const WEBHOOK_SECRET = process.env.LINEAR_WEBHOOK_SECRET || '';
 
 /**
