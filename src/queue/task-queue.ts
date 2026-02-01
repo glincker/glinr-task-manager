@@ -1,5 +1,5 @@
 import { Queue, Worker, Job } from 'bullmq';
-import type { Task, TaskResult, CreateTaskInput, TaskStatus } from '../types/task.js';
+import type { Task, TaskResult, CreateTaskInput, TaskStatusType } from '../types/task.js';
 import { getAgentRegistry } from '../adapters/registry.js';
 import { randomUUID } from 'crypto';
 
@@ -317,7 +317,7 @@ export function getTask(id: string): Task | undefined {
  * Get all tasks (paginated)
  */
 export function getTasks(options?: {
-  status?: TaskStatus;
+  status?: TaskStatusType;
   limit?: number;
   offset?: number;
 }): Task[] {
