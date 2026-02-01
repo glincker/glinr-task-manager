@@ -8,9 +8,9 @@ import type { Task, TaskResult, TaskArtifact } from '../types/task.js';
 
 // Regex patterns for artifact extraction
 // Defined at module scope to avoid recompilation
-const COMMIT_PATTERN = /commit\s+([a-f0-9]{7,40})/gi;
-const PR_PATTERN = /https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/g;
-const FILE_PATTERN = /(?:created|modified|edited|wrote)\s+(?:file\s+)?[`"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`"]?/gi;
+const COMMIT_PATTERN = /commit\s+([a-f0-9]{7,40})/i;
+const PR_PATTERN = /https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/;
+const FILE_PATTERN = /(?:created|modified|edited|wrote)\s+(?:file\s+)?[`"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`"]?/i;
 
 /**
  * OpenClaw Agent Adapter
