@@ -168,44 +168,71 @@ export class OpenClawAdapter implements AgentAdapter {
   }
 
   /**
-   * Build the full prompt for OpenClaw
+   * Build the full autonomous prompt for OpenClaw
    */
   private buildPrompt(task: Task): string {
-    const parts: string[] = [];
+    const repoName = task.repository?.split('/').pop() || 'project';
+    const issueNumber = task.sourceId || 'N/A';
 
-    // Add task context
-    if (task.repository) {
-      parts.push(`Repository: ${task.repository}`);
-    }
-    if (task.branch) {
-      parts.push(`Branch: ${task.branch}`);
-    }
-    if (task.sourceUrl) {
-      parts.push(`Source: ${task.sourceUrl}`);
-    }
-    if (task.labels.length > 0) {
-      parts.push(`Labels: ${task.labels.join(', ')}`);
-    }
+    return `You are an autonomous AI developer. Complete this task independently.
 
-    // Add title and description
-    parts.push(`\n## Task: ${task.title}`);
-    if (task.description) {
-      parts.push(`\n### Description:\n${task.description}`);
-    }
+## Task: ${task.title}
+${task.description ? `\n### Description\n${task.description}` : ''}
 
-    // Add the actual prompt/instructions
-    parts.push(`\n### Instructions:\n${task.prompt}`);
+### Source
+${task.sourceUrl ? `- Issue: ${task.sourceUrl}` : ''}
+${task.repository ? `- Repository: ${task.repository}` : ''}
+${task.labels.length > 0 ? `- Labels: ${task.labels.join(', ')}` : ''}
 
-    // Add structured output request
-    parts.push(`
-### Output Format:
-When you complete this task, please include:
-1. A summary of what you did
-2. List any files you created or modified
-3. List any commits you made (with SHA if applicable)
-4. Any follow-up items or concerns`);
+### Instructions
+${task.prompt}
 
-    return parts.join('\n');
+## Workflow (FOLLOW EXACTLY)
+
+1. **Setup**
+   \`\`\`bash
+   cd ~/openclaw-workdir/${repoName}
+   git fetch origin
+   git checkout main && git pull origin main
+   git checkout -b fix/issue-${issueNumber}
+   \`\`\`
+
+2. **Implement** - Make the necessary changes
+
+3. **Verify**
+   \`\`\`bash
+   pnpm install && pnpm build
+   \`\`\`
+   Fix any errors before proceeding.
+
+4. **Commit**
+   \`\`\`bash
+   git add -A
+   git commit -m "feat: <short description>
+
+   ${task.sourceId ? `Closes #${task.sourceId}` : ''}
+
+   Co-Authored-By: Glinr <bot@glincker.com>"
+   \`\`\`
+
+5. **Push & PR**
+   \`\`\`bash
+   git push -u origin HEAD
+   gh pr create --title "${task.title}" --body "Closes #${issueNumber}"
+   \`\`\`
+
+## Rules
+- Fix ALL build errors before committing
+- If blocked, explain clearly what's wrong
+- Never leave uncommitted changes
+- Keep commits atomic and focused
+
+## Output Required
+When done, report:
+1. Summary of changes
+2. Files modified
+3. PR URL (required)
+4. Any concerns`;
   }
 
   /**

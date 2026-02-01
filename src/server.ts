@@ -4,7 +4,9 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { handleGitHubWebhook } from './integrations/github.js';
 import { initTaskQueue, addTask, getTask, getTasks, closeTaskQueue } from './queue/task-queue.js';
+import { getDeadLetterQueue, retryDeadLetterTask, removeFromDeadLetterQueue } from './queue/failure-handler.js';
 import { getAgentRegistry } from './adapters/registry.js';
+import { startAllCronJobs, stopAllCronJobs, getHealthStatus } from './cron/index.js';
 import { CreateTaskSchema } from './types/task.js';
 
 const app = new Hono();
@@ -21,11 +23,13 @@ app.use(
 
 // Health check
 app.get('/health', (c) => {
+  const agentHealth = getHealthStatus();
   return c.json({
     status: 'ok',
     service: 'glinr-task-manager',
-    version: '0.1.0',
+    version: '0.2.0',
     timestamp: new Date().toISOString(),
+    agents: agentHealth,
   });
 });
 
@@ -33,8 +37,8 @@ app.get('/health', (c) => {
 app.get('/', (c) => {
   return c.json({
     name: 'GLINR Task Manager',
-    version: '0.1.0',
-    description: 'AI Agent Task Orchestration',
+    version: '0.2.0',
+    description: 'AI Agent Task Orchestration - Autonomous Mode',
     docs: '/docs',
     endpoints: {
       health: 'GET /health',
@@ -42,8 +46,12 @@ app.get('/', (c) => {
       createTask: 'POST /api/tasks',
       getTask: 'GET /api/tasks/:id',
       agents: 'GET /api/agents',
+      deadLetterQueue: 'GET /api/dlq',
+      retryDlqTask: 'POST /api/dlq/:id/retry',
       webhooks: {
         github: 'POST /webhooks/github',
+        jira: 'POST /webhooks/jira',
+        linear: 'POST /webhooks/linear',
       },
     },
   });
@@ -118,6 +126,41 @@ app.get('/api/tasks/:id', (c) => {
   }
 
   return c.json({ task });
+});
+
+// === Dead Letter Queue API ===
+
+// List dead letter queue tasks
+app.get('/api/dlq', (c) => {
+  const tasks = getDeadLetterQueue();
+  return c.json({
+    tasks,
+    count: tasks.length,
+  });
+});
+
+// Retry a task from DLQ
+app.post('/api/dlq/:id/retry', async (c) => {
+  const id = c.req.param('id');
+  const success = await retryDeadLetterTask(id);
+
+  if (!success) {
+    return c.json({ error: 'Task not found in dead letter queue' }, 404);
+  }
+
+  return c.json({ message: 'Task moved back to queue for retry' });
+});
+
+// Remove task from DLQ (manual resolution)
+app.delete('/api/dlq/:id', (c) => {
+  const id = c.req.param('id');
+  const success = removeFromDeadLetterQueue(id);
+
+  if (!success) {
+    return c.json({ error: 'Task not found in dead letter queue' }, 404);
+  }
+
+  return c.json({ message: 'Task removed from dead letter queue' });
 });
 
 // === Agent API ===
@@ -195,9 +238,11 @@ app.post('/webhooks/linear', async (c) => {
 // === Server Startup ===
 
 const PORT = parseInt(process.env.PORT || '3000');
+const ENABLE_CRON = process.env.ENABLE_CRON !== 'false'; // Default enabled
 
 async function main() {
   console.log('🚀 GLINR Task Manager starting...');
+  console.log('   Mode: Autonomous');
 
   // Initialize task queue
   try {
@@ -251,6 +296,14 @@ async function main() {
     console.log('ℹ️  Claude Code CLI not found, skipping adapter');
   }
 
+  // Start cron jobs for autonomous operation
+  if (ENABLE_CRON) {
+    startAllCronJobs();
+    console.log('✅ Cron jobs started (autonomous mode)');
+  } else {
+    console.log('ℹ️  Cron jobs disabled (ENABLE_CRON=false)');
+  }
+
   // Start server
   serve({
     fetch: app.fetch,
@@ -261,19 +314,29 @@ async function main() {
   console.log(`\nEndpoints:`);
   console.log(`  📋 Tasks:    http://localhost:${PORT}/api/tasks`);
   console.log(`  🤖 Agents:   http://localhost:${PORT}/api/agents`);
+  console.log(`  💀 DLQ:      http://localhost:${PORT}/api/dlq`);
   console.log(`  🔗 GitHub:   http://localhost:${PORT}/webhooks/github`);
   console.log(`  ❤️  Health:   http://localhost:${PORT}/health`);
+
+  if (ENABLE_CRON) {
+    console.log(`\nAutonomous Features:`);
+    console.log(`  🔄 Issue Poller: Every 5 minutes`);
+    console.log(`  💓 Heartbeat: Every 1 minute`);
+    console.log(`  🕐 Stale Checker: Every 5 minutes`);
+  }
 }
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n⏳ Shutting down...');
+  stopAllCronJobs();
   await closeTaskQueue();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('\n⏳ Shutting down...');
+  stopAllCronJobs();
   await closeTaskQueue();
   process.exit(0);
 });
