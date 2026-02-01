@@ -46,7 +46,7 @@ describe('OpenClawAdapter', () => {
   });
 
   it('handles multiple artifacts of same type', () => {
-     const message = `
+    const message = `
       commit 1111111
       commit 2222222
     `;
