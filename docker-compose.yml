@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Task Manager API
+  task-manager:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - REDIS_URL=redis://redis:6379
+      - OPENCLAW_BASE_URL=${OPENCLAW_BASE_URL:-http://host.docker.internal:18789}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - OPENCLAW_WORKING_DIR=/workspace
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+      - GITHUB_AI_TASK_LABEL=${GITHUB_AI_TASK_LABEL:-ai-task}
+      - TASK_CONCURRENCY=${TASK_CONCURRENCY:-2}
+    volumes:
+      - workspace:/workspace
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # Redis for task queue
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+  # Optional: Redis Commander (web UI for Redis)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    profiles:
+      - tools
+
+volumes:
+  redis-data:
+  workspace:

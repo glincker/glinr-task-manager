@@ -1,0 +1,304 @@
+import type {
+  AgentAdapter,
+  AgentCapability,
+  AgentConfig,
+  AgentHealth,
+  AgentTaskStatus,
+} from '../types/agent.js';
+import type { Task, TaskResult, TaskArtifact } from '../types/task.js';
+
+/**
+ * OpenClaw Agent Adapter
+ *
+ * Communicates with OpenClaw gateway via REST API to execute tasks.
+ * OpenClaw is an autonomous AI agent that can code, browse, manage files, etc.
+ *
+ * @see https://docs.openclaw.ai/
+ */
+export class OpenClawAdapter implements AgentAdapter {
+  readonly type = 'openclaw';
+  readonly name = 'OpenClaw';
+  readonly description = 'Open-source autonomous AI agent with 124k+ GitHub stars';
+  readonly capabilities: AgentCapability[] = [
+    'code_generation',
+    'code_review',
+    'bug_fix',
+    'testing',
+    'documentation',
+    'refactoring',
+    'research',
+    'git_operations',
+    'file_operations',
+    'web_browsing',
+    'api_calls',
+  ];
+
+  private readonly baseUrl: string;
+  private readonly token: string;
+  private readonly workingDir: string;
+  private readonly timeout: number;
+
+  constructor(config: AgentConfig) {
+    const { baseUrl, token, workingDir, timeout } = config.config as {
+      baseUrl?: string;
+      token?: string;
+      workingDir?: string;
+      timeout?: number;
+    };
+
+    this.baseUrl = baseUrl || process.env.OPENCLAW_BASE_URL || 'http://localhost:18789';
+    this.token = token || process.env.OPENCLAW_GATEWAY_TOKEN || '';
+    this.workingDir = workingDir || process.env.OPENCLAW_WORKING_DIR || '~/openclaw-workdir';
+    this.timeout = timeout || 300000; // 5 minutes default
+
+    if (!this.token) {
+      throw new Error('OpenClaw gateway token is required');
+    }
+  }
+
+  /**
+   * Check if OpenClaw gateway is healthy
+   */
+  async healthCheck(): Promise<AgentHealth> {
+    const startTime = Date.now();
+    try {
+      const response = await fetch(`${this.baseUrl}/api/health`, {
+        method: 'GET',
+        headers: this.getHeaders(),
+        signal: AbortSignal.timeout(5000),
+      });
+
+      const latencyMs = Date.now() - startTime;
+
+      if (response.ok) {
+        return {
+          healthy: true,
+          latencyMs,
+          message: 'OpenClaw gateway is healthy',
+          lastChecked: new Date(),
+        };
+      }
+
+      return {
+        healthy: false,
+        latencyMs,
+        message: `Gateway returned ${response.status}: ${response.statusText}`,
+        lastChecked: new Date(),
+      };
+    } catch (error) {
+      return {
+        healthy: false,
+        latencyMs: Date.now() - startTime,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        lastChecked: new Date(),
+      };
+    }
+  }
+
+  /**
+   * Execute a task via OpenClaw
+   */
+  async executeTask(task: Task): Promise<TaskResult> {
+    const startTime = Date.now();
+
+    try {
+      // Build the prompt with context
+      const fullPrompt = this.buildPrompt(task);
+
+      // Send to OpenClaw gateway
+      const response = await fetch(`${this.baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          message: fullPrompt,
+          options: {
+            workingDir: task.repository
+              ? `${this.workingDir}/${task.repository.split('/').pop()}`
+              : this.workingDir,
+            // Request structured output for better parsing
+            systemPrompt: this.getSystemPrompt(task),
+          },
+        }),
+        signal: AbortSignal.timeout(this.timeout),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return {
+          success: false,
+          output: '',
+          duration: Date.now() - startTime,
+          error: {
+            code: `HTTP_${response.status}`,
+            message: `OpenClaw API error: ${response.status} - ${errorText}`,
+          },
+        };
+      }
+
+      const result = await response.json() as OpenClawResponse;
+
+      // Parse the response and extract artifacts
+      const artifacts = this.extractArtifacts(result);
+
+      return {
+        success: true,
+        output: result.message || result.response || '',
+        artifacts,
+        tokensUsed: result.usage
+          ? {
+              input: result.usage.prompt_tokens || 0,
+              output: result.usage.completion_tokens || 0,
+              total: result.usage.total_tokens || 0,
+            }
+          : undefined,
+        duration: Date.now() - startTime,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        output: '',
+        duration: Date.now() - startTime,
+        error: {
+          code: 'EXECUTION_ERROR',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      };
+    }
+  }
+
+  /**
+   * Build the full prompt for OpenClaw
+   */
+  private buildPrompt(task: Task): string {
+    const parts: string[] = [];
+
+    // Add task context
+    if (task.repository) {
+      parts.push(`Repository: ${task.repository}`);
+    }
+    if (task.branch) {
+      parts.push(`Branch: ${task.branch}`);
+    }
+    if (task.sourceUrl) {
+      parts.push(`Source: ${task.sourceUrl}`);
+    }
+    if (task.labels.length > 0) {
+      parts.push(`Labels: ${task.labels.join(', ')}`);
+    }
+
+    // Add title and description
+    parts.push(`\n## Task: ${task.title}`);
+    if (task.description) {
+      parts.push(`\n### Description:\n${task.description}`);
+    }
+
+    // Add the actual prompt/instructions
+    parts.push(`\n### Instructions:\n${task.prompt}`);
+
+    // Add structured output request
+    parts.push(`
+### Output Format:
+When you complete this task, please include:
+1. A summary of what you did
+2. List any files you created or modified
+3. List any commits you made (with SHA if applicable)
+4. Any follow-up items or concerns`);
+
+    return parts.join('\n');
+  }
+
+  /**
+   * System prompt for structured task execution
+   */
+  private getSystemPrompt(task: Task): string {
+    return `You are executing a task from an automated task queue.
+
+Task ID: ${task.id}
+Source: ${task.source}
+Priority: ${task.priority}
+
+Guidelines:
+- Focus on completing the specific task requested
+- Make atomic, well-documented changes
+- Commit with clear messages referencing the task
+- Report any blockers or questions clearly
+- Do not make changes outside the scope of this task`;
+  }
+
+  /**
+   * Extract artifacts (commits, PRs, files) from OpenClaw response
+   */
+  private extractArtifacts(result: OpenClawResponse): TaskArtifact[] {
+    const artifacts: TaskArtifact[] = [];
+
+    // Parse the response text for commits
+    const commitPattern = /commit\s+([a-f0-9]{7,40})/gi;
+    let match;
+    while ((match = commitPattern.exec(result.message || '')) !== null) {
+      artifacts.push({
+        type: 'commit',
+        sha: match[1],
+      });
+    }
+
+    // Parse for PR URLs
+    const prPattern = /https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/g;
+    while ((match = prPattern.exec(result.message || '')) !== null) {
+      artifacts.push({
+        type: 'pull_request',
+        url: match[0],
+        metadata: {
+          owner: match[1],
+          repo: match[2],
+          number: parseInt(match[3]),
+        },
+      });
+    }
+
+    // Parse for file paths (simple heuristic)
+    const filePattern = /(?:created|modified|edited|wrote)\s+(?:file\s+)?[`"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`"]?/gi;
+    while ((match = filePattern.exec(result.message || '')) !== null) {
+      artifacts.push({
+        type: 'file',
+        path: match[1],
+      });
+    }
+
+    // Add any artifacts from structured response
+    if (result.artifacts) {
+      artifacts.push(...result.artifacts);
+    }
+
+    return artifacts;
+  }
+
+  /**
+   * Get request headers
+   */
+  private getHeaders(): HeadersInit {
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.token}`,
+    };
+  }
+}
+
+// OpenClaw API response type
+interface OpenClawResponse {
+  message?: string;
+  response?: string;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+  artifacts?: TaskArtifact[];
+}
+
+/**
+ * Factory function for creating OpenClaw adapters
+ */
+export function createOpenClawAdapter(config: AgentConfig): AgentAdapter {
+  return new OpenClawAdapter(config);
+}
