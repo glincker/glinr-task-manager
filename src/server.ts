@@ -12,7 +12,13 @@ import { CreateTaskSchema } from './types/task.js';
 const app = new Hono();
 
 // Middleware
-app.use('*', logger());
+const log = logger();
+app.use('*', (c, next) => {
+  if (c.req.path === '/health') {
+    return next();
+  }
+  return log(c, next);
+});
 app.use(
   '*',
   cors({
