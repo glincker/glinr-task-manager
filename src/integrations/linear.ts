@@ -30,15 +30,15 @@ export function verifyLinearSignature(
     return false;
   }
 
-  const expectedSignature = `sha256=${createHmac('sha256', WEBHOOK_SECRET)
+  const expectedSignature = createHmac('sha256', WEBHOOK_SECRET)
     .update(payload)
-    .digest('hex')}`;
+    .digest('hex');
 
   try {
-    return timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature)
-    );
+    const providedSignatureBuffer = Buffer.from(signature, 'hex');
+    const expectedSignatureBuffer = Buffer.from(expectedSignature, 'hex');
+
+    return timingSafeEqual(providedSignatureBuffer, expectedSignatureBuffer);
   } catch {
     return false;
   }
