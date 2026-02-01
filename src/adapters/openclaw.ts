@@ -3,7 +3,6 @@ import type {
   AgentCapability,
   AgentConfig,
   AgentHealth,
-  AgentTaskStatus,
 } from '../types/agent.js';
 import type { Task, TaskResult, TaskArtifact } from '../types/task.js';
 
@@ -303,7 +302,7 @@ Guidelines:
   /**
    * Get request headers
    */
-  private getHeaders(): HeadersInit {
+  private getHeaders(): Record<string, string> {
     return {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${this.token}`,
