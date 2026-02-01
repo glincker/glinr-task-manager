@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { handleGitHubWebhook } from './integrations/github.js';
+import { handleLinearWebhook } from './integrations/linear.js';
 import { initTaskQueue, addTask, getTask, getTasks, closeTaskQueue } from './queue/task-queue.js';
 import { getDeadLetterQueue, retryDeadLetterTask, removeFromDeadLetterQueue } from './queue/failure-handler.js';
 import { getAgentRegistry } from './adapters/registry.js';
@@ -229,10 +230,31 @@ app.post('/webhooks/jira', async (c) => {
   return c.json({ message: 'Jira webhook not yet implemented' }, 501);
 });
 
-// Linear webhook (placeholder)
+// Linear webhook
 app.post('/webhooks/linear', async (c) => {
-  // TODO: Implement Linear webhook handler
-  return c.json({ message: 'Linear webhook not yet implemented' }, 501);
+  try {
+    const taskInput = await handleLinearWebhook(c);
+
+    if (!taskInput) {
+      return c.json({ message: 'Webhook received, no task created' });
+    }
+
+    const task = await addTask(taskInput);
+
+    return c.json({
+      message: 'Task created from Linear webhook',
+      task,
+    });
+  } catch (error) {
+    console.error('[Webhook] Linear error:', error);
+    return c.json(
+      {
+        error: 'Webhook processing failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
+      error instanceof Error && error.message.includes('signature') ? 401 : 500
+    );
+  }
 });
 
 // === Server Startup ===
