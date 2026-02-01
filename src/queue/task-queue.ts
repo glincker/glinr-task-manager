@@ -2,6 +2,7 @@ import { Queue, Worker, Job } from 'bullmq';
 import type { Task, TaskResult, CreateTaskInput, TaskStatusType } from '../types/task.js';
 import { getAgentRegistry } from '../adapters/registry.js';
 import { randomUUID } from 'crypto';
+import { postResultToSource } from './notifications.js';
 
 /**
  * Task Queue Manager
@@ -14,6 +15,7 @@ import { randomUUID } from 'crypto';
  */
 
 const QUEUE_NAME = 'ai-tasks';
+const NOTIFICATION_QUEUE_NAME = 'ai-task-notifications';
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
 // Connection config
@@ -26,6 +28,10 @@ const connection = {
 // Task queue instance
 let taskQueue: Queue<Task> | null = null;
 let taskWorker: Worker<Task, TaskResult> | null = null;
+
+// Notification queue instance
+let notificationQueue: Queue<{ task: Task; result: TaskResult }> | null = null;
+let notificationWorker: Worker<{ task: Task; result: TaskResult }, void> | null = null;
 
 // In-memory task store (replace with DB in production)
 const taskStore = new Map<string, Task>();
@@ -131,13 +137,37 @@ export async function initTaskQueue(): Promise<void> {
     }
   });
 
+  // Create notification queue
+  notificationQueue = new Queue(NOTIFICATION_QUEUE_NAME, {
+    connection,
+    defaultJobOptions: {
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 2000 },
+      removeOnComplete: { count: 100 },
+      removeOnFail: { count: 500 },
+    },
+  });
+
+  // Create notification worker
+  notificationWorker = new Worker(
+    NOTIFICATION_QUEUE_NAME,
+    async (job) => {
+      const { task, result } = job.data;
+      await postResultToSource(task, result);
+    },
+    {
+      connection,
+      concurrency: 5, // Higher concurrency for IO bound tasks
+    }
+  );
+
   console.log('[Queue] Task queue initialized');
 }
 
 /**
  * Process a task
  */
-async function processTask(job: Job<Task>): Promise<TaskResult> {
+export async function processTask(job: Job<Task>): Promise<TaskResult> {
   const task = job.data;
 
   console.log(`[Queue] Processing task ${task.id}: ${task.title}`);
@@ -173,89 +203,16 @@ async function processTask(job: Job<Task>): Promise<TaskResult> {
 
   if (result.success) {
     // Post results back to source (e.g., GitHub comment)
-    await postResultToSource(task, result);
+    if (notificationQueue) {
+      await notificationQueue.add('notify-source', { task, result });
+    } else {
+      console.warn('[Queue] Notification queue not initialized, falling back to direct call');
+      // Fallback for safety/testing without queue init
+      await postResultToSource(task, result);
+    }
   }
 
   return result;
-}
-
-/**
- * Post task result back to the source
- */
-async function postResultToSource(task: Task, result: TaskResult): Promise<void> {
-  if (task.source === 'github_issue' || task.source === 'github_pr') {
-    await postGitHubComment(task, result);
-  }
-  // Add other integrations here (Jira, Linear, etc.)
-}
-
-/**
- * Post a comment on GitHub with task results
- */
-async function postGitHubComment(task: Task, result: TaskResult): Promise<void> {
-  const token = process.env.GITHUB_TOKEN;
-  if (!token || !task.repository || !task.sourceId) {
-    console.log('[GitHub] Missing token or task info, skipping comment');
-    return;
-  }
-
-  const [owner, repo] = task.repository.split('/');
-  const issueNumber = parseInt(task.sourceId);
-
-  // Build comment body
-  let body = `## AI Task Result\n\n`;
-  body += `**Status:** ${result.success ? '✅ Completed' : '❌ Failed'}\n\n`;
-
-  if (result.output) {
-    body += `### Summary\n\n${result.output}\n\n`;
-  }
-
-  if (result.artifacts && result.artifacts.length > 0) {
-    body += `### Artifacts\n\n`;
-    for (const artifact of result.artifacts) {
-      if (artifact.type === 'commit') {
-        body += `- Commit: \`${artifact.sha}\`\n`;
-      } else if (artifact.type === 'pull_request') {
-        body += `- Pull Request: ${artifact.url}\n`;
-      } else if (artifact.type === 'file') {
-        body += `- File: \`${artifact.path}\`\n`;
-      }
-    }
-    body += '\n';
-  }
-
-  if (result.error) {
-    body += `### Error\n\n\`\`\`\n${result.error.message}\n\`\`\`\n\n`;
-  }
-
-  if (result.duration) {
-    body += `*Completed in ${(result.duration / 1000).toFixed(1)}s*\n`;
-  }
-
-  body += `\n---\n*Posted by [GLINR Task Manager](https://github.com/GLINCKER/glinr-task-manager)*`;
-
-  try {
-    const response = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'glinr-task-manager',
-        },
-        body: JSON.stringify({ body }),
-      }
-    );
-
-    if (!response.ok) {
-      console.error('[GitHub] Failed to post comment:', await response.text());
-    } else {
-      console.log(`[GitHub] Posted result to issue #${issueNumber}`);
-    }
-  } catch (error) {
-    console.error('[GitHub] Error posting comment:', error);
-  }
 }
 
 /**
@@ -370,6 +327,14 @@ export async function closeTaskQueue(): Promise<void> {
   if (taskQueue) {
     await taskQueue.close();
     taskQueue = null;
+  }
+  if (notificationWorker) {
+    await notificationWorker.close();
+    notificationWorker = null;
+  }
+  if (notificationQueue) {
+    await notificationQueue.close();
+    notificationQueue = null;
   }
   console.log('[Queue] Task queue closed');
 }
