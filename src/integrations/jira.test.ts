@@ -1,17 +1,14 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
+
+// Set environment variables before module import using vi.hoisted
+vi.hoisted(() => {
+  process.env.JIRA_WEBHOOK_SECRET = 'test-secret';
+  process.env.JIRA_AI_TASK_LABEL = 'ai-task';
+});
+
 import { handleJiraWebhook, verifyJiraToken } from './jira.js';
 
 describe('Jira Integration', () => {
-  const originalEnv = process.env;
-
-  beforeEach(() => {
-    vi.resetModules();
-    process.env = { ...originalEnv, JIRA_WEBHOOK_SECRET: 'test-secret', JIRA_AI_TASK_LABEL: 'ai-task' };
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
 
   const createMockContext = (queryToken: string, body: any) => {
     return {
