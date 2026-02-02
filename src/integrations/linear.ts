@@ -12,6 +12,21 @@ import type { CreateTaskInput } from '../types/task.js';
  * - issue.updated - Issue updated
  */
 
+// Linear API types (simplified)
+interface LinearLabel {
+  name: string;
+}
+
+interface LinearIssue {
+  id: string;
+  title: string;
+  description?: string | null;
+  url: string;
+  createdAt: string;
+  updatedAt?: string;
+  labels?: LinearLabel[] | null;
+}
+
 const WEBHOOK_SECRET = process.env.LINEAR_WEBHOOK_SECRET || '';
 
 /**
@@ -129,19 +144,4 @@ function extractLabels(issue: LinearIssue): string[] {
   }
   
   return [];
-}
-
-// Linear API types (simplified)
-interface LinearLabel {
-  name: string;
-}
-
-interface LinearIssue {
-  id: string;
-  title: string;
-  description?: string | null;
-  url: string;
-  createdAt: string;
-  updatedAt?: string;
-  labels?: LinearLabel[] | null;
 }
