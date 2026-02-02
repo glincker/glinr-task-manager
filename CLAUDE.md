@@ -5,14 +5,22 @@
 
 ---
 
-## CRITICAL: Anti-Hallucination Rules
+## CRITICAL: Validate Before Implementing
 
-1. **NEVER invent APIs** - Only use functions that exist in codebase
-2. **NEVER guess paths** - Verify files exist: `ls -la src/path/file.ts`
-3. **NEVER assume deps** - Check package.json first
-4. **NEVER make up types** - Use types from `src/types/`
+You CAN create new code. VALIDATE your approach first:
 
-**When uncertain: VERIFY, ASK, or DO LESS.**
+1. **New APIs** → Research via Context7 or docs first
+2. **New files** → Follow existing directory structure
+3. **New deps** → Justify in PR, propose before adding
+4. **New types** → Check `src/types/` first, create if needed
+
+**Workflow: RESEARCH → VALIDATE → IMPLEMENT → VERIFY**
+
+Use Context7 for library validation:
+```
+"BullMQ delayed jobs use context7"
+"Hono error handling middleware use context7"
+```
 
 ---
 

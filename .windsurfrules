@@ -7,20 +7,34 @@
 
 ---
 
-## STOP - READ BEFORE CODING
+## VALIDATION-FIRST APPROACH
 
-### Anti-Hallucination Protocol
+You CAN create new code. VALIDATE your approach first:
 
-1. **VERIFY** every file path exists: `ls -la <path>`
-2. **VERIFY** every function exists: `grep -r "fn" src/`
-3. **VERIFY** every dependency: `grep "pkg" package.json`
-4. **VERIFY** every type is defined in `src/types/`
+### Validation Workflow
 
-### If You're Not 100% Sure
+```
+┌─────────────────────────────────────────┐
+│  1. RESEARCH  → Docs, Context7, online  │
+│  2. VALIDATE  → Matches project style?  │
+│  3. IMPLEMENT → Write the code          │
+│  4. VERIFY    → Build & tests pass      │
+└─────────────────────────────────────────┘
+```
 
-- **STOP** and verify
-- **ASK** in a comment
-- **DO LESS** correctly
+### Use Context7 for Library Validation
+
+```
+"BullMQ worker concurrency use context7"
+"Hono CORS middleware use context7"
+"Vitest mocking patterns use context7"
+```
+
+### When Creating Something New
+
+- Research best practices online
+- Check existing code for patterns
+- Document reasoning in PR
 
 ---
 

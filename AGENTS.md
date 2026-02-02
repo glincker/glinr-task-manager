@@ -6,31 +6,49 @@ Instructions for AI agents (Jules, OpenClaw, GitHub Copilot, Claude Code) workin
 
 ## CRITICAL RULES - READ FIRST
 
-### DO NOT HALLUCINATE
+### VALIDATE, DON'T HALLUCINATE
 
-1. **Never invent APIs** - Only use functions/methods that exist in the codebase or documented libraries
-2. **Never guess file paths** - Always verify files exist before modifying
-3. **Never assume dependencies** - Check `package.json` before using any library
-4. **Never create fictional types** - Only use types defined in `src/types/`
+You CAN create new code, patterns, and solutions. But VALIDATE your approach first:
 
-### VERIFY BEFORE ACTING
+1. **New APIs/Functions** → Search docs or use Context7 to verify the approach
+2. **New file paths** → Check existing structure, follow conventions
+3. **New dependencies** → Research if needed, propose in PR description
+4. **New types** → Check `src/types/` first, create if genuinely needed
 
-```bash
-# Before modifying a file, verify it exists
-ls -la src/path/to/file.ts
+### VALIDATION WORKFLOW
 
-# Before using a dependency, verify it's installed
-grep "dependency-name" package.json
-
-# Before calling a function, verify it exists
-grep -r "functionName" src/
 ```
+┌─────────────────────────────────────────────────────────┐
+│  1. UNDERSTAND → Read existing code patterns            │
+│  2. RESEARCH   → Search docs, Context7, best practices  │
+│  3. VALIDATE   → Does this align with project style?    │
+│  4. IMPLEMENT  → Write the code                         │
+│  5. VERIFY     → Build passes, tests pass               │
+└─────────────────────────────────────────────────────────┘
+```
+
+### USE CONTEXT7 FOR VALIDATION
+
+When using external libraries, validate with Context7:
+
+```
+"BullMQ job progress tracking use context7"
+"Hono middleware error handling use context7"
+"Zod schema validation patterns use context7"
+```
+
+### SEMANTIC THINKING
+
+Before implementing, think through:
+- What existing patterns solve similar problems?
+- What would a senior engineer do here?
+- Is there a simpler approach?
 
 ### WHEN UNCERTAIN
 
-- **ASK** - Leave a comment in the PR asking for clarification
-- **STATE ASSUMPTIONS** - Document any assumptions you made
-- **DO LESS** - It's better to do less correctly than more incorrectly
+- **RESEARCH** - Search online for best practices
+- **STATE ASSUMPTIONS** - Document your reasoning in PR
+- **PROCEED WITH CONFIDENCE** - Don't block, validate and continue
 
 ---
 
@@ -321,35 +339,48 @@ Only use what's already in `package.json`:
 
 ---
 
-## ANTI-HALLUCINATION CHECKLIST
+## VALIDATION CHECKLIST
 
 Before submitting any code:
 
-- [ ] Every import path exists (verified with `ls`)
-- [ ] Every function called exists (verified with `grep`)
-- [ ] Every type used is defined in codebase
-- [ ] No made-up API endpoints
-- [ ] No fictional library methods
+- [ ] Researched approach (docs, Context7, existing code)
+- [ ] Follows existing project patterns
+- [ ] New dependencies justified in PR description
 - [ ] Build passes: `pnpm build`
 - [ ] Tests pass: `pnpm test`
+- [ ] PR explains reasoning for new patterns
 
-### Red Flags (STOP and verify)
-
-If you're about to write any of these, STOP and verify first:
+### Validation Examples
 
 ```typescript
-// RED FLAG: Importing from a path you haven't verified
-import { something } from '../utils/helper.js';  // Does this file exist?
+// CREATING NEW UTILITY
+// ✓ Checked src/utils/ - no similar utility exists
+// ✓ Researched best practice via Context7
+// ✓ Follows existing code style
+export function formatTaskOutput(result: TaskResult): string { }
 
-// RED FLAG: Using a method you haven't seen in the codebase
-queue.processAll();  // Is this a real BullMQ method?
+// USING EXTERNAL LIBRARY METHOD
+// ✓ Verified via "BullMQ job.moveToDelayed use context7"
+// ✓ Checked BullMQ docs for correct signature
+await job.moveToDelayed(Date.now() + 5000);
 
-// RED FLAG: Creating a new type without checking existing ones
-interface MyNewType { }  // Is there already a similar type?
-
-// RED FLAG: Calling an external API
-await fetch('https://api.example.com/...');  // Is this documented?
+// ADDING NEW TYPE
+// ✓ Checked src/types/ - no existing type fits
+// ✓ Follows naming convention (PascalCase, descriptive)
+interface WebhookPayload {
+  event: string;
+  data: unknown;
+}
 ```
+
+### Research Resources
+
+| Need | Use |
+|------|-----|
+| Library APIs | `"<library> <method> use context7"` |
+| Best practices | Search online, check popular repos |
+| TypeScript patterns | TypeScript handbook, existing code |
+| Project conventions | Read CLAUDE.md, existing files |
 
 ---
 
@@ -431,14 +462,19 @@ type AgentCapability = 'code_generation' | 'code_review' | 'bug_fix' | 'testing'
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                                                         │
-│   IF YOU'RE NOT 100% SURE SOMETHING EXISTS,             │
-│   VERIFY IT BEFORE USING IT.                            │
+│   YOU CAN CREATE NEW THINGS.                            │
+│   JUST VALIDATE YOUR APPROACH FIRST.                    │
 │                                                         │
-│   grep -r "functionName" src/                           │
-│   ls -la src/path/to/file.ts                            │
-│   cat package.json | grep "dependency"                  │
+│   Research → Validate → Implement → Verify              │
 │                                                         │
-│   WRONG CODE IS WORSE THAN NO CODE.                     │
+│   Use Context7 for library docs:                        │
+│   "<library> <feature> use context7"                    │
+│                                                         │
+│   Search online for best practices.                     │
+│   Check existing code for patterns.                     │
+│   Think like a senior engineer.                         │
+│                                                         │
+│   CONFIDENT, VALIDATED CODE > HESITANT CODE             │
 │                                                         │
 └─────────────────────────────────────────────────────────┘
 ```

@@ -3,25 +3,29 @@
 ## Project Context
 Task queue orchestrator for AI agents. TypeScript + Hono + BullMQ + Redis.
 
-## CRITICAL: Anti-Hallucination Rules
+## CRITICAL: Validate Your Approach
 
-1. NEVER invent APIs or functions - verify they exist first
-2. NEVER guess file paths - use `ls` to verify
-3. NEVER assume dependencies - check package.json
-4. NEVER create fictional types - use existing types from src/types/
+You CAN create new code. VALIDATE first:
 
-## Before Writing Code
+1. New APIs → Research via Context7 or official docs
+2. New files → Follow existing directory conventions
+3. New deps → Propose in PR description
+4. New types → Check src/types/ first, create if needed
 
-```bash
-# Verify file exists
-ls -la src/path/to/file.ts
+## Validation Workflow
 
-# Verify function exists
-grep -r "functionName" src/
-
-# Verify dependency
-grep "package-name" package.json
 ```
+RESEARCH → VALIDATE → IMPLEMENT → VERIFY
+```
+
+Use Context7 for library docs:
+```
+"BullMQ job.moveToDelayed use context7"
+"Hono middleware patterns use context7"
+"Zod schema inference use context7"
+```
+
+Search online for best practices when needed.
 
 ## Code Style
 
