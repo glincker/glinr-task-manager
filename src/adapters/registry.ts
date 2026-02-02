@@ -17,6 +17,7 @@ export class DefaultAgentRegistry implements AgentRegistry {
   private factories = new Map<string, AgentAdapterFactory>();
   private adapters = new Map<string, AgentAdapter>();
   private configs = new Map<string, AgentConfig>();
+  private cachedAdapterTypes: string[] | null = null;
 
   constructor() {
     // Register built-in adapters
@@ -29,6 +30,7 @@ export class DefaultAgentRegistry implements AgentRegistry {
    */
   registerAdapter(type: string, factory: AgentAdapterFactory): void {
     this.factories.set(type, factory);
+    this.cachedAdapterTypes = null;
   }
 
   /**
@@ -51,7 +53,11 @@ export class DefaultAgentRegistry implements AgentRegistry {
    * Get all registered adapter types
    */
   getAdapterTypes(): string[] {
-    return Array.from(this.factories.keys());
+    if (this.cachedAdapterTypes) {
+      return this.cachedAdapterTypes;
+    }
+    this.cachedAdapterTypes = Array.from(this.factories.keys());
+    return this.cachedAdapterTypes;
   }
 
   /**
