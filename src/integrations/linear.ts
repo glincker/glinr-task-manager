@@ -87,7 +87,7 @@ function handleIssueCreatedEvent(payload: any): CreateTaskInput | null {
     source: 'linear_issue' as const,
     sourceId: issue.id,
     sourceUrl: issue.url,
-    labels: [],
+    labels: extractLabels(issue),
     metadata: {
       issueId: issue.id,
       createdAt: issue.createdAt,
@@ -110,10 +110,25 @@ function handleIssueUpdatedEvent(payload: any): CreateTaskInput | null {
     source: 'linear_issue_update' as const,
     sourceId: issue.id,
     sourceUrl: issue.url,
-    labels: [],
+    labels: extractLabels(issue),
     metadata: {
       issueId: issue.id,
       updatedAt: issue.updatedAt,
     },
   };
+}
+
+/**
+ * Extract labels from Linear issue
+ * Linear issues can have labels as an array of label objects with a 'name' property
+ */
+function extractLabels(issue: any): string[] {
+  // Linear webhooks include labels as an array of label objects
+  if (issue.labels && Array.isArray(issue.labels)) {
+    return issue.labels
+      .map((label: any) => label?.name)
+      .filter((name: string | undefined) => name !== undefined);
+  }
+  
+  return [];
 }

@@ -61,8 +61,6 @@ export async function handleJiraWebhook(
 
   const payload = JSON.parse(rawBody);
 
-  switch (event) {
-    case 'jira:issue_created':
   // Normalize Jira event key to standard "jira:*" format
   const normalizedEvent =
     event && event.startsWith('jira:') ? event : `jira:${event}`;
