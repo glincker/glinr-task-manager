@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ThemeProvider } from './ThemeProvider';
 import { QueryProvider } from './QueryProvider';
+import { EventStreamProvider } from './EventStreamProvider';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -10,7 +11,9 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <QueryProvider>
       <ThemeProvider>
-        {children}
+        <EventStreamProvider>
+          {children}
+        </EventStreamProvider>
       </ThemeProvider>
     </QueryProvider>
   );
@@ -18,3 +21,4 @@ export function Providers({ children }: ProvidersProps) {
 
 export { ThemeProvider } from './ThemeProvider';
 export { QueryProvider } from './QueryProvider';
+export { EventStreamProvider } from './EventStreamProvider';

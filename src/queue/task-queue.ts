@@ -346,15 +346,54 @@ export function onTaskEvent(callback: (event: TaskEvent) => void): () => void {
   return () => eventCallbacks.delete(id);
 }
 
+// SSE broadcast callback (set from server.ts)
+let sseBroadcaster: ((eventType: string, data: any) => void) | null = null;
+
 /**
- * Emit event to all subscribers
+ * Register SSE broadcaster for real-time updates
+ */
+export function registerSSEBroadcaster(broadcaster: (eventType: string, data: any) => void): void {
+  sseBroadcaster = broadcaster;
+}
+
+/**
+ * Emit event to all subscribers and SSE
  */
 function emitEvent(event: TaskEvent): void {
+  // Call registered callbacks
   for (const callback of eventCallbacks.values()) {
     try {
       callback(event);
     } catch (error) {
       console.error('[Queue] Error in event callback:', error);
+    }
+  }
+
+  // Broadcast to SSE clients
+  if (sseBroadcaster) {
+    try {
+      sseBroadcaster(`task:${event.type}`, {
+        taskId: event.taskId,
+        task: {
+          id: event.task.id,
+          title: event.task.title,
+          status: event.task.status,
+          priority: event.task.priority,
+          source: event.task.source,
+          assignedAgent: event.task.assignedAgent,
+          createdAt: event.task.createdAt,
+          startedAt: event.task.startedAt,
+          completedAt: event.task.completedAt,
+        },
+        result: event.result ? {
+          success: event.result.success,
+          error: event.result.error?.message,
+        } : undefined,
+        progress: event.progress,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('[Queue] Error broadcasting SSE event:', error);
     }
   }
 }

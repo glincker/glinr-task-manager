@@ -78,24 +78,15 @@ pnpm dev:ui     # UI on :5173
 | Integrations API | Done | `GET /api/integrations/status` |
 | Summary Detail View | Done | `ui/src/features/summaries/views/SummaryDetail.tsx` |
 | Keyboard Shortcuts Modal | Done | `ui/src/components/shared/KeyboardShortcuts.tsx` |
+| SSE Event Stream | Done | `src/server.ts`, `ui/src/core/hooks/useEventStream.ts` |
+| Mobile Sidebar Drawer | Done | `ui/src/layouts/RootLayout.tsx` |
+| Export/Import Tasks | Done | `src/server.ts`, `ui/src/features/settings/views/Settings.tsx` |
 
 ---
 
 ## HIGH Priority Tasks
 
-### 1. SSE Event Stream (Backend)
-**Effort: Medium | Files: `src/routes/events.ts`**
-
-```typescript
-// GET /api/events (Server-Sent Events)
-// Stream: task:created, task:started, task:completed, task:failed
-// Replace polling for real-time updates
-// Include task summary in event payload
-```
-
----
-
-### 2. Settings API (Backend)
+### 1. Settings API (Backend)
 **Effort: Medium | Files: `src/routes/settings.ts`**
 
 ```typescript
@@ -109,34 +100,34 @@ pnpm dev:ui     # UI on :5173
 
 ## MEDIUM Priority Tasks
 
-### 3. Mobile Sidebar Drawer
-**Effort: Medium | Files: `ui/src/layouts/RootLayout.tsx`**
+### 2. Notification Preferences
+**Effort: Small | Files: Backend + UI**
 
-Responsive sidebar:
+User preferences for notifications:
 ```typescript
-// On mobile (< 768px):
-// - Hide sidebar by default
-// - Add hamburger menu in header
-// - Sidebar slides in as drawer from left
-// - Backdrop closes it
-// - Use sheet component from shadcn/ui
+// Backend:
+// - Store notification preferences in settings table
+// - Filter notifications based on preferences
+
+// UI:
+// - Toggle switches in Settings for each notification type
+// - Email notification option (future)
 ```
 
 ---
 
-### 4. Export/Import Tasks
-**Effort: Small | Files: Backend + UI**
+### 3. Task Templates
+**Effort: Medium | Files: Backend + UI**
 
-Backup and restore:
+Pre-defined task templates:
 ```typescript
 // Backend:
-// - GET /api/tasks/export → JSON file download
-// - POST /api/tasks/import → Upload JSON file
+// - Store templates in SQLite
+// - GET/POST /api/templates endpoints
 
 // UI:
-// - Export button in Settings or Task list header
-// - Import with file picker
-// - Validation and conflict handling
+// - Template picker in Create Task modal
+// - Template management in Settings
 ```
 
 ---

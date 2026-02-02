@@ -17,7 +17,7 @@ import {
   getRecentReports,
   getTaskReports,
 } from './hooks/index.js';
-import { initTaskQueue, addTask, getTask, getTasks, cancelTask, retryTask, closeTaskQueue } from './queue/task-queue.js';
+import { initTaskQueue, addTask, getTask, getTasks, cancelTask, retryTask, closeTaskQueue, registerSSEBroadcaster } from './queue/task-queue.js';
 import { getDeadLetterQueue, retryDeadLetterTask, removeFromDeadLetterQueue } from './queue/failure-handler.js';
 import { getAgentRegistry } from './adapters/registry.js';
 import { startAllCronJobs, stopAllCronJobs, getHealthStatus } from './cron/index.js';
@@ -264,6 +264,108 @@ app.post('/api/tasks/:id/retry', async (c) => {
   }
 
   return c.json({ message: 'Task queued for retry', task: newTask, originalTaskId: id });
+});
+
+// === Export/Import API ===
+
+// Export all tasks as JSON
+app.get('/api/tasks/export', (_c) => {
+  const tasks = getTasks({ limit: 10000 }); // Get all tasks
+  const exportData = {
+    version: '1.0',
+    exportedAt: new Date().toISOString(),
+    taskCount: tasks.length,
+    tasks: tasks.map(task => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      prompt: task.prompt,
+      status: task.status,
+      priority: task.priority,
+      source: task.source,
+      sourceId: task.sourceId,
+      sourceUrl: task.sourceUrl,
+      repository: task.repository,
+      branch: task.branch,
+      labels: task.labels,
+      assignedAgent: task.assignedAgent,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      startedAt: task.startedAt,
+      completedAt: task.completedAt,
+    })),
+  };
+
+  return new Response(JSON.stringify(exportData, null, 2), {
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Disposition': `attachment; filename="glinr-tasks-${new Date().toISOString().split('T')[0]}.json"`,
+    },
+  });
+});
+
+// Import tasks from JSON
+app.post('/api/tasks/import', async (c) => {
+  try {
+    const body = await c.req.json();
+
+    // Validate import format
+    if (!body.version || !Array.isArray(body.tasks)) {
+      return c.json({ error: 'Invalid import format. Expected { version, tasks[] }' }, 400);
+    }
+
+    const results = {
+      imported: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    for (const taskData of body.tasks) {
+      try {
+        // Check if task with same ID exists
+        const existing = getTask(taskData.id);
+        if (existing) {
+          results.skipped++;
+          continue;
+        }
+
+        // Create task with imported data
+        const parsed = CreateTaskSchema.safeParse({
+          title: taskData.title,
+          description: taskData.description,
+          prompt: taskData.prompt,
+          priority: taskData.priority,
+          source: taskData.source || 'import',
+          sourceId: taskData.sourceId,
+          sourceUrl: taskData.sourceUrl,
+          repository: taskData.repository,
+          branch: taskData.branch,
+          labels: taskData.labels || [],
+          assignedAgent: taskData.assignedAgent,
+        });
+
+        if (!parsed.success) {
+          results.errors.push(`Task "${taskData.title}": ${parsed.error.message}`);
+          continue;
+        }
+
+        await addTask(parsed.data);
+        results.imported++;
+      } catch (error) {
+        results.errors.push(`Task "${taskData.title}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    return c.json({
+      message: `Import completed: ${results.imported} imported, ${results.skipped} skipped`,
+      results,
+    });
+  } catch (error) {
+    return c.json({
+      error: 'Import failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    }, 500);
+  }
 });
 
 // === Dead Letter Queue API ===
@@ -645,6 +747,79 @@ app.get('/api/webhook/tasks/:taskId/reports', (c) => {
   });
 });
 
+// === Server-Sent Events (SSE) for Real-Time Updates ===
+
+// Store active SSE connections
+const sseConnections = new Set<ReadableStreamDefaultController<Uint8Array>>();
+
+// Broadcast event to all connected clients
+export function broadcastEvent(eventType: string, data: any) {
+  const message = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(message);
+
+  sseConnections.forEach((controller) => {
+    try {
+      controller.enqueue(bytes);
+    } catch {
+      // Connection closed, will be cleaned up
+    }
+  });
+}
+
+// SSE endpoint for real-time task updates
+app.get('/api/events', (c) => {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    start(controller) {
+      // Add to active connections
+      sseConnections.add(controller);
+
+      // Send initial connection message
+      const connectMsg = `event: connected\ndata: ${JSON.stringify({
+        message: 'Connected to GLINR event stream',
+        timestamp: new Date().toISOString()
+      })}\n\n`;
+      controller.enqueue(encoder.encode(connectMsg));
+
+      // Heartbeat to keep connection alive
+      const heartbeat = setInterval(() => {
+        try {
+          const ping = `event: ping\ndata: ${JSON.stringify({ timestamp: new Date().toISOString() })}\n\n`;
+          controller.enqueue(encoder.encode(ping));
+        } catch {
+          clearInterval(heartbeat);
+          sseConnections.delete(controller);
+        }
+      }, 30000);
+
+      // Cleanup on close
+      c.req.raw.signal.addEventListener('abort', () => {
+        clearInterval(heartbeat);
+        sseConnections.delete(controller);
+        try {
+          controller.close();
+        } catch {
+          // Already closed
+        }
+      });
+    },
+    cancel() {
+      // Will be cleaned up by abort handler
+    }
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no', // Disable nginx buffering
+    },
+  });
+});
+
 // === Integration Status API ===
 
 // Get integration/webhook status
@@ -963,7 +1138,10 @@ async function main() {
   // Initialize task queue
   try {
     await initTaskQueue();
+    // Register SSE broadcaster for real-time updates
+    registerSSEBroadcaster(broadcastEvent);
     console.log('✅ Task queue initialized');
+    console.log('✅ SSE event stream registered');
   } catch (error) {
     console.error('❌ Failed to initialize task queue:', error);
     console.log('⚠️  Running without Redis (tasks will not be processed)');

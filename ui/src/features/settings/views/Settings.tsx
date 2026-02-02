@@ -1,12 +1,81 @@
-import { Shield, Server, Palette, Trash2, Key, Database, Sun, Moon, Zap, Eye, RotateCcw } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Shield, Server, Palette, Trash2, Key, Database, Sun, Moon, Zap, Eye, RotateCcw, Download, Upload, Loader2, Check } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useOnboardingTour } from '@/components/shared/OnboardingTour';
+import { toast } from 'sonner';
+
+const API_BASE = 'http://localhost:3000';
 
 export function Settings() {
   const { theme, setTheme } = useTheme();
   const { resetTour, startTour } = useOnboardingTour();
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/tasks/export`);
+      if (!response.ok) throw new Error('Export failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `glinr-tasks-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success('Tasks exported successfully');
+    } catch (error) {
+      toast.error('Failed to export tasks');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const content = await file.text();
+      const data = JSON.parse(content);
+
+      const response = await fetch(`${API_BASE}/api/tasks/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Import failed');
+      }
+
+      toast.success(result.message, {
+        description: result.results.errors.length > 0
+          ? `${result.results.errors.length} errors occurred`
+          : undefined,
+      });
+    } catch (error) {
+      toast.error('Failed to import tasks', {
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   const handleRestartTour = () => {
     resetTour();
@@ -84,8 +153,8 @@ export function Settings() {
         </SettingsCard>
 
         {/* Database & Storage */}
-        <SettingsCard 
-          title="Storage & Data" 
+        <SettingsCard
+          title="Storage & Data"
           description="Manage your local SQLite database and sync options."
           icon={Database}
         >
@@ -97,6 +166,52 @@ export function Settings() {
               </div>
               <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-green-500/10 text-green-500 border border-green-500/20">CONNECTED</span>
             </div>
+
+            {/* Export/Import Section */}
+            <div className="p-3 rounded-2xl bg-white/5 border border-white/5 space-y-3">
+              <div className="flex flex-col">
+                <span className="text-sm font-bold">Backup & Restore</span>
+                <span className="text-[10px] text-muted-foreground">Export or import your tasks as JSON</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                  disabled={isExporting}
+                  className="flex-1 rounded-xl border-white/10 hover:bg-white/5"
+                >
+                  {isExporting ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Export
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isImporting}
+                  className="flex-1 rounded-xl border-white/10 hover:bg-white/5"
+                >
+                  {isImporting ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Import
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleImport}
+                  className="hidden"
+                />
+              </div>
+            </div>
+
             <Button variant="outline" className="w-full rounded-xl border-white/5 hover:bg-white/5 flex items-center gap-2">
               <Server className="h-4 w-4" />
               Connect to Turso Cloud
