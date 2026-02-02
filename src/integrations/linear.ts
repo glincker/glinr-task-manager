@@ -125,9 +125,7 @@ function handleIssueUpdatedEvent(payload: any): CreateTaskInput | null {
 function extractLabels(issue: LinearIssue): string[] {
   // Linear webhooks include labels as an array of label objects
   if (issue.labels && Array.isArray(issue.labels)) {
-    return issue.labels
-      .map((label: LinearLabel) => label?.name)
-      .filter((name: string | undefined) => name !== undefined);
+    return issue.labels.map((label: LinearLabel) => label.name);
   }
   
   return [];
