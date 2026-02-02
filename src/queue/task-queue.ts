@@ -29,7 +29,21 @@ let taskWorker: Worker<Task, TaskResult> | null = null;
 
 // In-memory task store (replace with DB in production)
 const taskStore = new Map<string, Task>();
+// Maintain a sorted list of tasks (newest first) for efficient retrieval
+const sortedTasks: Task[] = [];
 const eventCallbacks = new Map<string, (event: TaskEvent) => void>();
+
+// Internal helper for benchmarking/testing
+export function _seedTaskStore(tasks: Task[]) {
+  taskStore.clear();
+  sortedTasks.length = 0;
+  // Sort tasks by createdAt desc before pushing
+  const sorted = [...tasks].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  sorted.forEach((t) => {
+    taskStore.set(t.id, t);
+    sortedTasks.push(t);
+  });
+}
 
 interface TaskEvent {
   type: 'created' | 'queued' | 'started' | 'progress' | 'completed' | 'failed';
@@ -279,6 +293,7 @@ export async function addTask(input: CreateTaskInput): Promise<Task> {
 
   // Store task
   taskStore.set(task.id, task);
+  sortedTasks.unshift(task);
 
   emitEvent({
     type: 'created',
@@ -321,20 +336,32 @@ export function getTasks(options?: {
   limit?: number;
   offset?: number;
 }): Task[] {
-  let tasks = Array.from(taskStore.values());
-
-  // Filter by status
-  if (options?.status) {
-    tasks = tasks.filter((t) => t.status === options.status);
-  }
-
-  // Sort by created date (newest first)
-  tasks.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-  // Paginate
   const offset = options?.offset || 0;
   const limit = options?.limit || 50;
-  return tasks.slice(offset, offset + limit);
+
+  // Optimized path: no status filter
+  if (!options?.status) {
+    return sortedTasks.slice(offset, offset + limit);
+  }
+
+  // Filtered path: iterate sorted list
+  const result: Task[] = [];
+  let skipped = 0;
+
+  for (const task of sortedTasks) {
+    if (task.status === options.status) {
+      if (skipped < offset) {
+        skipped++;
+      } else {
+        result.push(task);
+        if (result.length >= limit) {
+          break;
+        }
+      }
+    }
+  }
+
+  return result;
 }
 
 /**
