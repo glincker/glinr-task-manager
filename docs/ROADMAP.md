@@ -1,7 +1,72 @@
-# GLINR Task Manager - Roadmap & Checklist
+# GLINR Task Manager - Vision & Roadmap
 
 > **For AI Agents:** Pick any unchecked item, validate your approach, implement, and submit a PR.
 > **Workflow:** Research → Validate → Implement → Verify → PR
+
+---
+
+## Product Vision
+
+### What This IS
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   GLINR Task Manager = AI Agent ORCHESTRATOR (not another AI agent)        │
+│                                                                             │
+│   ┌─────────────┐     ┌─────────────────────────┐     ┌─────────────────┐  │
+│   │   GitHub    │     │                         │     │   Claude Code   │  │
+│   │   Issues    │────▶│                         │────▶│   OpenClaw      │  │
+│   ├─────────────┤     │    GLINR Task Manager   │     │   Gemini        │  │
+│   │   Jira      │────▶│                         │────▶│   Ollama        │  │
+│   │   Tickets   │     │  • Routes tasks         │     │   Devin         │  │
+│   ├─────────────┤     │  • Tracks costs         │     └────────┬────────┘  │
+│   │   Linear    │────▶│  • Stores summaries     │              │           │
+│   │   Issues    │     │  • Links to PRs         │              ▼           │
+│   └─────────────┘     │  • Manages versions     │     ┌─────────────────┐  │
+│                       │                         │     │   Artifacts     │  │
+│                       └───────────┬─────────────┘     │   • PRs         │  │
+│                                   │                   │   • Commits     │  │
+│                                   ▼                   │   • Deployments │  │
+│                       ┌─────────────────────────┐     │   • Summaries   │  │
+│                       │   Developer Dashboard   │     └─────────────────┘  │
+│                       │   "What did AI do?"     │                          │
+│                       └─────────────────────────┘                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### The Problem We Solve
+
+| Pain Point | Current State | GLINR Solution |
+|------------|---------------|----------------|
+| **"What did the AI do?"** | Random MD files, scattered PRs | Unified task view with linked artifacts |
+| **Token burn** | No visibility, surprise bills | Cost tracking per task, budget alerts |
+| **Multi-agent chaos** | Each agent works in isolation | Coordinated routing, shared context |
+| **No accountability** | Can't trace AI decisions | Full audit trail with summaries |
+| **Manual version bumps** | Devs do it themselves | Smart semantic versioning |
+
+### What We DON'T Do
+
+- We don't replace AI agents (Claude, OpenClaw, Gemini work as-is)
+- We don't compete with IDE copilots (use those for real-time coding)
+- We don't try to be another chatbot (we orchestrate, not chat)
+
+### Market Position
+
+```
+     ┌──────────────────────────────────────────────────────────────┐
+     │                      AI AGENT LANDSCAPE                      │
+     ├───────────────────┬──────────────────────┬───────────────────┤
+     │   CODING AGENTS   │   ORCHESTRATORS      │   OBSERVABILITY   │
+     ├───────────────────┼──────────────────────┼───────────────────┤
+     │   Claude Code     │   ★ GLINR ★          │   Langfuse        │
+     │   OpenClaw        │   (Developer-centric │   OpenLIT         │
+     │   Devin           │    with DevOps       │   Helicone        │
+     │   Cursor          │    integration)      │   Traceloop       │
+     │   GitHub Copilot  │                      │                   │
+     └───────────────────┴──────────────────────┴───────────────────┘
+```
 
 ---
 
@@ -28,7 +93,7 @@
 
 ---
 
-## Phase 2: New Integrations (Priority: HIGH)
+## Phase 2: Source Integrations (Priority: HIGH)
 
 ### 2.1 Linear Integration
 - [ ] Create `src/integrations/linear.ts` webhook handler
@@ -52,7 +117,7 @@
 
 ---
 
-## Phase 3: New Adapters (Priority: MEDIUM)
+## Phase 3: Agent Adapters (Priority: MEDIUM)
 
 ### 3.1 Gemini Adapter
 - [ ] Create `src/adapters/gemini.ts` implementing `AgentAdapter`
@@ -99,22 +164,141 @@
 
 ---
 
-## Phase 5: Persistence & State (Priority: MEDIUM)
+## Phase 5: Token Cost Management (Priority: HIGH) ⭐ NEW
 
-### 5.1 Database Integration
+> **Goal:** Prevent token burn, provide visibility, enable budgeting
+
+### 5.1 Token Tracking
+- [ ] Create `src/costs/token-tracker.ts` for unified token counting
+- [ ] Track input/output tokens per task
+- [ ] Support multiple providers (OpenAI, Anthropic, Google)
+- [ ] Store token usage in task result
+
+### 5.2 Cost Calculation
+- [ ] Create `src/costs/pricing.ts` with per-model pricing
+- [ ] Calculate cost per task in USD
+- [ ] Support custom pricing overrides (Azure, enterprise)
+- [ ] Add daily/weekly/monthly rollups
+
+### 5.3 Budget Alerts
+- [ ] Create `src/costs/budget.ts` for budget management
+- [ ] Set budget limits per user/project/team
+- [ ] Alert at 50%, 80%, 100% of budget
+- [ ] Optional: pause tasks when budget exceeded
+
+### 5.4 Cost Dashboard
+- [ ] Add `/api/costs/summary` endpoint
+- [ ] Show cost by adapter, task type, time period
+- [ ] Show cost per user (when auth enabled)
+- [ ] Export cost reports as CSV
+
+---
+
+## Phase 6: Structured Summaries (Priority: HIGH) ⭐ NEW
+
+> **Goal:** Store AI work summaries properly, not random MD files
+
+### 6.1 Summary Schema
+- [ ] Create `src/types/summary.ts` with structured summary type
+- [ ] Define fields: what changed, why, decisions made, blockers
+- [ ] Support markdown content with metadata
+- [ ] Add summary validation with Zod
+
+### 6.2 Summary Extraction
+- [ ] Create `src/summaries/extractor.ts` to parse agent outputs
+- [ ] Extract key decisions and trade-offs
+- [ ] Extract file changes with line counts
+- [ ] Extract error/warning messages
+
+### 6.3 Summary Storage
+- [ ] Store summaries linked to tasks
+- [ ] Add full-text search on summaries
+- [ ] Add `/api/summaries/search` endpoint
+- [ ] Support filtering by date, agent, task type
+
+### 6.4 Summary Templates
+- [ ] Define templates per task type (bug fix, feature, refactor)
+- [ ] Auto-generate PR descriptions from summaries
+- [ ] Auto-generate changelog entries
+- [ ] Support custom templates
+
+---
+
+## Phase 7: GitHub Deep Integration (Priority: HIGH) ⭐ NEW
+
+> **Goal:** OAuth login, link PRs/deployments, smart versioning
+
+### 7.1 GitHub OAuth
+- [ ] Create `src/auth/github.ts` for OAuth flow
+- [ ] Implement `/auth/github/login` and `/auth/github/callback`
+- [ ] Store user GitHub tokens securely
+- [ ] Add user session management
+
+### 7.2 Repository Connection
+- [ ] Create `src/github/repos.ts` for repo management
+- [ ] List user's repos and orgs
+- [ ] Install webhooks on selected repos
+- [ ] Sync repo metadata (branches, collaborators)
+
+### 7.3 Artifact Linking
+- [ ] Create `src/github/artifacts.ts` for PR/deployment links
+- [ ] Link tasks to PRs created by AI agents
+- [ ] Link tasks to Vercel/Netlify deployments
+- [ ] Track deployment status (pending, success, failed)
+
+### 7.4 Semantic Versioning
+- [ ] Create `src/versioning/semver.ts` for version management
+- [ ] Analyze PR content to suggest version bump (patch/minor/major)
+- [ ] Auto-update package.json version (opt-in)
+- [ ] Generate CHANGELOG.md entries
+- [ ] Support conventional commits analysis
+
+---
+
+## Phase 8: Jira/Linear Sync (Priority: MEDIUM) ⭐ NEW
+
+> **Goal:** Bi-directional sync with project management tools
+
+### 8.1 Jira OAuth
+- [ ] Create `src/auth/jira.ts` for Atlassian OAuth
+- [ ] Connect to Jira Cloud instances
+- [ ] Sync issue metadata (status, assignee, labels)
+
+### 8.2 Linear OAuth
+- [ ] Create `src/auth/linear.ts` for Linear OAuth
+- [ ] Connect to Linear workspaces
+- [ ] Sync issue metadata
+
+### 8.3 Bi-directional Sync
+- [ ] Update Jira/Linear when task completes
+- [ ] Post summary as comment on issue
+- [ ] Link PR to issue automatically
+- [ ] Update issue status based on task result
+
+### 8.4 Smart Mapping
+- [ ] Map issue labels to task types
+- [ ] Map issue priority to task priority
+- [ ] Map issue assignee to preferred agent
+- [ ] Extract acceptance criteria for validation
+
+---
+
+## Phase 9: Persistence & State (Priority: MEDIUM)
+
+### 9.1 Database Integration
 - [ ] Choose database (SQLite for dev, PostgreSQL for prod)
 - [ ] Create `src/db/schema.ts` with task/result tables
 - [ ] Migrate from in-memory Map to database
 - [ ] Add database migrations support
 - [ ] Add connection pooling
 
-### 5.2 Task History
+### 9.2 Task History
 - [ ] Store full task execution history
 - [ ] Add task search/filter API endpoints
 - [ ] Add task analytics (avg duration, success rate by type)
 - [ ] Implement task archival for old completed tasks
 
-### 5.3 Agent Memory
+### 9.3 Agent Memory
 - [ ] Create `src/memory/store.ts` for agent context
 - [ ] Store relevant task context for follow-up tasks
 - [ ] Implement context retrieval for related tasks
@@ -122,22 +306,52 @@
 
 ---
 
-## Phase 6: API Enhancements (Priority: LOW)
+## Phase 10: Agent Feedback Loop (Priority: MEDIUM) ⭐ NEW
 
-### 6.1 REST API
+> **Goal:** Send commands to agents, get structured feedback
+
+### 10.1 Command Protocol
+- [ ] Create `src/commands/protocol.ts` for agent commands
+- [ ] Define command types (run, pause, cancel, clarify)
+- [ ] Support command parameters
+- [ ] Add command acknowledgment
+
+### 10.2 Feedback Collection
+- [ ] Create `src/feedback/collector.ts` for agent feedback
+- [ ] Collect progress updates (% complete, current step)
+- [ ] Collect blockers and questions
+- [ ] Collect confidence scores
+
+### 10.3 Human-in-the-Loop
+- [ ] Pause task for human review
+- [ ] Request clarification from user
+- [ ] Approve/reject AI decisions
+- [ ] Resume with additional context
+
+### 10.4 Learning from Feedback
+- [ ] Store task outcomes (success, failure, partial)
+- [ ] Track which agents perform best for which tasks
+- [ ] Adjust routing based on historical performance
+- [ ] A/B test different routing strategies
+
+---
+
+## Phase 11: API & Real-time (Priority: LOW)
+
+### 11.1 REST API
 - [ ] Add OpenAPI/Swagger documentation
 - [ ] Add API versioning (`/api/v1/...`)
 - [ ] Add rate limiting middleware
 - [ ] Add API key authentication
 - [ ] Add request validation with Zod
 
-### 6.2 WebSocket Support
+### 11.2 WebSocket Support
 - [ ] Add WebSocket server for real-time updates
 - [ ] Implement task progress streaming
 - [ ] Add task completion notifications
 - [ ] Add queue status updates
 
-### 6.3 GraphQL API (Optional)
+### 11.3 GraphQL API (Optional)
 - [ ] Evaluate need for GraphQL
 - [ ] Create GraphQL schema for tasks/agents
 - [ ] Implement resolvers
@@ -145,43 +359,49 @@
 
 ---
 
-## Phase 7: UI Dashboard (Priority: LOW)
+## Phase 12: UI Dashboard (Priority: LOW)
 
-### 7.1 Basic Dashboard
+### 12.1 Basic Dashboard
 - [ ] Create simple HTML dashboard at `/dashboard`
 - [ ] Show active tasks with status
 - [ ] Show agent health status
 - [ ] Show queue depth metrics
 
-### 7.2 Task Management UI
+### 12.2 Task Management UI
 - [ ] Add task creation form
-- [ ] Add task detail view
+- [ ] Add task detail view with full history
 - [ ] Add task cancellation button
 - [ ] Add manual retry for failed tasks
 
-### 7.3 Analytics Dashboard
-- [ ] Show task completion trends
-- [ ] Show adapter performance comparison
-- [ ] Show error rate trends
-- [ ] Export reports as CSV
+### 12.3 Cost Dashboard
+- [ ] Show token usage over time (chart)
+- [ ] Show cost breakdown by agent/model
+- [ ] Show budget vs actual spending
+- [ ] Export cost reports
+
+### 12.4 Summary Browser
+- [ ] List all AI summaries with search
+- [ ] Show linked PRs and deployments
+- [ ] Show file changes per task
+- [ ] Diff view for code changes
 
 ---
 
-## Phase 8: DevOps & Deployment (Priority: LOW)
+## Phase 13: DevOps & Deployment (Priority: LOW)
 
-### 8.1 Docker
+### 13.1 Docker
 - [ ] Create `Dockerfile` for production build
 - [ ] Create `docker-compose.yml` with Redis
 - [ ] Add health check to Docker container
 - [ ] Document deployment process
 
-### 8.2 CI/CD
+### 13.2 CI/CD
 - [ ] Set up GitHub Actions for PR checks
 - [ ] Add automated testing on push
 - [ ] Add build verification
 - [ ] Add automatic deployment (optional)
 
-### 8.3 Monitoring
+### 13.3 Monitoring
 - [ ] Add Prometheus metrics endpoint
 - [ ] Create Grafana dashboard template
 - [ ] Add alerting rules for failures
@@ -233,7 +453,7 @@ Closes #<issue-number-if-any>
 
 | Priority | Meaning |
 |----------|---------|
-| **HIGH** | Core functionality, should be done first |
+| **HIGH** | Core functionality, MVP features |
 | **MEDIUM** | Important features, can be parallelized |
 | **LOW** | Nice to have, do when HIGH/MEDIUM are done |
 
@@ -243,25 +463,68 @@ Closes #<issue-number-if-any>
 
 **Last Updated:** 2026-02-01
 
-| Phase | Status | Progress |
-|-------|--------|----------|
-| Phase 1: Core Stability | In Progress | 30% |
-| Phase 2: New Integrations | In Progress | 40% |
-| Phase 3: New Adapters | Not Started | 0% |
-| Phase 4: Smart Routing | Not Started | 0% |
-| Phase 5: Persistence | Not Started | 0% |
-| Phase 6: API Enhancements | Not Started | 0% |
-| Phase 7: UI Dashboard | Not Started | 0% |
-| Phase 8: DevOps | Not Started | 0% |
+| Phase | Status | Progress | Priority |
+|-------|--------|----------|----------|
+| Phase 1: Core Stability | In Progress | 30% | HIGH |
+| Phase 2: Source Integrations | In Progress | 40% | HIGH |
+| Phase 3: Agent Adapters | Not Started | 0% | MEDIUM |
+| Phase 4: Smart Routing | Not Started | 0% | MEDIUM |
+| Phase 5: Token Cost Management | Not Started | 0% | HIGH ⭐ |
+| Phase 6: Structured Summaries | Not Started | 0% | HIGH ⭐ |
+| Phase 7: GitHub Deep Integration | Not Started | 0% | HIGH ⭐ |
+| Phase 8: Jira/Linear Sync | Not Started | 0% | MEDIUM |
+| Phase 9: Persistence & State | Not Started | 0% | MEDIUM |
+| Phase 10: Agent Feedback Loop | Not Started | 0% | MEDIUM |
+| Phase 11: API & Real-time | Not Started | 0% | LOW |
+| Phase 12: UI Dashboard | Not Started | 0% | LOW |
+| Phase 13: DevOps | Not Started | 0% | LOW |
+
+---
+
+## MVP Definition
+
+**Minimum Viable Product** = Phases 1 + 2 + 5 + 6 + 7 (partial)
+
+At MVP:
+- ✅ Tasks flow from GitHub/Jira to AI agents
+- ✅ Token costs are tracked per task
+- ✅ Summaries are stored (not random MD files)
+- ✅ PRs are linked to tasks
+- ✅ Basic dashboard shows what AI did
+
+---
+
+## Competitive Advantage
+
+| Feature | GLINR | Port.io | LangChain | Langfuse |
+|---------|-------|---------|-----------|----------|
+| Multi-agent routing | ✅ | ❌ | ✅ | ❌ |
+| Token cost tracking | ✅ | ❌ | ❌ | ✅ |
+| GitHub OAuth | ✅ | ✅ | ❌ | ❌ |
+| PR/Deployment linking | ✅ | ✅ | ❌ | ❌ |
+| Structured summaries | ✅ | ❌ | ❌ | ❌ |
+| Semantic versioning | ✅ | ❌ | ❌ | ❌ |
+| Open source | ✅ | ❌ | ✅ | ✅ |
+| Self-hostable | ✅ | ❌ | ✅ | ✅ |
+| Developer-first | ✅ | ❌ | ✅ | ✅ |
 
 ---
 
 ## Notes for AI Agents
 
-1. **Start with Phase 1 & 2** - These are highest priority
+1. **Start with Phase 1, 2, 5, 6, 7** - These are MVP priorities
 2. **One task per PR** - Keep PRs focused and atomic
 3. **Include tests** - Every new feature needs tests
 4. **Follow patterns** - Check existing code before creating new patterns
 5. **Document decisions** - Explain why in PR description
 
 **Questions?** Check existing code, read CLAUDE.md, or ask in PR.
+
+---
+
+## Resources
+
+- [Deloitte: AI Agent Orchestration Market](https://www.deloitte.com/us/en/insights/industry/technology/technology-media-and-telecom-predictions/2026/ai-agent-orchestration.html)
+- [Langfuse: Token Cost Tracking](https://langfuse.com/docs/observability/features/token-and-cost-tracking)
+- [CrewAI: Multi-Agent Framework](https://github.com/crewAIInc/crewAI)
+- [Port.io: Task Manager AI Agent](https://docs.port.io/guides/all/setup-task-manager-ai-agent/)
