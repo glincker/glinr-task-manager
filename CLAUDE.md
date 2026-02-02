@@ -1,5 +1,21 @@
 # GLINR Task Manager - Development Guidelines
 
+> **For AI Agents:** Also read `AGENTS.md` for detailed workflow instructions.
+> **Other AI Tools:** See `.cursorrules`, `.windsurfrules` for tool-specific rules.
+
+---
+
+## CRITICAL: Anti-Hallucination Rules
+
+1. **NEVER invent APIs** - Only use functions that exist in codebase
+2. **NEVER guess paths** - Verify files exist: `ls -la src/path/file.ts`
+3. **NEVER assume deps** - Check package.json first
+4. **NEVER make up types** - Use types from `src/types/`
+
+**When uncertain: VERIFY, ASK, or DO LESS.**
+
+---
+
 ## Project Overview
 
 Task queue orchestrator for AI agents (OpenClaw, Claude Code, Jules). Routes tasks from GitHub/Jira/Linear to appropriate AI agents.

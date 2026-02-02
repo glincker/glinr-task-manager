@@ -1,0 +1,81 @@
+# Cursor AI Rules for GLINR Task Manager
+
+## Project Context
+Task queue orchestrator for AI agents. TypeScript + Hono + BullMQ + Redis.
+
+## CRITICAL: Anti-Hallucination Rules
+
+1. NEVER invent APIs or functions - verify they exist first
+2. NEVER guess file paths - use `ls` to verify
+3. NEVER assume dependencies - check package.json
+4. NEVER create fictional types - use existing types from src/types/
+
+## Before Writing Code
+
+```bash
+# Verify file exists
+ls -la src/path/to/file.ts
+
+# Verify function exists
+grep -r "functionName" src/
+
+# Verify dependency
+grep "package-name" package.json
+```
+
+## Code Style
+
+- TypeScript strict mode
+- ES modules with `.js` extensions in imports
+- Use `type` imports: `import type { Task } from './types.js'`
+- Explicit return types on exported functions
+- Error handling with typed responses
+
+## File Structure
+
+```
+src/
+├── adapters/      # AI agent adapters (OpenClaw, Claude)
+├── cron/          # Scheduled jobs
+├── integrations/  # External services (GitHub, Jira)
+├── queue/         # BullMQ task queue
+├── types/         # TypeScript types
+└── server.ts      # Hono HTTP server
+```
+
+## Allowed Dependencies (already installed)
+
+- hono (HTTP framework)
+- bullmq (queue)
+- ioredis (Redis)
+- zod (validation)
+- vitest (testing)
+
+DO NOT add new dependencies without approval.
+
+## Files You Cannot Modify
+
+- package.json (ask first)
+- tsconfig.json
+- .env files
+- lock files
+- .github/ workflows
+
+## Commit Convention
+
+```
+<type>: <description>
+
+Types: feat, fix, perf, refactor, docs, test, chore
+```
+
+## When Uncertain
+
+- ASK for clarification
+- STATE assumptions in comments
+- DO LESS correctly rather than MORE incorrectly
+
+## Read More
+
+- CLAUDE.md - Full project conventions
+- AGENTS.md - Detailed workflow for AI agents

@@ -2,11 +2,44 @@
 
 Instructions for AI agents (Jules, OpenClaw, GitHub Copilot, Claude Code) working on this codebase.
 
+---
+
+## CRITICAL RULES - READ FIRST
+
+### DO NOT HALLUCINATE
+
+1. **Never invent APIs** - Only use functions/methods that exist in the codebase or documented libraries
+2. **Never guess file paths** - Always verify files exist before modifying
+3. **Never assume dependencies** - Check `package.json` before using any library
+4. **Never create fictional types** - Only use types defined in `src/types/`
+
+### VERIFY BEFORE ACTING
+
+```bash
+# Before modifying a file, verify it exists
+ls -la src/path/to/file.ts
+
+# Before using a dependency, verify it's installed
+grep "dependency-name" package.json
+
+# Before calling a function, verify it exists
+grep -r "functionName" src/
+```
+
+### WHEN UNCERTAIN
+
+- **ASK** - Leave a comment in the PR asking for clarification
+- **STATE ASSUMPTIONS** - Document any assumptions you made
+- **DO LESS** - It's better to do less correctly than more incorrectly
+
+---
+
 ## Before You Start
 
 1. **Read CLAUDE.md** for project conventions
 2. **Run the build** to ensure it passes: `pnpm build`
 3. **Check existing patterns** before creating new ones
+4. **Search the codebase** before creating new utilities
 
 ## Workflow
 
@@ -251,3 +284,161 @@ If blocked or unclear on requirements:
 3. Ask for clarification in the issue/PR
 
 **Never guess. Ask or state assumptions clearly.**
+
+---
+
+## STRICT BOUNDARIES
+
+### Files You CAN Modify
+
+- `src/**/*.ts` - Source code
+- `src/**/*.test.ts` - Tests
+- `README.md` - Documentation (if asked)
+
+### Files You CANNOT Modify (without explicit permission)
+
+- `package.json` - Dependencies (ask first)
+- `tsconfig.json` - TypeScript config
+- `.env*` - Environment files
+- `*.lock` - Lock files
+- `.github/**` - CI/CD workflows
+
+### Dependencies You CAN Use
+
+Only use what's already in `package.json`:
+
+```json
+{
+  "hono": "HTTP framework",
+  "bullmq": "Queue management",
+  "ioredis": "Redis client",
+  "zod": "Schema validation",
+  "vitest": "Testing"
+}
+```
+
+**DO NOT** add new dependencies without explicit approval.
+
+---
+
+## ANTI-HALLUCINATION CHECKLIST
+
+Before submitting any code:
+
+- [ ] Every import path exists (verified with `ls`)
+- [ ] Every function called exists (verified with `grep`)
+- [ ] Every type used is defined in codebase
+- [ ] No made-up API endpoints
+- [ ] No fictional library methods
+- [ ] Build passes: `pnpm build`
+- [ ] Tests pass: `pnpm test`
+
+### Red Flags (STOP and verify)
+
+If you're about to write any of these, STOP and verify first:
+
+```typescript
+// RED FLAG: Importing from a path you haven't verified
+import { something } from '../utils/helper.js';  // Does this file exist?
+
+// RED FLAG: Using a method you haven't seen in the codebase
+queue.processAll();  // Is this a real BullMQ method?
+
+// RED FLAG: Creating a new type without checking existing ones
+interface MyNewType { }  // Is there already a similar type?
+
+// RED FLAG: Calling an external API
+await fetch('https://api.example.com/...');  // Is this documented?
+```
+
+---
+
+## EXISTING PATTERNS TO FOLLOW
+
+### Task Creation Pattern
+
+```typescript
+// CORRECT - follows existing pattern in src/queue/task-queue.ts
+const task: Task = {
+  id: randomUUID(),
+  title: input.title,
+  description: input.description,
+  status: 'pending',
+  priority: input.priority || 'medium',
+  source: input.source,
+  // ... other required fields from CreateTaskInput
+};
+```
+
+### Adapter Pattern
+
+```typescript
+// CORRECT - follows existing pattern in src/adapters/
+export class MyAdapter implements AgentAdapter {
+  readonly type = 'my-adapter';
+  readonly name = 'My Adapter';
+  readonly capabilities: AgentCapability[] = [];  // Use existing capabilities only
+
+  async healthCheck(): Promise<AgentHealth> { }
+  async executeTask(task: Task): Promise<TaskResult> { }
+}
+```
+
+### Webhook Handler Pattern
+
+```typescript
+// CORRECT - follows existing pattern in src/integrations/
+export async function handleMyWebhook(c: Context): Promise<CreateTaskInput | null> {
+  // 1. Verify signature (if applicable)
+  // 2. Parse body
+  // 3. Validate required fields
+  // 4. Map to CreateTaskInput
+  // 5. Return null if not actionable
+}
+```
+
+---
+
+## REAL EXAMPLES FROM THIS CODEBASE
+
+### Correct Import Pattern
+
+```typescript
+// These imports are REAL and verified:
+import { Queue, Worker, Job } from 'bullmq';
+import { Hono } from 'hono';
+import { randomUUID } from 'crypto';
+import type { Task, TaskResult, CreateTaskInput } from '../types/task.js';
+import type { AgentAdapter, AgentConfig } from '../types/agent.js';
+```
+
+### Correct Type Usage
+
+```typescript
+// These types EXIST in src/types/task.ts:
+type TaskStatus = 'pending' | 'queued' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
+type TaskSource = 'github' | 'jira' | 'linear' | 'slack' | 'api' | 'cron';
+
+// These capabilities EXIST in src/types/agent.ts:
+type AgentCapability = 'code_generation' | 'code_review' | 'bug_fix' | 'testing' | ...;
+```
+
+---
+
+## FINAL REMINDER
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                                                         │
+│   IF YOU'RE NOT 100% SURE SOMETHING EXISTS,             │
+│   VERIFY IT BEFORE USING IT.                            │
+│                                                         │
+│   grep -r "functionName" src/                           │
+│   ls -la src/path/to/file.ts                            │
+│   cat package.json | grep "dependency"                  │
+│                                                         │
+│   WRONG CODE IS WORSE THAN NO CODE.                     │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
