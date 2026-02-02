@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { handleJiraWebhook, verifyJiraToken } from './jira.js';
 
 describe('Jira Integration', () => {
   const originalEnv = process.env;
@@ -22,17 +21,20 @@ describe('Jira Integration', () => {
     } as any;
   };
 
-  it('should verify correct token', () => {
+  it('should verify correct token', async () => {
+    const { verifyJiraToken } = await import('./jira.js');
     const c = createMockContext('test-secret', {});
     expect(verifyJiraToken(c)).toBe(true);
   });
 
-  it('should reject incorrect token', () => {
+  it('should reject incorrect token', async () => {
+    const { verifyJiraToken } = await import('./jira.js');
     const c = createMockContext('wrong-secret', {});
     expect(verifyJiraToken(c)).toBe(false);
   });
 
   it('should handle issue_created with ai-task label', async () => {
+    const { handleJiraWebhook } = await import('./jira.js');
     const payload = {
       webhookEvent: 'jira:issue_created',
       issue: {
@@ -68,6 +70,7 @@ describe('Jira Integration', () => {
   });
 
   it('should ignore issue without ai-task label', async () => {
+    const { handleJiraWebhook } = await import('./jira.js');
     const payload = {
       webhookEvent: 'jira:issue_created',
       issue: {
@@ -95,11 +98,13 @@ describe('Jira Integration', () => {
   });
 
   it('should throw error on invalid token in handler', async () => {
+    const { handleJiraWebhook } = await import('./jira.js');
     const c = createMockContext('wrong-secret', {});
     await expect(handleJiraWebhook(c)).rejects.toThrow('Invalid webhook token');
   });
 
   it('should ignore unrelated events', async () => {
+    const { handleJiraWebhook } = await import('./jira.js');
     const payload = {
       webhookEvent: 'jira:worklog_updated',
       issue: {

@@ -7,11 +7,6 @@ import type {
 import type { Task, TaskResult, TaskArtifact } from '../types/task.js';
 import { spawn } from 'child_process';
 
-// Regex patterns for artifact extraction
-const COMMIT_PATTERN = /commit\s+([a-f0-9]{7,40})/gi;
-const PR_PATTERN = /https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/g;
-const FILE_PATTERN = /(?:Created|Modified|Wrote|Edited):\s*([a-zA-Z0-9_\-./]+)/gi;
-
 /**
  * Claude Code Agent Adapter
  *
@@ -219,12 +214,15 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     const artifacts: TaskArtifact[] = [];
 
     // Parse for commits
-    for (const match of output.matchAll(COMMIT_PATTERN)) {
+    const commitPattern = /commit\s+([a-f0-9]{7,40})/gi;
+    let match;
+    while ((match = commitPattern.exec(output)) !== null) {
       artifacts.push({ type: 'commit', sha: match[1] });
     }
 
     // Parse for PR URLs
-    for (const match of output.matchAll(PR_PATTERN)) {
+    const prPattern = /https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/g;
+    while ((match = prPattern.exec(output)) !== null) {
       artifacts.push({
         type: 'pull_request',
         url: match[0],
@@ -232,7 +230,8 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     }
 
     // Parse for created/modified files (from tool use output)
-    for (const match of output.matchAll(FILE_PATTERN)) {
+    const filePattern = /(?:Created|Modified|Wrote|Edited):\s*([a-zA-Z0-9_\-./]+)/gi;
+    while ((match = filePattern.exec(output)) !== null) {
       artifacts.push({ type: 'file', path: match[1] });
     }
 

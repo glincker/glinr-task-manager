@@ -11,14 +11,15 @@ import type { CreateTaskInput } from '../types/task.js';
  * - jira:issue_updated
  */
 
+const JIRA_AI_TASK_LABEL = process.env.JIRA_AI_TASK_LABEL || 'ai-task';
+const WEBHOOK_SECRET = process.env.JIRA_WEBHOOK_SECRET || '';
+
 /**
  * Verify Jira webhook token
  *
  * Checks for ?token=SECRET in query params
  */
 export function verifyJiraToken(c: Context): boolean {
-  const WEBHOOK_SECRET = process.env.JIRA_WEBHOOK_SECRET || '';
-
   if (!WEBHOOK_SECRET) {
     console.warn('JIRA_WEBHOOK_SECRET not set - skipping verification');
     return true;
@@ -38,8 +39,6 @@ export async function handleJiraWebhook(
   if (!verifyJiraToken(c)) {
     throw new Error('Invalid webhook token');
   }
-
-  const JIRA_AI_TASK_LABEL = process.env.JIRA_AI_TASK_LABEL || 'ai-task';
 
   const rawBody = await c.req.text();
   const payload = JSON.parse(rawBody) as JiraWebhookPayload;
