@@ -164,7 +164,77 @@
 
 ---
 
-## Phase 5: Token Cost Management (Priority: HIGH) ⭐ NEW
+## Phase 5: MCP Server & Agent Integration (Priority: HIGH) ⭐ CRITICAL
+
+> **Goal:** How agents report to GLINR WITHOUT double-burning tokens
+
+### Integration Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     ZERO-BURN INTEGRATION METHODS                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────────┐     ┌──────────────────────┐                       │
+│  │  Claude Code        │────▶│  1. MCP SERVER       │  ~50 tokens/call      │
+│  │  (via MCP tools)    │     │  glinr__log_task     │  (structured report)  │
+│  └─────────────────────┘     └──────────────────────┘                       │
+│                                                                             │
+│  ┌─────────────────────┐     ┌──────────────────────┐                       │
+│  │  Claude Code        │────▶│  2. HOOKS            │  0 tokens             │
+│  │  (PostToolUse)      │     │  Auto-intercept      │  (shell command)      │
+│  └─────────────────────┘     └──────────────────────┘                       │
+│                                                                             │
+│  ┌─────────────────────┐     ┌──────────────────────┐                       │
+│  │  OpenClaw/Devin     │────▶│  3. WEBHOOK          │  0 tokens             │
+│  │  (HTTP POST)        │     │  POST /api/hook/*    │  (HTTP callback)      │
+│  └─────────────────────┘     └──────────────────────┘                       │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 5.1 MCP Server (For Claude Code)
+- [ ] Create `src/mcp/server.ts` - MCP server implementation
+- [ ] Implement `glinr__log_task` tool - Log current work
+- [ ] Implement `glinr__complete_task` tool - Mark done with summary
+- [ ] Implement `glinr__report_usage` tool - Report token counts
+- [ ] Implement `glinr__get_context` tool - Get relevant past tasks
+- [ ] Add MCP server to package.json bin for npx usage
+- [ ] Document MCP setup in Claude Code settings
+
+### 5.2 Claude Code Hooks (Zero Token)
+- [ ] Create `src/hooks/` directory for hook handlers
+- [ ] Create `/api/hook/tool-use` endpoint for PostToolUse
+- [ ] Create `/api/hook/session-end` endpoint for Stop hook
+- [ ] Create `/api/hook/prompt-submit` endpoint for UserPromptSubmit
+- [ ] Parse hook payloads and extract summaries
+- [ ] Generate example `.claude/settings.json` for users
+- [ ] Document hook setup process
+
+### 5.3 External Agent Webhooks
+- [ ] Create `/api/webhook/openclaw` endpoint
+- [ ] Create `/api/webhook/devin` endpoint (when API available)
+- [ ] Create `/api/webhook/generic` for custom agents
+- [ ] Verify webhook signatures (HMAC)
+- [ ] Parse agent-specific payload formats
+- [ ] Extract artifacts (PRs, commits, files changed)
+
+### 5.4 Log Parsing (Retrospective)
+- [ ] Create `src/parsers/claude-log.ts` for Claude conversation logs
+- [ ] Extract tool calls from conversation history
+- [ ] Extract file changes from Edit/Write tool outputs
+- [ ] Calculate token usage from API responses
+- [ ] Generate summary from conversation without re-running AI
+
+### 5.5 Skills/Plugins (Optional)
+- [ ] Research Claude Code skills format
+- [ ] Create `glinr-track` skill for manual tracking
+- [ ] Create `glinr-summary` skill to generate summary on demand
+- [ ] Publish skills to community registry
+
+---
+
+## Phase 6: Token Cost Management (Priority: HIGH) ⭐ NEW
 
 > **Goal:** Prevent token burn, provide visibility, enable budgeting
 
@@ -194,7 +264,7 @@
 
 ---
 
-## Phase 6: Structured Summaries (Priority: HIGH) ⭐ NEW
+## Phase 7: Structured Summaries (Priority: HIGH) ⭐ NEW
 
 > **Goal:** Store AI work summaries properly, not random MD files
 
@@ -224,7 +294,7 @@
 
 ---
 
-## Phase 7: GitHub Deep Integration (Priority: HIGH) ⭐ NEW
+## Phase 8: GitHub Deep Integration (Priority: HIGH) ⭐ NEW
 
 > **Goal:** OAuth login, link PRs/deployments, smart versioning
 
@@ -255,7 +325,7 @@
 
 ---
 
-## Phase 8: Jira/Linear Sync (Priority: MEDIUM) ⭐ NEW
+## Phase 9: Jira/Linear Sync (Priority: MEDIUM) ⭐ NEW
 
 > **Goal:** Bi-directional sync with project management tools
 
@@ -283,7 +353,7 @@
 
 ---
 
-## Phase 9: Persistence & State (Priority: MEDIUM)
+## Phase 10: Persistence & State (Priority: MEDIUM)
 
 ### 9.1 Database Integration
 - [ ] Choose database (SQLite for dev, PostgreSQL for prod)
@@ -306,7 +376,7 @@
 
 ---
 
-## Phase 10: Agent Feedback Loop (Priority: MEDIUM) ⭐ NEW
+## Phase 11: Agent Feedback Loop (Priority: MEDIUM) ⭐ NEW
 
 > **Goal:** Send commands to agents, get structured feedback
 
@@ -336,7 +406,7 @@
 
 ---
 
-## Phase 11: API & Real-time (Priority: LOW)
+## Phase 12: API & Real-time (Priority: LOW)
 
 ### 11.1 REST API
 - [ ] Add OpenAPI/Swagger documentation
@@ -359,7 +429,7 @@
 
 ---
 
-## Phase 12: UI Dashboard (Priority: LOW)
+## Phase 13: UI Dashboard (Priority: LOW)
 
 ### 12.1 Basic Dashboard
 - [ ] Create simple HTML dashboard at `/dashboard`
@@ -387,7 +457,7 @@
 
 ---
 
-## Phase 13: DevOps & Deployment (Priority: LOW)
+## Phase 14: DevOps & Deployment (Priority: LOW)
 
 ### 13.1 Docker
 - [ ] Create `Dockerfile` for production build
@@ -469,24 +539,27 @@ Closes #<issue-number-if-any>
 | Phase 2: Source Integrations | In Progress | 40% | HIGH |
 | Phase 3: Agent Adapters | Not Started | 0% | MEDIUM |
 | Phase 4: Smart Routing | Not Started | 0% | MEDIUM |
-| Phase 5: Token Cost Management | Not Started | 0% | HIGH ⭐ |
-| Phase 6: Structured Summaries | Not Started | 0% | HIGH ⭐ |
-| Phase 7: GitHub Deep Integration | Not Started | 0% | HIGH ⭐ |
-| Phase 8: Jira/Linear Sync | Not Started | 0% | MEDIUM |
-| Phase 9: Persistence & State | Not Started | 0% | MEDIUM |
-| Phase 10: Agent Feedback Loop | Not Started | 0% | MEDIUM |
-| Phase 11: API & Real-time | Not Started | 0% | LOW |
-| Phase 12: UI Dashboard | Not Started | 0% | LOW |
-| Phase 13: DevOps | Not Started | 0% | LOW |
+| Phase 5: MCP Server & Integration | Not Started | 0% | HIGH ⭐⭐ |
+| Phase 6: Token Cost Management | Not Started | 0% | HIGH ⭐ |
+| Phase 7: Structured Summaries | Not Started | 0% | HIGH ⭐ |
+| Phase 8: GitHub Deep Integration | Not Started | 0% | HIGH ⭐ |
+| Phase 9: Jira/Linear Sync | Not Started | 0% | MEDIUM |
+| Phase 10: Persistence & State | Not Started | 0% | MEDIUM |
+| Phase 11: Agent Feedback Loop | Not Started | 0% | MEDIUM |
+| Phase 12: API & Real-time | Not Started | 0% | LOW |
+| Phase 13: UI Dashboard | Not Started | 0% | LOW |
+| Phase 14: DevOps | Not Started | 0% | LOW |
 
 ---
 
 ## MVP Definition
 
-**Minimum Viable Product** = Phases 1 + 2 + 5 + 6 + 7 (partial)
+**Minimum Viable Product** = Phases 1 + 2 + 5 + 6 + 7 + 8 (partial)
 
 At MVP:
 - ✅ Tasks flow from GitHub/Jira to AI agents
+- ✅ **MCP Server** for Claude Code integration (zero-burn tracking)
+- ✅ **Hooks** for automatic activity capture
 - ✅ Token costs are tracked per task
 - ✅ Summaries are stored (not random MD files)
 - ✅ PRs are linked to tasks
