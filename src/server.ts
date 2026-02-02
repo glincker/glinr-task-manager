@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { handleGitHubWebhook } from './integrations/github.js';
-import { handleLinearWebhook } from './integrations/linear.js';
+import { handleJiraWebhook } from './integrations/jira.js';
 import { initTaskQueue, addTask, getTask, getTasks, closeTaskQueue } from './queue/task-queue.js';
 import { getDeadLetterQueue, retryDeadLetterTask, removeFromDeadLetterQueue } from './queue/failure-handler.js';
 import { getAgentRegistry } from './adapters/registry.js';
@@ -230,16 +230,10 @@ app.post('/webhooks/github', async (c) => {
   }
 });
 
-// Jira webhook (placeholder)
+// Jira webhook
 app.post('/webhooks/jira', async (c) => {
-  // TODO: Implement Jira webhook handler
-  return c.json({ message: 'Jira webhook not yet implemented' }, 501);
-});
-
-// Linear webhook
-app.post('/webhooks/linear', async (c) => {
   try {
-    const taskInput = await handleLinearWebhook(c);
+    const taskInput = await handleJiraWebhook(c);
 
     if (!taskInput) {
       return c.json({ message: 'Webhook received, no task created' });
@@ -248,19 +242,25 @@ app.post('/webhooks/linear', async (c) => {
     const task = await addTask(taskInput);
 
     return c.json({
-      message: 'Task created from Linear webhook',
+      message: 'Task created from Jira webhook',
       task,
     });
   } catch (error) {
-    console.error('[Webhook] Linear error:', error);
+    console.error('[Webhook] Jira error:', error);
     return c.json(
       {
         error: 'Webhook processing failed',
         message: error instanceof Error ? error.message : 'Unknown error',
       },
-      error instanceof Error && error.message.includes('signature') ? 401 : 500
+      error instanceof Error && error.message.includes('token') ? 401 : 500
     );
   }
+});
+
+// Linear webhook (placeholder)
+app.post('/webhooks/linear', async (c) => {
+  // TODO: Implement Linear webhook handler
+  return c.json({ message: 'Linear webhook not yet implemented' }, 501);
 });
 
 // === Server Startup ===
@@ -344,6 +344,7 @@ async function main() {
   console.log(`  🤖 Agents:   http://localhost:${PORT}/api/agents`);
   console.log(`  💀 DLQ:      http://localhost:${PORT}/api/dlq`);
   console.log(`  🔗 GitHub:   http://localhost:${PORT}/webhooks/github`);
+  console.log(`  🔗 Jira:     http://localhost:${PORT}/webhooks/jira`);
   console.log(`  ❤️  Health:   http://localhost:${PORT}/health`);
 
   if (ENABLE_CRON) {
