@@ -227,7 +227,7 @@ export async function processTask(job: Job<Task>): Promise<TaskResult> {
   if (result.success) {
     // 1. Create structured summary
     try {
-      const summaryInput = extractFromTaskResult(result, {
+      const summaryInput = await extractFromTaskResult(result, {
         taskId: task.id,
         agent: adapter.type,
         model: result.metadata?.model as string,
@@ -259,9 +259,11 @@ export async function addTask(input: CreateTaskInput): Promise<Task> {
     throw new Error('Task queue not initialized');
   }
 
-  // Create full task object
+  // Create full task object with defaults for optional fields
   const task: Task = {
     ...input,
+    labels: input.labels ?? [],
+    metadata: input.metadata ?? {},
     id: randomUUID(),
     status: 'pending',
     createdAt: new Date(),
@@ -322,7 +324,12 @@ export function getTasks(options?: {
   }
 
   // Sort by created date (newest first)
-  tasks.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  // Handle both Date objects and ISO strings
+  tasks.sort((a, b) => {
+    const dateA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+    const dateB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+    return dateB - dateA;
+  });
 
   // Paginate
   const offset = options?.offset || 0;
@@ -350,6 +357,82 @@ function emitEvent(event: TaskEvent): void {
       console.error('[Queue] Error in event callback:', error);
     }
   }
+}
+
+/**
+ * Cancel a running task
+ */
+export async function cancelTask(id: string): Promise<boolean> {
+  const task = taskStore.get(id);
+  if (!task) return false;
+
+  // Can only cancel pending, queued, assigned, or in_progress tasks
+  const cancellableStatuses: TaskStatusType[] = ['pending', 'queued', 'assigned', 'in_progress'];
+  if (!cancellableStatuses.includes(task.status)) {
+    return false;
+  }
+
+  // Update task status
+  task.status = 'cancelled';
+  task.completedAt = new Date();
+  task.result = {
+    success: false,
+    output: 'Task was cancelled by user',
+    error: {
+      code: 'CANCELLED',
+      message: 'Task cancelled by user',
+    },
+  };
+  taskStore.set(id, task);
+
+  // Try to remove from BullMQ if pending
+  if (taskQueue) {
+    try {
+      const job = await taskQueue.getJob(id);
+      if (job) {
+        await job.remove();
+      }
+    } catch {
+      // Job may already be processing
+    }
+  }
+
+  emitEvent({ type: 'failed', taskId: id, task });
+  return true;
+}
+
+/**
+ * Retry a failed task
+ */
+export async function retryTask(id: string): Promise<Task | null> {
+  const task = taskStore.get(id);
+  if (!task) return null;
+
+  // Can retry failed, cancelled, or completed tasks
+  const retryableStatuses: TaskStatusType[] = ['failed', 'cancelled', 'completed'];
+  if (!retryableStatuses.includes(task.status)) {
+    return null;
+  }
+
+  // Create a new task with same input
+  const newTask = await addTask({
+    title: task.title,
+    description: task.description,
+    prompt: task.prompt,
+    priority: task.priority,
+    source: task.source,
+    sourceId: task.sourceId,
+    sourceUrl: task.sourceUrl,
+    repository: task.repository,
+    branch: task.branch,
+    labels: task.labels,
+    metadata: {
+      ...task.metadata,
+      retriedFrom: id,
+    },
+  });
+
+  return newTask;
 }
 
 /**

@@ -12,11 +12,54 @@ import type {
 } from '../types/summary.js';
 import { getStorage } from '../storage/index.js';
 
+import { getEmbeddingService } from '../ai/embedding-service.js';
+import { logger } from '../utils/logger.js';
+import { randomUUID } from 'crypto';
+
 /**
  * Create a new summary
  */
 export async function createSummary(input: CreateSummaryInput): Promise<Summary> {
-  return await getStorage().createSummary(input);
+  const summary = await getStorage().createSummary(input);
+
+  // Trigger embedding generation in background
+  generateAndStoreSummaryEmbedding(summary).catch(err => {
+    logger.error(`[Storage] Failed to generate embedding for summary ${summary.id}:`, err);
+  });
+
+  return summary;
+}
+
+/**
+ * Background task to generate and store entity embedding
+ */
+async function generateAndStoreSummaryEmbedding(summary: Summary): Promise<void> {
+  const service = getEmbeddingService();
+  const storage = getStorage();
+
+  if (!storage.storeEmbedding) return;
+
+  // Combine key fields for better semantic representation
+  const textToIndex = `
+    Title: ${summary.title}
+    Changes: ${summary.whatChanged}
+    Rationale: ${summary.whyChanged || ''}
+    Decisions: ${summary.decisions.map(d => d.description).join(', ')}
+    Type: ${summary.taskType || ''}
+    Component: ${summary.component || ''}
+  `.trim();
+
+  const embedding = await service.generateEmbedding(textToIndex);
+  
+  await storage.storeEmbedding(
+    randomUUID(),
+    'summary',
+    summary.id,
+    embedding,
+    'semantic-v1'
+  );
+  
+  logger.debug(`[Storage] Stored embedding for summary ${summary.id}`);
 }
 
 /**

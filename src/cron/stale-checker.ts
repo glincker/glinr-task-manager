@@ -3,13 +3,17 @@
  *
  * Finds tasks that have been in_progress for too long and marks them
  * as failed or retries them.
+ * Configurable via POLL_INTERVAL_STALE env var (default: 60s).
  */
 
-import { getTasks, onTaskEvent } from '../queue/task-queue.js';
+import { getTasks } from '../queue/task-queue.js';
 import { handleTaskFailure } from '../queue/failure-handler.js';
-import type { Task } from '../types/task.js';
+import { createContextualLogger } from '../utils/logger.js';
 
-const CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const log = createContextualLogger('StaleChecker');
+
+// Configurable interval (default: 60 seconds)
+const CHECK_INTERVAL = parseInt(process.env.POLL_INTERVAL_STALE || '60000', 10);
 const STALE_THRESHOLD = 30 * 60 * 1000; // 30 minutes - task considered stale
 
 let checkerInterval: NodeJS.Timeout | null = null;
@@ -24,15 +28,20 @@ async function checkStaleTasks(): Promise<void> {
   for (const task of inProgressTasks) {
     if (!task.startedAt) continue;
 
-    const elapsed = now - task.startedAt.getTime();
+    // Handle both Date and string formats
+    const startTime = task.startedAt instanceof Date
+      ? task.startedAt.getTime()
+      : new Date(task.startedAt).getTime();
+    const elapsed = now - startTime;
 
     if (elapsed > STALE_THRESHOLD) {
-      console.warn(`[StaleChecker] Task ${task.id} has been running for ${Math.round(elapsed / 60000)} minutes`);
+      const minutes = Math.round(elapsed / 60000);
+      log.warn(`Task stale`, { taskId: task.id, elapsedMinutes: minutes });
 
       // Mark as failed and let failure handler deal with it
       await handleTaskFailure(
         task,
-        new Error(`Task stale: running for ${Math.round(elapsed / 60000)} minutes without completion`)
+        new Error(`Task stale: running for ${minutes} minutes without completion`)
       );
     }
   }
@@ -43,15 +52,14 @@ async function checkStaleTasks(): Promise<void> {
  */
 export function startStaleChecker(): void {
   if (checkerInterval) {
-    console.log('[StaleChecker] Already running');
-    return;
+    return; // Already running
   }
 
-  console.log('[StaleChecker] Starting stale task checker (interval: 5 minutes)');
+  log.info('Starting stale task checker', { intervalMs: CHECK_INTERVAL });
 
-  // Run every 5 minutes
+  // Run at configured interval
   checkerInterval = setInterval(() => {
-    checkStaleTasks().catch(console.error);
+    checkStaleTasks().catch((e) => log.error('Stale check failed', e instanceof Error ? e : undefined));
   }, CHECK_INTERVAL);
 }
 
@@ -62,6 +70,6 @@ export function stopStaleChecker(): void {
   if (checkerInterval) {
     clearInterval(checkerInterval);
     checkerInterval = null;
-    console.log('[StaleChecker] Stopped');
+    log.debug('Stopped');
   }
 }

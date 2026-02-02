@@ -1,6 +1,7 @@
 # GLINR Task Manager - Development Guidelines
 
 > **For AI Agents:** Also read `AGENTS.md` for detailed workflow instructions.
+> **For UI Development:** See `docs/UI_GUIDELINES.md` for complete UI standards.
 > **Other AI Tools:** See `.cursorrules`, `.windsurfrules` for tool-specific rules.
 
 ---
@@ -184,7 +185,43 @@ Optional:
 - `GITHUB_TOKEN` - GitHub API access
 - `JIRA_WEBHOOK_SECRET` - Jira signature verification
 
-## Don't
+## UI Development (Quick Reference)
+
+> Full guidelines in `docs/UI_GUIDELINES.md`
+
+**Stack**: React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui
+
+**Architecture**: Feature-based (group by domain, not file type)
+```
+ui/src/features/tasks/      # All task-related code together
+ui/src/features/summaries/  # All summary-related code together
+```
+
+**Key Rules**:
+1. **Use shadcn/ui components** - Don't reinvent buttons, cards, dialogs
+2. **Tailwind only** - No inline styles, no CSS modules
+3. **Lucide icons only** - Consistent iconography
+4. **TanStack Query** - For all server state (no Redux for API data)
+5. **Feature folders** - Components, hooks, views co-located
+6. **Dark mode required** - Use CSS variables, test both themes
+
+**Styling Quick Reference**:
+```tsx
+// Use theme colors, not hardcoded values
+<Card className="bg-card text-card-foreground shadow-soft">
+
+// Ordering: layout → size → typography → visual → interactive
+<div className="flex items-center gap-4 p-4 text-sm bg-muted rounded-lg hover:bg-accent">
+```
+
+**Don't (UI-specific)**:
+- Don't use `style={{}}` inline styles
+- Don't create new icon sets (use Lucide)
+- Don't skip loading/error states
+- Don't forget keyboard navigation
+- Don't use index as list keys
+
+## Don't (General)
 
 - Don't use `any` type
 - Don't commit `.env` files

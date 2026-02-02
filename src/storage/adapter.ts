@@ -30,4 +30,16 @@ export interface StorageAdapter {
 
   // Health
   healthCheck(): Promise<{ healthy: boolean; latencyMs: number }>;
+
+  // Agent Stats
+  getAgentStats(): Promise<Record<string, { completed: number; failed: number; avgDuration: number; lastActivity?: Date }>>;
+
+  // Costs
+  getCostAnalytics(): Promise<{
+    daily: Array<{ date: string; cost: number; tokens: number }>;
+    byModel: Record<string, { cost: number; tokens: number }>;
+    byAgent: Record<string, { cost: number; tokens: number }>;
+    totalCost: number;
+    totalTokens: number;
+  }>;
 }

@@ -53,7 +53,7 @@ const HOW_SECTION_PATTERN = /##?\s*(?:how|approach|implementation)[:\s]*\n([\s\S
 /**
  * Extract a summary from a task result
  */
-export function extractFromTaskResult(
+export async function extractFromTaskResult(
   result: TaskResult,
   context?: {
     taskId?: string;
@@ -61,7 +61,29 @@ export function extractFromTaskResult(
     model?: string;
     startedAt?: Date;
   }
-): CreateSummaryInput {
+): Promise<CreateSummaryInput> {
+  // Try Ollama-based summary generation first if configured
+  const { getOllamaService } = await import('../intelligence/ollama.js');
+  const { loadConfig } = await import('../utils/config-loader.js');
+  
+  const config = loadConfig<any>('settings.yml');
+  const summaryProvider = config.ai?.defaultSummaryProvider || 'pattern';
+
+  if (summaryProvider === 'ollama' || summaryProvider === 'auto') {
+    try {
+      const ollama = getOllamaService();
+      const ollamaSummary = await ollama.generateSummary(result, context || {});
+      
+      if (ollamaSummary) {
+        return ollamaSummary;
+      }
+    } catch (error) {
+      // Fall through to pattern-based extraction
+      console.debug('[Extractor] Ollama summary failed, using pattern extraction');
+    }
+  }
+
+  // Fallback to pattern-based extraction
   const output = result.output || '';
   const now = new Date();
 

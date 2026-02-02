@@ -3,12 +3,17 @@
  *
  * Monitors the health of all registered agents and pauses/resumes
  * task processing based on agent availability.
+ * Configurable via POLL_INTERVAL_HEARTBEAT env var (default: 30s).
  */
 
 import { getAgentRegistry } from '../adapters/registry.js';
 import { sendSlackNotification } from '../notifications/slack.js';
+import { createContextualLogger } from '../utils/logger.js';
 
-const HEARTBEAT_INTERVAL = 60 * 1000; // 1 minute
+const log = createContextualLogger('Heartbeat');
+
+// Configurable interval (default: 30 seconds)
+const HEARTBEAT_INTERVAL = parseInt(process.env.POLL_INTERVAL_HEARTBEAT || '30000', 10);
 const UNHEALTHY_THRESHOLD = 3; // Consecutive failures before alerting
 
 let heartbeatInterval: NodeJS.Timeout | null = null;
@@ -34,23 +39,23 @@ async function checkAgentHealth(): Promise<void> {
         // If was alerted, send recovery notification
         if (alertedAgents.has(adapter.type)) {
           alertedAgents.delete(adapter.type);
-          console.log(`[Heartbeat] ✅ ${adapter.name} recovered (latency: ${health.latencyMs}ms)`);
+          log.info(`${adapter.name} recovered`, { latencyMs: health.latencyMs });
 
           await sendSlackNotification({
             type: 'agent_recovered',
             title: `✅ Agent Recovered: ${adapter.name}`,
             message: `${adapter.name} is healthy again. Latency: ${health.latencyMs}ms`,
             agent: adapter.type,
-          }).catch(console.error);
+          }).catch((e) => log.error('Slack notification failed', e instanceof Error ? e : undefined));
         } else if (prevCount > 0) {
-          console.log(`[Heartbeat] ${adapter.name} healthy again after ${prevCount} failures`);
+          log.debug(`${adapter.name} healthy again after ${prevCount} failures`);
         }
       } else {
         // Increment unhealthy count
         const count = (unhealthyCounts.get(adapter.type) || 0) + 1;
         unhealthyCounts.set(adapter.type, count);
 
-        console.warn(`[Heartbeat] ⚠️ ${adapter.name} unhealthy (${count}/${UNHEALTHY_THRESHOLD}): ${health.message}`);
+        log.warn(`${adapter.name} unhealthy`, { count, threshold: UNHEALTHY_THRESHOLD, message: health.message });
 
         // Alert after threshold
         if (count >= UNHEALTHY_THRESHOLD && !alertedAgents.has(adapter.type)) {
@@ -62,13 +67,13 @@ async function checkAgentHealth(): Promise<void> {
             message: `${adapter.name} has been unhealthy for ${count} consecutive checks.\nLast error: ${health.message}`,
             agent: adapter.type,
             severity: 'warning',
-          }).catch(console.error);
+          }).catch((e) => log.error('Slack notification failed', e instanceof Error ? e : undefined));
         }
       }
     } catch (error) {
       const count = (unhealthyCounts.get(adapter.type) || 0) + 1;
       unhealthyCounts.set(adapter.type, count);
-      console.error(`[Heartbeat] Error checking ${adapter.name}:`, error);
+      log.error(`Error checking ${adapter.name}`, error instanceof Error ? error : undefined);
     }
   }
 }
@@ -78,18 +83,17 @@ async function checkAgentHealth(): Promise<void> {
  */
 export function startHeartbeat(): void {
   if (heartbeatInterval) {
-    console.log('[Heartbeat] Already running');
-    return;
+    return; // Already running
   }
 
-  console.log('[Heartbeat] Starting agent health monitor (interval: 1 minute)');
+  log.info('Starting agent health monitor', { intervalMs: HEARTBEAT_INTERVAL });
 
   // Run immediately
-  checkAgentHealth().catch(console.error);
+  checkAgentHealth().catch((e) => log.error('Health check failed', e instanceof Error ? e : undefined));
 
-  // Then run every minute
+  // Then run at configured interval
   heartbeatInterval = setInterval(() => {
-    checkAgentHealth().catch(console.error);
+    checkAgentHealth().catch((e) => log.error('Health check failed', e instanceof Error ? e : undefined));
   }, HEARTBEAT_INTERVAL);
 }
 
@@ -100,7 +104,7 @@ export function stopHeartbeat(): void {
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;
-    console.log('[Heartbeat] Stopped');
+    log.debug('Stopped');
   }
 }
 

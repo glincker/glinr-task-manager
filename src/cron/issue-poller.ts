@@ -2,13 +2,17 @@
  * Issue Poller
  *
  * Polls GitHub for new issues labeled with ai-task that aren't in the queue yet.
- * Runs every 5 minutes to catch issues that webhooks might have missed.
+ * Configurable via POLL_INTERVAL_ISSUES env var (default: 2 minutes).
  */
 
 import { addTask, getTask } from '../queue/task-queue.js';
+import { createContextualLogger } from '../utils/logger.js';
 import type { CreateTaskInput } from '../types/task.js';
 
-const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const log = createContextualLogger('IssuePoller');
+
+// Configurable interval (default: 2 minutes, env var in ms)
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_ISSUES || '120000', 10);
 const AI_TASK_LABEL = process.env.GITHUB_AI_TASK_LABEL || 'ai-task';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
 const REPOS_TO_POLL = (process.env.GITHUB_REPOS_TO_POLL || '').split(',').filter(Boolean);
@@ -44,7 +48,7 @@ async function fetchOpenIssues(owner: string, repo: string): Promise<GitHubIssue
     );
 
     if (!response.ok) {
-      console.error(`[Poller] Failed to fetch issues from ${owner}/${repo}: ${response.status}`);
+      log.warn(`Failed to fetch issues from ${owner}/${repo}`, { status: response.status });
       return [];
     }
 
@@ -53,7 +57,7 @@ async function fetchOpenIssues(owner: string, repo: string): Promise<GitHubIssue
     // Filter out pull requests (GitHub API returns PRs in issues endpoint)
     return issues.filter(issue => !issue.pull_request);
   } catch (error) {
-    console.error(`[Poller] Error fetching issues from ${owner}/${repo}:`, error);
+    log.error(`Error fetching issues from ${owner}/${repo}`, error instanceof Error ? error : undefined);
     return [];
   }
 }
@@ -139,15 +143,15 @@ function getPriorityFromLabels(labels: Array<{ name: string }>): number {
  */
 async function pollForIssues(): Promise<void> {
   if (!GITHUB_TOKEN) {
-    console.log('[Poller] No GITHUB_TOKEN, skipping poll');
+    log.debug('No GITHUB_TOKEN configured, skipping poll');
     return;
   }
 
   if (REPOS_TO_POLL.length === 0) {
-    return;
+    return; // Silent - no repos configured
   }
 
-  console.log(`[Poller] Polling ${REPOS_TO_POLL.length} repos for ai-task issues...`);
+  log.debug(`Polling ${REPOS_TO_POLL.length} repos`);
 
   for (const repo of REPOS_TO_POLL) {
     const [owner, repoName] = repo.split('/');
@@ -159,17 +163,14 @@ async function pollForIssues(): Promise<void> {
       // Check if already in queue by sourceId
       const existingTask = getTask(`github_issue_${issue.number}_${repo}`);
 
-      // Also check by iterating (since we use random UUIDs)
-      // In production, add a proper index/lookup
-
       if (!existingTask) {
-        console.log(`[Poller] Found new issue #${issue.number} in ${repo}: ${issue.title}`);
+        log.info(`Found new issue #${issue.number} in ${repo}`, { title: issue.title });
 
         try {
           const task = await addTask(issueToTask(issue, repo));
-          console.log(`[Poller] Created task ${task.id} for issue #${issue.number}`);
+          log.info(`Created task for issue #${issue.number}`, { taskId: task.id });
         } catch (error) {
-          console.error(`[Poller] Failed to create task for issue #${issue.number}:`, error);
+          log.error(`Failed to create task for issue #${issue.number}`, error instanceof Error ? error : undefined);
         }
       }
     }
@@ -181,18 +182,17 @@ async function pollForIssues(): Promise<void> {
  */
 export function startIssuePoller(): void {
   if (pollerInterval) {
-    console.log('[Poller] Already running');
-    return;
+    return; // Already running
   }
 
-  console.log('[Poller] Starting issue poller (interval: 5 minutes)');
+  log.info(`Starting issue poller`, { intervalMs: POLL_INTERVAL });
 
   // Run immediately on start
-  pollForIssues().catch(console.error);
+  pollForIssues().catch((e) => log.error('Poll failed', e instanceof Error ? e : undefined));
 
-  // Then run every 5 minutes
+  // Then run at configured interval
   pollerInterval = setInterval(() => {
-    pollForIssues().catch(console.error);
+    pollForIssues().catch((e) => log.error('Poll failed', e instanceof Error ? e : undefined));
   }, POLL_INTERVAL);
 }
 
@@ -203,6 +203,6 @@ export function stopIssuePoller(): void {
   if (pollerInterval) {
     clearInterval(pollerInterval);
     pollerInterval = null;
-    console.log('[Poller] Stopped');
+    log.debug('Stopped');
   }
 }

@@ -2,8 +2,48 @@
 
 > **Last Updated:** 2026-02-01
 > **For:** Antigravity and other AI agents
+> **Design System:** macOS Sequoia Liquid Glass
+> **Theme Logic:** Smart System Sync (Remembers Dark/Midnight preference)
+> **Speed Mode:** Pick 2-3 tasks and run in parallel!
 
-Quick context for AI agents to pick up work without overlap.
+---
+
+## Quick Start
+
+```bash
+# Start both backend + UI together (recommended)
+pnpm dev
+
+# Or start separately:
+pnpm dev:api    # Backend on :3000
+pnpm dev:ui     # UI on :5173
+```
+
+---
+
+## Design System: Liquid Glass
+
+### Core Principles
+- **Floating elements** - Nothing touches viewport edges
+- **Multi-layer glass** - backdrop-filter: blur + saturate + inner glow
+- **Organic curves** - 12-20px radius everywhere (32px for main cards)
+- **Depth via shadows** - 4-layer shadow stacks
+- **Vibrant colors** - OKLCH with saturation
+
+### CSS Utilities Available
+```css
+.glass              /* Standard glass panel */
+.glass-heavy        /* 40px blur for modals/popovers */
+.sidebar-glass      /* Floating sidebar with glow */
+.header-glass       /* Top toolbar glass */
+.nav-item-active-glass  /* Active nav with primary glow */
+.nav-item-hover-glass   /* Subtle hover glass */
+.shadow-float       /* Multi-layer floating shadow */
+.hover-lift         /* Lift + shadow on hover */
+.transition-liquid  /* Smooth 0.3s cubic-bezier */
+.skeleton-glass     /* Glass-style skeleton loader */
+.skeleton-shimmer   /* Shimmer effect for loaders */
+```
 
 ---
 
@@ -11,169 +51,143 @@ Quick context for AI agents to pick up work without overlap.
 
 ### Completed
 
-| Phase | Status | Key Files |
-|-------|--------|-----------|
-| Task Queue (BullMQ) | ✅ | `src/queue/` |
-| GitHub/Jira/Linear Webhooks | ✅ | `src/integrations/` |
-| OpenClaw + Claude Code Adapters | ✅ | `src/adapters/` |
-| MCP Server (Claude Code) | ✅ | `src/mcp/server.ts` |
-| Zero-Cost Hooks | ✅ | `src/hooks/` |
-| Rules Engine | ✅ | `src/intelligence/rules.ts` |
-| Token Cost Tracking | ✅ | `src/costs/` |
-| Structured Summaries | ✅ | `src/summaries/` |
-| **LibSQL Storage** | ✅ | `src/storage/` |
-
-### In Progress
-
-| Phase | Progress | Next Steps |
-|-------|----------|------------|
-| Phase 10: Storage | 40% | Vector search, cloud sync |
-| Phase 8: GitHub OAuth | 0% | OAuth flow, PR linking |
-| Phase 5: Intelligence | 30% | Ollama, Copilot proxy |
+| Feature | Status | Files |
+|---------|--------|-------|
+| Liquid Glass Design System | Done | `ui/src/index.css` |
+| Floating Sidebar | Done | `ui/src/layouts/RootLayout.tsx` |
+| macOS Toolbar Header | Done | `ui/src/layouts/RootLayout.tsx` |
+| Dashboard with Stats | Done | `ui/src/features/dashboard/` |
+| Task List + Filters + Search | Done | `ui/src/features/tasks/` |
+| Task Detail View | Done | `ui/src/features/tasks/views/TaskDetail.tsx` |
+| Task Actions (Cancel/Retry UI) | Done | `ui/src/features/tasks/views/TaskDetail.tsx` |
+| Summary Browser | Done | `ui/src/features/summaries/` |
+| Agent Status Dashboard | Done | `ui/src/features/agents/` |
+| Settings Page | Done | `ui/src/features/settings/` |
+| Command Palette (Cmd+K) | Done | `ui/src/components/shared/CommandPalette.tsx` |
+| Notification Center | Done | `ui/src/features/notifications/` |
+| Smart Theme Sync | Done | `ui/src/core/providers/ThemeProvider.tsx` |
+| Loading Skeletons | Done | `ui/src/components/ui/skeleton.tsx` |
+| Status Indicators | Done | `ui/src/components/shared/StatusIndicator.tsx` |
+| Real-time Polling | Done | TanStack Query refetchInterval (stops on error) |
+| Backend Offline UI | Done | Dashboard shows helpful "Backend Not Running" state |
+| Concurrent Dev Script | Done | `pnpm dev` runs both API + UI |
+| Cost Analytics Dashboard | Done | `ui/src/features/costs/views/CostDashboard.tsx` |
+| Webhook Status Panel | Done | `ui/src/features/webhooks/` |
+| Dead Letter Queue UI | Done | `ui/src/features/dlq/` |
+| Onboarding Tour | Done | `ui/src/components/shared/OnboardingTour.tsx` |
+| Integrations API | Done | `GET /api/integrations/status` |
+| Summary Detail View | Done | `ui/src/features/summaries/views/SummaryDetail.tsx` |
+| Keyboard Shortcuts Modal | Done | `ui/src/components/shared/KeyboardShortcuts.tsx` |
 
 ---
 
-## Recommended Tasks for Antigravity
+## HIGH Priority Tasks
 
-### Option 1: Vector Search (sqlite-vec) ⭐ HIGH
-**Phase 10.3 | Effort: Medium**
-
-Add semantic search for finding related tasks/summaries:
+### 1. SSE Event Stream (Backend)
+**Effort: Medium | Files: `src/routes/events.ts`**
 
 ```typescript
-// In src/storage/libsql.ts - add these methods:
-storeEmbedding(id, entityType, entityId, embedding, model)
-searchSimilar(entityType, embedding, limit)
+// GET /api/events (Server-Sent Events)
+// Stream: task:created, task:started, task:completed, task:failed
+// Replace polling for real-time updates
+// Include task summary in event payload
 ```
-
-Steps:
-1. Install sqlite-vec extension
-2. Update schema with vector column type
-3. Add `/api/search/semantic` endpoint
-4. Generate embeddings on summary creation (use Ollama or OpenAI)
-
-**Test:** `pnpm build && pnpm test`
 
 ---
 
-### Option 2: Ollama Integration ⭐ HIGH
-**Phase 5.6.2 | Effort: Medium**
-
-Zero-cost local inference for summaries:
+### 2. Settings API (Backend)
+**Effort: Medium | Files: `src/routes/settings.ts`**
 
 ```typescript
-// src/intelligence/ollama.ts
-export async function generateSummary(content: string): Promise<string>
-export async function generateEmbedding(text: string): Promise<number[]>
+// GET /api/settings → Current config (secrets masked)
+// PATCH /api/settings → Update settings
+// Store in SQLite settings table
+// Fields: theme, apiKeys (masked), webhookUrls, preferences
 ```
-
-Steps:
-1. Create Ollama client with health check
-2. Use `llama3.2:3b` for summaries
-3. Use `nomic-embed-text` for embeddings
-4. Add fallback to Gemini Flash if Ollama unavailable
-
-**Test:** Start Ollama, then `pnpm test`
 
 ---
 
-### Option 3: GitHub OAuth
-**Phase 8 | Effort: Medium**
+## MEDIUM Priority Tasks
 
-Enable GitHub login and PR linking:
+### 3. Mobile Sidebar Drawer
+**Effort: Medium | Files: `ui/src/layouts/RootLayout.tsx`**
 
+Responsive sidebar:
 ```typescript
-// src/auth/github.ts
-export async function handleOAuthCallback(code: string): Promise<User>
-export async function linkPRToTask(taskId: string, prUrl: string): Promise<void>
+// On mobile (< 768px):
+// - Hide sidebar by default
+// - Add hamburger menu in header
+// - Sidebar slides in as drawer from left
+// - Backdrop closes it
+// - Use sheet component from shadcn/ui
 ```
 
-Steps:
-1. Create GitHub OAuth flow (`/auth/github/login`, `/auth/github/callback`)
-2. Store tokens securely
-3. Auto-link PRs to tasks via branch/commit message parsing
-
-**Test:** `pnpm build`
-
 ---
 
-### Option 4: Cloud Sync (Turso)
-**Phase 10.4 | Effort: Large**
+### 4. Export/Import Tasks
+**Effort: Small | Files: Backend + UI**
 
-Enable multi-device sync via Turso:
-
-Steps:
-1. Add Turso connection option in config
-2. Update LibSQLAdapter to support sync URL
-3. Implement conflict resolution
-4. Add sync status endpoint
-
-**Test:** Create Turso account, then `pnpm test`
-
----
-
-### Option 5: Summary Templates
-**Phase 7.4 | Effort: Small**
-
-Auto-generate PR descriptions from summaries:
-
+Backup and restore:
 ```typescript
-// src/summaries/templates.ts
-export function generatePRDescription(summary: Summary): string
-export function generateChangelog(summaries: Summary[]): string
+// Backend:
+// - GET /api/tasks/export → JSON file download
+// - POST /api/tasks/import → Upload JSON file
+
+// UI:
+// - Export button in Settings or Task list header
+// - Import with file picker
+// - Validation and conflict handling
 ```
-
-Steps:
-1. Create template functions
-2. Add `/api/summaries/:id/pr-description` endpoint
-3. Add changelog generation
-
-**Test:** `pnpm build && pnpm test`
 
 ---
 
 ## Quick Commands
 
 ```bash
-pnpm dev          # Start server (auto-reload)
-pnpm build        # TypeScript compile
-pnpm test         # Run tests
-pnpm db:generate  # Generate Drizzle migrations
-pnpm db:migrate   # Apply migrations
-pnpm db:studio    # Open Drizzle Studio (DB viewer)
+# Full stack (recommended)
+pnpm dev              # Starts API + UI together
+
+# Separate
+pnpm dev:api          # Backend on port 3000
+pnpm dev:ui           # UI on port 5173
+
+# Build
+pnpm build            # Builds both backend + UI
+
+# Tests
+pnpm test             # Run backend tests
+
+# Install UI dependency
+pnpm --dir ui add <package>
 ```
 
-## Key Directories
+## API Response Types
+
+**Important:** All GET endpoints wrap data in objects:
+```typescript
+// GET /api/tasks/:id → { task: Task }
+// GET /api/summaries/:id → { summary: Summary }
+// GET /api/summaries/recent → { summaries: Summary[], count: number }
+// GET /api/tasks → { tasks: Task[], count: number }
+// GET /api/costs/summary → { totalTokens, totalCost, taskCount }
+// GET /api/costs/analytics → { daily[], byModel{}, byAgent{} }
+```
+
+## Key Files
 
 | Path | Purpose |
 |------|---------|
-| `src/storage/` | LibSQL adapter, Drizzle schema |
-| `src/summaries/` | Summary extraction & storage |
-| `src/intelligence/` | Rules engine (add Ollama here) |
-| `src/auth/` | Auth flows (create for OAuth) |
-| `config/` | YAML configurations |
+| `ui/src/index.css` | Liquid Glass Design Tokens |
+| `ui/src/layouts/RootLayout.tsx` | Main layout with sidebar + header |
+| `ui/src/features/` | Feature modules (tasks, agents, etc) |
+| `ui/src/components/ui/` | shadcn/ui base components |
+| `ui/src/components/shared/` | Shared components |
+| `ui/src/core/api/client.ts` | API client with types |
+| `ui/src/router.tsx` | Route definitions |
 
-## Do NOT Modify
+## Do NOT Modify Without Care
 
-- `package.json` - Dependencies stable
-- `src/queue/task-queue.ts` - Core queue tested
-- `src/storage/schema.ts` - DB schema in use
-
----
-
-## Architecture Reference
-
-```
-User Request → Webhook → Task Queue → Agent Adapter → Result
-                                           ↓
-                             Storage ← Summary Extraction
-                                           ↓
-                                    Intelligence Layer
-                                    (Rules → Ollama → Gemini)
-```
-
-**Storage Stack:**
-- Local: LibSQL (SQLite fork)
-- Schema: Drizzle ORM
-- Migrations: drizzle-kit
-- Future: sqlite-vec for vectors, Turso for cloud sync
+- `ui/src/index.css` - Liquid glass system (add new, don't break existing)
+- `src/queue/task-queue.ts` - Core queue logic
+- `src/storage/schema.ts` - DB schema (needs migrations)
+- `ui/src/core/api/client.ts` - API types are synced with backend

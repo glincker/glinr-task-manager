@@ -6,6 +6,12 @@ server:
     origin: "*"
   enableCron: true
 
+# Agent auto-discovery
+# When enabled, the system will auto-detect available agents (e.g., claude CLI)
+# Set to false to only use agents explicitly defined in agents.yml
+agents:
+  autoDiscover: false
+
 queue:
   name: ai-tasks
   notificationName: ai-task-notifications
@@ -29,3 +35,16 @@ integrations:
     enabled: true
     webhookPath: /webhooks/linear
     aiTaskLabel: ai-task
+    aiReviewLabel: ai-review
+
+ai:
+  providers:
+    openai:
+      apiKey: "${OPENAI_API_KEY}"
+      embeddingModel: text-embedding-3-small
+    ollama:
+      baseUrl: http://localhost:11434
+      summaryModel: llama3.2:3b
+      embeddingModel: mxbai-embed-large
+  defaultEmbeddingProvider: openai
+  defaultSummaryProvider: ollama  # 'ollama' for local, 'openai' for cloud, 'auto' for fallback

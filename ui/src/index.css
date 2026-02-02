@@ -1,0 +1,562 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Typography */
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Liquid Design - Softer, More Organic Radius */
+  --radius-lg: 1.25rem; /* 20px - Apple's signature soft curves */
+  --radius-md: 1rem;    /* 16px */
+  --radius-sm: 0.75rem; /* 12px */
+
+  /* Liquid Multi-Layer Shadows */
+  --shadow-liquid-1: 0 1px 2px -1px oklch(0 0 0 / 0.05);
+  --shadow-liquid-2: 0 4px 8px -2px oklch(0 0 0 / 0.08);
+  --shadow-liquid-3: 0 12px 24px -4px oklch(0 0 0 / 0.12);
+  --shadow-liquid-4: 0 24px 48px -8px oklch(0 0 0 / 0.16);
+  
+  --shadow-soft: var(--shadow-liquid-1), var(--shadow-liquid-2);
+  --shadow-elevated: var(--shadow-liquid-2), var(--shadow-liquid-3);
+  --shadow-float: var(--shadow-liquid-2), var(--shadow-liquid-3), var(--shadow-liquid-4);
+}
+
+/* Light mode - Vibrant liquid colors */
+:root {
+  --background: oklch(0.99 0.005 260); /* Subtle cool tint */
+  --foreground: oklch(0.15 0.01 260);
+  
+  --card: oklch(1 0 0 / 0.85); /* Semi-transparent for glass effect */
+  --card-foreground: oklch(0.15 0.01 260);
+  
+  --popover: oklch(1 0 0 / 0.95);
+  --popover-foreground: oklch(0.15 0.01 260);
+  
+  /* Vibrant primary with color */
+  --primary: oklch(0.45 0.15 250); /* Rich blue */
+  --primary-foreground: oklch(0.99 0 0);
+  
+  /* Frosted secondary */
+  --secondary: oklch(0.96 0.01 260 / 0.6);
+  --secondary-foreground: oklch(0.15 0.01 260);
+  
+  --muted: oklch(0.96 0.01 260 / 0.5);
+  --muted-foreground: oklch(0.45 0.01 260);
+  
+  /* Vibrant accent */
+  --accent: oklch(0.94 0.02 270 / 0.7);
+  --accent-foreground: oklch(0.15 0.01 260);
+  
+  --destructive: oklch(0.55 0.22 25); /* Warmer red */
+  --destructive-foreground: oklch(0.99 0 0);
+  
+  --border: oklch(0.92 0.01 260 / 0.4);
+  --input: oklch(0.92 0.01 260 / 0.5);
+  
+  /* Vibrant ring */
+  --ring: oklch(0.6 0.18 250 / 0.4);
+  --radius: 1rem;
+
+  /* Vibrant status colors with transparency */
+  --success: oklch(0.55 0.15 150);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.68 0.16 80);
+  --warning-foreground: oklch(0.15 0 0);
+  --info: oklch(0.55 0.16 250);
+  --info-foreground: oklch(0.99 0 0);
+  
+  /* Mesh gradient colors */
+  --gradient-from: oklch(0.75 0.12 280); /* Purple */
+  --gradient-via: oklch(0.7 0.14 250);   /* Blue */
+  --gradient-to: oklch(0.68 0.11 200);   /* Cyan */
+}
+
+/* Dark mode - Deep, vibrant liquid */
+:root[class~="dark"] {
+  --background: oklch(0.11 0.015 260);
+  --foreground: oklch(0.96 0.005 260);
+  
+  --card: oklch(0.15 0.02 260 / 0.85);
+  --card-foreground: oklch(0.96 0.005 260);
+  
+  --popover: oklch(0.15 0.02 260 / 0.95);
+  --popover-foreground: oklch(0.96 0.005 260);
+  
+  --primary: oklch(0.65 0.18 250);
+  --primary-foreground: oklch(0.11 0.015 260);
+  
+  --secondary: oklch(0.2 0.02 260 / 0.6);
+  --secondary-foreground: oklch(0.96 0.005 260);
+  
+  --muted: oklch(0.2 0.02 260 / 0.5);
+  --muted-foreground: oklch(0.6 0.01 260);
+  
+  --accent: oklch(0.22 0.03 270 / 0.7);
+  --accent-foreground: oklch(0.96 0.005 260);
+  
+  --destructive: oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  
+  --border: oklch(0.25 0.02 260 / 0.4);
+  --input: oklch(0.25 0.02 260 / 0.5);
+  --ring: oklch(0.65 0.18 250 / 0.5);
+
+  /* Dark mode status colors */
+  --success: oklch(0.6 0.16 150);
+  --success-foreground: oklch(0.11 0.015 260);
+  --warning: oklch(0.7 0.17 80);
+  --warning-foreground: oklch(0.11 0.015 260);
+  --info: oklch(0.6 0.17 250);
+  --info-foreground: oklch(0.11 0.015 260);
+
+  /* Dark mesh gradients */
+  --gradient-from: oklch(0.35 0.12 280);
+  --gradient-via: oklch(0.32 0.14 250);
+  --gradient-to: oklch(0.3 0.11 200);
+
+  /* Enhanced dark shadows */
+  --shadow-liquid-1: 0 1px 2px -1px oklch(0 0 0 / 0.2);
+  --shadow-liquid-2: 0 4px 8px -2px oklch(0 0 0 / 0.3);
+  --shadow-liquid-3: 0 12px 24px -4px oklch(0 0 0 / 0.4);
+  --shadow-liquid-4: 0 24px 48px -8px oklch(0 0 0 / 0.5);
+  
+  --shadow-soft: var(--shadow-liquid-1), var(--shadow-liquid-2);
+  --shadow-elevated: var(--shadow-liquid-2), var(--shadow-liquid-3);
+  --shadow-float: var(--shadow-liquid-2), var(--shadow-liquid-3), var(--shadow-liquid-4);
+}
+
+/* Midnight Theme - Deep Professional Black/Gray */
+:root[class~="midnight"] {
+  --background: oklch(0.1 0 0); /* Pure professional deep black-gray */
+  --foreground: oklch(0.98 0 0);
+  
+  --card: oklch(0.14 0 0 / 0.8);
+  --card-foreground: oklch(0.98 0 0);
+  
+  --popover: oklch(0.12 0 0 / 0.95);
+  --popover-foreground: oklch(0.98 0 0);
+  
+  --primary: oklch(0.7 0.1 250); /* Slightly more desaturated indigo/blue */
+  --primary-foreground: oklch(0.1 0 0);
+  
+  --secondary: oklch(0.18 0 0 / 0.6);
+  --secondary-foreground: oklch(0.98 0 0);
+  
+  --muted: oklch(0.18 0 0 / 0.5);
+  --muted-foreground: oklch(0.6 0 0);
+  
+  --accent: oklch(0.2 0 0 / 0.7);
+  --accent-foreground: oklch(0.98 0 0);
+  
+  --border: oklch(0.25 0 0 / 0.3);
+  --input: oklch(0.25 0 0 / 0.4);
+  --ring: oklch(0.7 0.1 250 / 0.5);
+
+  /* Status colors - cleaner in black mode */
+  --success: oklch(0.7 0.12 150);
+  --warning: oklch(0.75 0.12 80);
+  --info: oklch(0.7 0.12 250);
+
+  /* Midnight mesh gradients - subtle emerald/slate tints */
+  --gradient-from: oklch(0.2 0.02 200);
+  --gradient-via: oklch(0.15 0.01 240);
+  --gradient-to: oklch(0.12 0.01 280);
+
+  /* More pronounced shadows for deep black mode */
+  --shadow-liquid-1: 0 1px 2px -1px oklch(0 0 0 / 0.4);
+  --shadow-liquid-2: 0 4px 12px -2px oklch(0 0 0 / 0.5);
+  --shadow-liquid-3: 0 16px 32px -4px oklch(0 0 0 / 0.6);
+  --shadow-liquid-4: 0 32px 64px -8px oklch(0 0 0 / 0.7);
+}
+
+/* Base styles with liquid aesthetics */
+* {
+  border-color: var(--border);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, var(--gradient-from) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 0% 100%, var(--gradient-via) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 50% at 100% 100%, var(--gradient-to) 0%, transparent 50%),
+    var(--background);
+  background-attachment: fixed;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Liquid utility classes */
+@utility shadow-soft {
+  box-shadow: var(--shadow-soft);
+}
+
+@utility shadow-elevated {
+  box-shadow: var(--shadow-elevated);
+}
+
+@utility shadow-float {
+  box-shadow: var(--shadow-float);
+}
+
+@utility glass {
+  background: var(--card);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--border);
+}
+
+@utility glass-heavy {
+  background: var(--card);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid oklch(from var(--primary) l c h / 0.2);
+  box-shadow: 0 0 0 1px oklch(from var(--primary) l c h / 0.05) inset;
+}
+
+@utility sidebar-glass {
+  background: var(--card);
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  border: 1px solid oklch(1 0 0 / 0.1);
+  box-shadow: 
+    var(--shadow-float),
+    inset 0 0 0 1px oklch(1 0 0 / 0.05),
+    inset 0 1px 1px 0 oklch(1 0 0 / 0.1);
+}
+
+@utility header-glass {
+  background: var(--card);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid oklch(1 0 0 / 0.08);
+  box-shadow: 
+    var(--shadow-elevated),
+    inset 0 0 0 1px oklch(1 0 0 / 0.03);
+}
+
+@utility nav-item-active-glass {
+  background: var(--primary);
+  backdrop-filter: saturate(200%);
+  border: 1px solid oklch(1 0 0 / 0.2);
+  box-shadow: 
+    0 4px 12px -2px oklch(from var(--primary) l c h / 0.4),
+    inset 0 1px 1px 0 oklch(1 0 0 / 0.2);
+}
+
+@utility nav-item-hover-glass {
+  background: oklch(1 0 0 / 0.08);
+  backdrop-filter: blur(8px);
+  border: 1px solid oklch(1 0 0 / 0.05);
+}
+
+@utility skeleton-glass {
+  background: oklch(1 0 0 / 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid oklch(1 0 0 / 0.05);
+}
+
+@utility skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(1 0 0 / 0.08) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Smooth transitions for liquid feel */
+@utility transition-liquid {
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+@utility hover-lift {
+  transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1),
+              box-shadow 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-float);
+  }
+}
+
+/* Toast Liquid Glass */
+.toast-glass {
+  background: var(--card) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1px solid oklch(1 0 0 / 0.1) !important;
+  border-radius: 20px !important;
+  box-shadow: var(--shadow-float) !important;
+  color: var(--foreground) !important;
+  padding: 16px !important;
+}
+
+.toast-glass[data-type="success"] {
+  border: 1px solid oklch(from var(--success) l c h / 0.3) !important;
+  box-shadow: 0 8px 32px -8px oklch(from var(--success) l c h / 0.2), var(--shadow-float) !important;
+}
+
+.toast-glass[data-type="error"] {
+  border: 1px solid oklch(from var(--destructive) l c h / 0.3) !important;
+  box-shadow: 0 8px 32px -8px oklch(from var(--destructive) l c h / 0.2), var(--shadow-float) !important;
+}
+
+.toast-glass[data-type="info"] {
+  border: 1px solid oklch(from var(--info) l c h / 0.3) !important;
+  box-shadow: 0 8px 32px -8px oklch(from var(--info) l c h / 0.2), var(--shadow-float) !important;
+}
+
+/* ===== Driver.js Onboarding Tour - Liquid Glass Styling ===== */
+.driver-popover {
+  background: oklch(0.13 0.02 260 / 0.92) !important;
+  backdrop-filter: blur(40px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(200%) !important;
+  border: 1px solid oklch(1 0 0 / 0.12) !important;
+  border-radius: 24px !important;
+  box-shadow:
+    0 4px 16px -2px oklch(0 0 0 / 0.4),
+    0 20px 40px -8px oklch(0 0 0 / 0.5),
+    inset 0 1px 1px 0 oklch(1 0 0 / 0.08),
+    inset 0 0 0 1px oklch(1 0 0 / 0.04) !important;
+  color: oklch(0.96 0.005 260) !important;
+  padding: 20px 24px !important;
+  max-width: 360px !important;
+}
+
+.driver-popover-title {
+  font-size: 1.125rem !important;
+  font-weight: 700 !important;
+  color: oklch(0.98 0 0) !important;
+  margin-bottom: 10px !important;
+  letter-spacing: -0.01em !important;
+}
+
+.driver-popover-description {
+  font-size: 0.875rem !important;
+  color: oklch(0.7 0.01 260) !important;
+  line-height: 1.6 !important;
+  margin-bottom: 16px !important;
+}
+
+.driver-popover-progress-text {
+  color: oklch(0.5 0.01 260) !important;
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+/* Navigation buttons */
+.driver-popover-navigation-btns {
+  gap: 8px !important;
+  justify-content: flex-end !important;
+}
+
+.driver-popover-prev-btn,
+.driver-popover-next-btn {
+  background: oklch(0.22 0.02 260 / 0.8) !important;
+  color: oklch(0.9 0 0) !important;
+  border: 1px solid oklch(1 0 0 / 0.1) !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  font-size: 0.8rem !important;
+  padding: 10px 18px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  text-shadow: none !important;
+}
+
+.driver-popover-prev-btn:hover,
+.driver-popover-next-btn:hover {
+  background: oklch(0.28 0.02 260 / 0.9) !important;
+  transform: translateY(-1px) !important;
+  border-color: oklch(1 0 0 / 0.15) !important;
+}
+
+.driver-popover-next-btn {
+  background: linear-gradient(135deg, oklch(0.6 0.18 250), oklch(0.55 0.2 280)) !important;
+  color: white !important;
+  border: 1px solid oklch(1 0 0 / 0.2) !important;
+  box-shadow: 0 4px 12px -2px oklch(0.6 0.18 250 / 0.4) !important;
+}
+
+.driver-popover-next-btn:hover {
+  background: linear-gradient(135deg, oklch(0.65 0.18 250), oklch(0.6 0.2 280)) !important;
+  box-shadow: 0 6px 16px -2px oklch(0.6 0.18 250 / 0.5) !important;
+}
+
+/* Close button */
+.driver-popover-close-btn {
+  background: oklch(1 0 0 / 0.08) !important;
+  color: oklch(0.6 0 0) !important;
+  border: none !important;
+  border-radius: 10px !important;
+  width: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.2s ease !important;
+}
+
+.driver-popover-close-btn:hover {
+  background: oklch(1 0 0 / 0.15) !important;
+  color: oklch(0.9 0 0) !important;
+  transform: none !important;
+}
+
+/* Arrow styling */
+.driver-popover-arrow {
+  border: none !important;
+}
+
+.driver-popover-arrow-side-left,
+.driver-popover-arrow-side-right,
+.driver-popover-arrow-side-top,
+.driver-popover-arrow-side-bottom {
+  border-color: oklch(0.13 0.02 260 / 0.92) !important;
+}
+
+/* Overlay */
+.driver-overlay {
+  background: oklch(0.08 0.015 260 / 0.85) !important;
+}
+
+/* Highlighted element */
+.driver-active-element {
+  box-shadow:
+    0 0 0 4px oklch(0.6 0.18 250 / 0.3),
+    0 0 0 8px oklch(0.6 0.18 250 / 0.1) !important;
+  border-radius: 16px !important;
+}
+
+/* ===== Light Mode Overrides for Tour ===== */
+:root:not(.dark):not(.midnight) .driver-popover {
+  background: oklch(1 0 0 / 0.92) !important;
+  border-color: oklch(0.9 0.01 260 / 0.5) !important;
+  color: oklch(0.15 0.01 260) !important;
+  box-shadow:
+    0 4px 16px -2px oklch(0 0 0 / 0.1),
+    0 20px 40px -8px oklch(0 0 0 / 0.15),
+    inset 0 1px 1px 0 oklch(1 0 0 / 0.5) !important;
+}
+
+:root:not(.dark):not(.midnight) .driver-popover-title {
+  color: oklch(0.15 0.01 260) !important;
+}
+
+:root:not(.dark):not(.midnight) .driver-popover-description {
+  color: oklch(0.4 0.01 260) !important;
+}
+
+:root:not(.dark):not(.midnight) .driver-popover-progress-text {
+  color: oklch(0.55 0.01 260) !important;
+}
+
+:root:not(.dark):not(.midnight) .driver-popover-prev-btn {
+  background: oklch(0.96 0.01 260 / 0.8) !important;
+  color: oklch(0.3 0.01 260) !important;
+  border-color: oklch(0.9 0.01 260 / 0.5) !important;
+}
+
+:root:not(.dark):not(.midnight) .driver-popover-prev-btn:hover {
+  background: oklch(0.94 0.01 260 / 0.9) !important;
+}
+
+:root:not(.dark):not(.midnight) .driver-popover-close-btn {
+  background: oklch(0 0 0 / 0.05) !important;
+  color: oklch(0.5 0 0) !important;
+}
+
+:root:not(.dark):not(.midnight) .driver-popover-close-btn:hover {
+  background: oklch(0 0 0 / 0.1) !important;
+  color: oklch(0.2 0 0) !important;
+}
+
+:root:not(.dark):not(.midnight) .driver-overlay {
+  background: oklch(0 0 0 / 0.5) !important;
+}
+
+/* ===== Midnight Mode Overrides for Tour ===== */
+:root.midnight .driver-popover {
+  background: oklch(0.12 0 0 / 0.95) !important;
+  border-color: oklch(1 0 0 / 0.08) !important;
+  box-shadow:
+    0 4px 16px -2px oklch(0 0 0 / 0.5),
+    0 24px 48px -8px oklch(0 0 0 / 0.6),
+    inset 0 1px 1px 0 oklch(1 0 0 / 0.05) !important;
+}
+
+:root.midnight .driver-popover-prev-btn {
+  background: oklch(0.18 0 0 / 0.8) !important;
+  border-color: oklch(1 0 0 / 0.08) !important;
+}
+
+:root.midnight .driver-popover-next-btn {
+  background: linear-gradient(135deg, oklch(0.65 0.1 250), oklch(0.6 0.12 280)) !important;
+}
+
+:root.midnight .driver-overlay {
+  background: oklch(0 0 0 / 0.8) !important;
+}
+
+/* ===== Custom Scrollbar Styling ===== */
+/* Hide scrollbar but keep functionality */
+.scrollbar-none {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
+}
+
+/* Thin glass scrollbar for main content */
+.scrollbar-glass {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(1 0 0 / 0.15) transparent;
+}
+.scrollbar-glass::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-glass::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-glass::-webkit-scrollbar-thumb {
+  background: oklch(1 0 0 / 0.15);
+  border-radius: 3px;
+}
+.scrollbar-glass::-webkit-scrollbar-thumb:hover {
+  background: oklch(1 0 0 / 0.25);
+}
+
+/* Light mode scrollbar */
+:root:not(.dark):not(.midnight) .scrollbar-glass {
+  scrollbar-color: oklch(0 0 0 / 0.12) transparent;
+}
+:root:not(.dark):not(.midnight) .scrollbar-glass::-webkit-scrollbar-thumb {
+  background: oklch(0 0 0 / 0.12);
+}
+:root:not(.dark):not(.midnight) .scrollbar-glass::-webkit-scrollbar-thumb:hover {
+  background: oklch(0 0 0 / 0.2);
+}

@@ -2,36 +2,40 @@
  * Cron Jobs Index
  *
  * Starts and stops all background cron jobs.
+ *
+ * Configurable intervals via environment variables:
+ * - POLL_INTERVAL_HEARTBEAT: Agent health check (default: 30s)
+ * - POLL_INTERVAL_ISSUES: GitHub issue polling (default: 2m)
+ * - POLL_INTERVAL_STALE: Stale task check (default: 1m)
  */
 
 import { startIssuePoller, stopIssuePoller } from './issue-poller.js';
 import { startHeartbeat, stopHeartbeat } from './heartbeat.js';
 import { startStaleChecker, stopStaleChecker } from './stale-checker.js';
+import { createContextualLogger } from '../utils/logger.js';
+
+const log = createContextualLogger('Cron');
 
 /**
  * Start all cron jobs
  */
 export function startAllCronJobs(): void {
-  console.log('[Cron] Starting all background jobs...');
+  log.info('Starting background jobs');
 
   startHeartbeat();
   startIssuePoller();
   startStaleChecker();
-
-  console.log('[Cron] All background jobs started');
 }
 
 /**
  * Stop all cron jobs
  */
 export function stopAllCronJobs(): void {
-  console.log('[Cron] Stopping all background jobs...');
+  log.info('Stopping background jobs');
 
   stopHeartbeat();
   stopIssuePoller();
   stopStaleChecker();
-
-  console.log('[Cron] All background jobs stopped');
 }
 
 export { startIssuePoller, stopIssuePoller } from './issue-poller.js';

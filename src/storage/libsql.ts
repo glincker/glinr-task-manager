@@ -91,6 +91,17 @@ export class LibSQLAdapter implements StorageAdapter {
         metadata TEXT
       )
     `);
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS embeddings (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        embedding BLOB NOT NULL,
+        model TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
   }
 
   async disconnect(): Promise<void> {
@@ -274,5 +285,152 @@ export class LibSQLAdapter implements StorageAdapter {
     } catch (error) {
       return { healthy: false, latencyMs: Date.now() - start };
     }
+  }
+
+  async getAgentStats(): Promise<Record<string, { completed: number; failed: number; avgDuration: number; lastActivity?: Date }>> {
+    const results = await this.db.select({
+      agent: schema.tasks.assignedAgent,
+      status: schema.tasks.status,
+      count: count(),
+      avgDuration: sql<number>`AVG(${schema.tasks.completedAt} - ${schema.tasks.startedAt})`,
+      lastActivity: sql<number>`MAX(${schema.tasks.updatedAt})`
+    })
+    .from(schema.tasks)
+    .where(sql`${schema.tasks.assignedAgent} IS NOT NULL`)
+    .groupBy(schema.tasks.assignedAgent, schema.tasks.status);
+
+    const stats: Record<string, any> = {};
+    for (const row of results as any[]) {
+      if (!row.agent) continue;
+      if (!stats[row.agent]) {
+        stats[row.agent] = { completed: 0, failed: 0, avgDuration: 0, lastActivity: null };
+      }
+      if (row.status === 'completed') {
+        stats[row.agent].completed = row.count;
+        stats[row.agent].avgDuration = row.avgDuration || 0;
+      } else if (row.status === 'failed') {
+        stats[row.agent].failed = row.count;
+      }
+      
+      if (row.lastActivity) {
+        const lastActivity = new Date(row.lastActivity);
+        if (!stats[row.agent].lastActivity || lastActivity > stats[row.agent].lastActivity) {
+          stats[row.agent].lastActivity = lastActivity;
+        }
+      }
+    }
+    return stats;
+  }
+
+  async getCostAnalytics(): Promise<{
+    daily: Array<{ date: string; cost: number; tokens: number }>;
+    byModel: Record<string, { cost: number; tokens: number }>;
+    byAgent: Record<string, { cost: number; tokens: number }>;
+    totalCost: number;
+    totalTokens: number;
+  }> {
+    const all = await this.db.select().from(schema.summaries);
+    const daily: Record<string, { cost: number; tokens: number }> = {};
+    const byModel: Record<string, { cost: number; tokens: number }> = {};
+    const byAgent: Record<string, { cost: number; tokens: number }> = {};
+    let totalCost = 0;
+    let totalTokens = 0;
+
+    for (const s of all) {
+      if (!s.createdAt) continue;
+      
+      const date = s.createdAt.toISOString().split('T')[0];
+      const model = s.model || 'unknown';
+      const agent = s.agent || 'unknown';
+      const cost = (s.cost as any)?.amount || 0;
+      const tokens = (s.tokensUsed as any)?.total || 0;
+
+      totalCost += cost;
+      totalTokens += tokens;
+
+      if (!daily[date]) daily[date] = { cost: 0, tokens: 0 };
+      daily[date].cost += cost;
+      daily[date].tokens += tokens;
+
+      if (!byModel[model]) byModel[model] = { cost: 0, tokens: 0 };
+      byModel[model].cost += cost;
+      byModel[model].tokens += tokens;
+
+      if (!byAgent[agent]) byAgent[agent] = { cost: 0, tokens: 0 };
+      byAgent[agent].cost += cost;
+      byAgent[agent].tokens += tokens;
+    }
+
+    const dailyArray = Object.entries(daily)
+      .map(([date, data]) => ({ date, ...data }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    return {
+      daily: dailyArray,
+      byModel,
+      byAgent,
+      totalCost,
+      totalTokens,
+    };
+  }
+
+  // === Vector Search ===
+
+  async storeEmbedding(id: string, entityType: 'task' | 'summary', entityId: string, embedding: number[], model: string): Promise<void> {
+    // Convert float array to Buffer/Uint8Array for blob storage
+    const float32Array = new Float32Array(embedding);
+    const buffer = Buffer.from(float32Array.buffer);
+
+    await this.db.insert(schema.embeddings).values({
+      id,
+      entityType,
+      entityId,
+      embedding: buffer as any,
+      model,
+      createdAt: new Date(),
+    });
+  }
+
+  async searchSimilar(entityType: 'task' | 'summary', embedding: number[], limit = 5): Promise<Array<{ entityId: string; distance: number }>> {
+    // Basic implementation: fetch all embeddings of that type and compute cosine similarity in-memory
+    // In Phase 10.3 we would use sqlite-vec or libsql vector search if available.
+    const allEmbeddings = await this.db.select()
+      .from(schema.embeddings)
+      .where(eq(schema.embeddings.entityType, entityType));
+
+    if (allEmbeddings.length === 0) return [];
+
+    const targetVector = new Float32Array(embedding);
+    
+    const results = allEmbeddings.map((row: any) => {
+      const rowVector = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4);
+      const distance = this.cosineSimilarity(targetVector, rowVector);
+      return {
+        entityId: row.entityId,
+        distance,
+      };
+    });
+
+    // Sort by descending similarity (1.0 is identical)
+    results.sort((a: any, b: any) => b.distance - a.distance);
+
+    return results.slice(0, limit);
+  }
+
+  private cosineSimilarity(vecA: Float32Array, vecB: Float32Array): number {
+    if (vecA.length !== vecB.length) return 0;
+    
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    
+    for (let i = 0; i < vecA.length; i++) {
+      dotProduct += vecA[i] * vecB[i];
+      normA += vecA[i] * vecA[i];
+      normB += vecB[i] * vecB[i];
+    }
+    
+    const norm = Math.sqrt(normA) * Math.sqrt(normB);
+    return norm === 0 ? 0 : dotProduct / norm;
   }
 }

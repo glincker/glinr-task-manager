@@ -17,7 +17,7 @@ import {
   getRecentReports,
   getTaskReports,
 } from './hooks/index.js';
-import { initTaskQueue, addTask, getTask, getTasks, closeTaskQueue } from './queue/task-queue.js';
+import { initTaskQueue, addTask, getTask, getTasks, cancelTask, retryTask, closeTaskQueue } from './queue/task-queue.js';
 import { getDeadLetterQueue, retryDeadLetterTask, removeFromDeadLetterQueue } from './queue/failure-handler.js';
 import { getAgentRegistry } from './adapters/registry.js';
 import { startAllCronJobs, stopAllCronJobs, getHealthStatus } from './cron/index.js';
@@ -25,7 +25,7 @@ import { CreateTaskSchema } from './types/task.js';
 import { initTokenTracker, getUsageSummary } from './costs/token-tracker.js';
 import { getBudgetStatus } from './costs/budget.js';
 import { loadConfig } from './utils/config-loader.js';
-import { initStorage } from './storage/index.js';
+import { initStorage, getStorage } from './storage/index.js';
 import {
   createSummary,
   getSummary,
@@ -38,6 +38,21 @@ import {
   CreateSummaryInputSchema,
   SummaryQuerySchema,
 } from './summaries/index.js';
+import {
+  redirectToGitHub,
+  handleGitHubCallback,
+} from './auth/github-oauth.js';
+import {
+  redirectToJira,
+  handleJiraCallback,
+} from './auth/jira-oauth.js';
+import {
+  redirectToLinear,
+  handleLinearCallback,
+} from './auth/linear-oauth.js';
+import { generatePRDescription, generateChangelog } from './summaries/templates.js';
+import { getEmbeddingService } from './ai/embedding-service.js';
+import { logger as systemLogger } from './utils/logger.js';
 
 interface SettingsYaml {
   server: {
@@ -46,6 +61,9 @@ interface SettingsYaml {
       origin: string;
     };
     enableCron: boolean;
+  };
+  agents?: {
+    autoDiscover?: boolean;
   };
 }
 
@@ -93,6 +111,8 @@ app.get('/', (c) => {
       tasks: 'GET /api/tasks',
       createTask: 'POST /api/tasks',
       getTask: 'GET /api/tasks/:id',
+      cancelTask: 'POST /api/tasks/:id/cancel',
+      retryTask: 'POST /api/tasks/:id/retry',
       agents: 'GET /api/agents',
       deadLetterQueue: 'GET /api/dlq',
       retryDlqTask: 'POST /api/dlq/:id/retry',
@@ -132,6 +152,16 @@ app.get('/', (c) => {
     },
   });
 });
+
+// === Auth API ===
+app.get('/auth/github', (c) => redirectToGitHub(c));
+app.get('/auth/github/callback', (c) => handleGitHubCallback(c));
+
+app.get('/auth/jira', (c) => redirectToJira(c));
+app.get('/auth/jira/callback', (c) => handleJiraCallback(c));
+
+app.get('/auth/linear', (c) => redirectToLinear(c));
+app.get('/auth/linear/callback', (c) => handleLinearCallback(c));
 
 // === Task API ===
 
@@ -204,6 +234,38 @@ app.get('/api/tasks/:id', (c) => {
   return c.json({ task });
 });
 
+// Cancel a task
+app.post('/api/tasks/:id/cancel', async (c) => {
+  const id = c.req.param('id');
+  const success = await cancelTask(id);
+
+  if (!success) {
+    const task = getTask(id);
+    if (!task) {
+      return c.json({ error: 'Task not found' }, 404);
+    }
+    return c.json({ error: 'Task cannot be cancelled (not running or pending)' }, 400);
+  }
+
+  return c.json({ message: 'Task cancelled', task: getTask(id) });
+});
+
+// Retry a task
+app.post('/api/tasks/:id/retry', async (c) => {
+  const id = c.req.param('id');
+  const newTask = await retryTask(id);
+
+  if (!newTask) {
+    const task = getTask(id);
+    if (!task) {
+      return c.json({ error: 'Task not found' }, 404);
+    }
+    return c.json({ error: 'Task cannot be retried (not failed or completed)' }, 400);
+  }
+
+  return c.json({ message: 'Task queued for retry', task: newTask, originalTaskId: id });
+});
+
 // === Dead Letter Queue API ===
 
 // List dead letter queue tasks
@@ -241,20 +303,37 @@ app.delete('/api/dlq/:id', (c) => {
 
 // === Agent API ===
 
-// List available agents
+// List available agents with detailed status
 app.get('/api/agents', async (c) => {
   const registry = getAgentRegistry();
   const adapters = registry.getActiveAdapters();
+  const storage = getStorage();
+  
+  let agentStats: Record<string, any> = {};
+  try {
+    agentStats = await storage.getAgentStats();
+  } catch (error) {
+    console.warn('[API] Could not fetch agent stats:', error);
+  }
 
   const agents = await Promise.all(
     adapters.map(async (adapter) => {
       const health = await adapter.healthCheck();
+      const stats = agentStats[adapter.type] || { completed: 0, failed: 0, avgDuration: 0 };
+      
       return {
         type: adapter.type,
         name: adapter.name,
         description: adapter.description,
         capabilities: adapter.capabilities,
-        health,
+        configured: true, // If it's in active adapters, it's partially configured
+        healthy: health,
+        lastActivity: stats.lastActivity || null,
+        stats: {
+          completed: stats.completed,
+          failed: stats.failed,
+          avgDuration: stats.avgDuration,
+        },
       };
     })
   );
@@ -566,6 +645,51 @@ app.get('/api/webhook/tasks/:taskId/reports', (c) => {
   });
 });
 
+// === Integration Status API ===
+
+// Get integration/webhook status
+app.get('/api/integrations/status', (c) => {
+  const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
+
+  // Check which integrations have credentials configured
+  const integrations = {
+    github: {
+      name: 'GitHub',
+      configured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
+      webhookUrl: `${baseUrl}/webhooks/github`,
+      oauthUrl: `${baseUrl}/auth/github`,
+      icon: 'github',
+      description: 'Issues and Pull Requests',
+    },
+    jira: {
+      name: 'Jira',
+      configured: Boolean(process.env.JIRA_CLIENT_ID && process.env.JIRA_CLIENT_SECRET),
+      webhookUrl: `${baseUrl}/webhooks/jira`,
+      oauthUrl: `${baseUrl}/auth/jira`,
+      icon: 'jira',
+      description: 'Issues and Projects',
+    },
+    linear: {
+      name: 'Linear',
+      configured: Boolean(process.env.LINEAR_CLIENT_ID && process.env.LINEAR_CLIENT_SECRET),
+      webhookUrl: `${baseUrl}/webhooks/linear`,
+      oauthUrl: `${baseUrl}/auth/linear`,
+      icon: 'linear',
+      description: 'Issues and Cycles',
+    },
+  };
+
+  return c.json({
+    integrations,
+    baseUrl,
+    hookEndpoints: {
+      toolUse: `${baseUrl}/api/hook/tool-use`,
+      sessionEnd: `${baseUrl}/api/hook/session-end`,
+      promptSubmit: `${baseUrl}/api/hook/prompt-submit`,
+    },
+  });
+});
+
 // === Cost API ===
 
 // Get usage summary
@@ -578,6 +702,13 @@ app.get('/api/costs/summary', (c) => {
 app.get('/api/costs/budget', (c) => {
   const status = getBudgetStatus();
   return c.json(status);
+});
+
+// Get historical cost analytics
+app.get('/api/costs/analytics', async (c) => {
+  const storage = getStorage();
+  const analytics = await storage.getCostAnalytics();
+  return c.json(analytics);
 });
 
 // === Summary API ===
@@ -670,6 +801,49 @@ app.get('/api/summaries', async (c) => {
   });
 });
 
+// Semantic Search
+app.get('/api/summaries/semantic', async (c) => {
+  const query = c.req.query('q');
+  const type = c.req.query('type') as 'task' | 'summary' || 'summary';
+  const limit = parseInt(c.req.query('limit') || '5');
+  
+  if (!query) return c.json({ error: 'Missing query' }, 400);
+
+  try {
+    const storage = getStorage();
+    if (!storage.searchSimilar) {
+      return c.json({ error: 'Semantic search not supported by current storage tier' }, 501);
+    }
+
+    let vector: number[];
+    const vectorStr = c.req.query('vector');
+
+    if (vectorStr) {
+      vector = JSON.parse(vectorStr) as number[];
+    } else {
+      // Auto-generate vector from query text
+      const service = getEmbeddingService();
+      vector = await service.generateEmbedding(query);
+    }
+
+    const results = await storage.searchSimilar(type, vector, limit);
+    
+    // Enrich results with actual summaries
+    const enriched = await Promise.all(results.map(async (r: any) => ({
+      ...r,
+      summary: type === 'summary' ? await getSummary(r.entityId) : null
+    })));
+
+    return c.json({ 
+      query,
+      results: enriched 
+    });
+  } catch (error) {
+    systemLogger.error('[API] Semantic search error:', error as Error);
+    return c.json({ error: 'Search failed', message: (error as Error).message }, 500);
+  }
+});
+
 // Create summary
 app.post('/api/summaries', async (c) => {
   try {
@@ -705,6 +879,38 @@ app.post('/api/summaries', async (c) => {
       500
     );
   }
+});
+
+// Generate PR Description
+app.get('/api/summaries/:id/pr-description', async (c) => {
+  const id = c.req.param('id');
+  const summary = await getSummary(id);
+
+  if (!summary) {
+    return c.json({ error: 'Summary not found' }, 404);
+  }
+
+  const description = generatePRDescription(summary);
+  return c.json({ 
+    id: summary.id,
+    title: summary.title,
+    description 
+  });
+});
+
+// Generate Changelog
+app.get('/api/summaries/changelog', async (c) => {
+  const limit = parseInt(c.req.query('limit') || '50');
+  const version = c.req.query('version');
+  
+  const summaries = await getRecentSummaries(limit);
+  const changelog = generateChangelog(summaries, version);
+
+  return c.json({ 
+    version: version || 'Unreleased',
+    count: summaries.length,
+    changelog 
+  });
 });
 
 // Get single summary
@@ -790,7 +996,12 @@ async function main() {
       try {
         // Filter out agent if required config is missing (from interpolated env vars)
         if (agentDef.type === 'openclaw' && !agentDef.config?.token) {
-          console.log(`ℹ️  Skipping agent ${agentDef.id}: Missing OpenClaw token`);
+          console.log(`ℹ️  Skipping agent ${agentDef.id}: Missing OPENCLAW_GATEWAY_TOKEN`);
+          continue;
+        }
+
+        if (agentDef.type === 'claude-code' && !agentDef.config?.workingDir) {
+          console.log(`ℹ️  Skipping agent ${agentDef.id}: Missing CLAUDE_WORKING_DIR`);
           continue;
         }
 
@@ -802,8 +1013,12 @@ async function main() {
     }
   }
 
-  // Fallback for Claude Code if not in config but available on system
-  if (!registry.getActiveAdapters().some(a => a.type === 'claude-code')) {
+  // Auto-discover agents if enabled (respects settings.yml and env var)
+  const autoDiscover = process.env.AUTO_DISCOVER_AGENTS !== undefined
+    ? process.env.AUTO_DISCOVER_AGENTS === 'true'
+    : (settings.agents?.autoDiscover ?? false);
+
+  if (autoDiscover && !registry.getActiveAdapters().some(a => a.type === 'claude-code')) {
     try {
       const { execSync } = await import('child_process');
       execSync('which claude', { stdio: 'ignore' });
@@ -817,7 +1032,7 @@ async function main() {
           workingDir: process.env.CLAUDE_WORKING_DIR || process.cwd(),
         },
       });
-      console.log('✅ Claude Code adapter auto-configured (CLI found)');
+      console.log('✅ Claude Code adapter auto-discovered (CLI found)');
     } catch {
       // CLI not found, ignore
     }
@@ -849,10 +1064,14 @@ async function main() {
   console.log(`  ❤️  Health:   http://localhost:${PORT}/health`);
 
   if (ENABLE_CRON) {
-    console.log(`\nAutonomous Features:`);
-    console.log(`  🔄 Issue Poller: Every 5 minutes`);
-    console.log(`  💓 Heartbeat: Every 1 minute`);
-    console.log(`  🕐 Stale Checker: Every 5 minutes`);
+    const heartbeatMs = parseInt(process.env.POLL_INTERVAL_HEARTBEAT || '30000', 10);
+    const issuesMs = parseInt(process.env.POLL_INTERVAL_ISSUES || '120000', 10);
+    const staleMs = parseInt(process.env.POLL_INTERVAL_STALE || '60000', 10);
+    console.log(`\nAutonomous Features (configurable via env):`);
+    console.log(`  💓 Heartbeat: ${Math.round(heartbeatMs / 1000)}s (POLL_INTERVAL_HEARTBEAT)`);
+    console.log(`  🔄 Issue Poller: ${Math.round(issuesMs / 1000)}s (POLL_INTERVAL_ISSUES)`);
+    console.log(`  🕐 Stale Checker: ${Math.round(staleMs / 1000)}s (POLL_INTERVAL_STALE)`);
+    console.log(`  📝 Log Level: ${process.env.LOG_LEVEL || 'INFO'} (LOG_LEVEL)`);
   }
 }
 

@@ -8,8 +8,10 @@
     "glinr-mcp": "./dist/mcp/server.js"
   },
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "dev": "concurrently -n api,ui -c blue,magenta \"pnpm dev:api\" \"pnpm dev:ui\"",
+    "dev:api": "tsx watch src/server.ts",
+    "dev:ui": "pnpm --dir ui dev",
+    "build": "tsc && pnpm --dir ui build",
     "start": "node dist/server.js",
     "mcp": "node dist/mcp/server.js",
     "mcp:dev": "tsx src/mcp/server.ts",
@@ -19,7 +21,8 @@
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "ui": "pnpm --dir ui dev"
   },
   "keywords": [
     "ai-agent",
@@ -47,11 +50,14 @@
     "hono": "^4.6.16",
     "ioredis": "^5.4.2",
     "js-yaml": "^4.1.1",
+    "openai": "^6.17.0",
     "postgres": "^3.4.5",
+    "sqlite-vec": "0.1.7-alpha.2",
     "sqlite3": "^5.1.7",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.7",
     "@types/sqlite3": "^5.1.0",

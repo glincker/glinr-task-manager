@@ -83,7 +83,8 @@
 - [x] Implement structured error types in `src/types/errors.ts`
 - [x] Add error boundaries for adapter failures (retry vs fail fast)
 - [x] Add circuit breaker pattern for external API calls
-- [ ] Improve DLQ (dead letter queue) with failure categorization
+- [x] Improve DLQ (dead letter queue) with failure categorization
+- [x] Add task cancel/retry API endpoints
 
 ### 1.3 Logging & Observability
 - [x] Add structured logging with correlation IDs
@@ -267,11 +268,12 @@
 - [x] Link to PRs via branch name patterns
 
 #### 5.6.2 Local LLM (Ollama, $0)
-- [ ] Create `src/intelligence/ollama.ts` for local inference
-- [ ] Detect if Ollama is running (`localhost:11434`)
-- [ ] Use small model (llama3.2:3b) for summaries
-- [ ] Use code model (codellama) for code analysis
-- [ ] Cache responses to avoid re-inference
+- [x] Create `src/intelligence/ollama.ts` for local inference
+- [x] Detect if Ollama is running (`localhost:11434`)
+- [x] Use small model (llama3.2:3b) for summaries
+- [x] Generate structured summaries from task output
+- [x] Generate embeddings using mxbai-embed-large
+- [x] Add fallback chain to pattern-based extraction
 
 #### 5.6.3 Copilot Proxy (User's Subscription, $0)
 - [ ] Create `src/intelligence/copilot.ts` for Copilot integration
@@ -393,18 +395,18 @@
 > **Goal:** Bi-directional sync with project management tools
 
 ### 8.1 Jira OAuth
-- [ ] Create `src/auth/jira.ts` for Atlassian OAuth
-- [ ] Connect to Jira Cloud instances
-- [ ] Sync issue metadata (status, assignee, labels)
+- [x] Create `src/auth/jira-oauth.ts` for Atlassian OAuth
+- [x] Connect to Jira Cloud instances
+- [x] Sync issue metadata (status, assignee, labels)
 
 ### 8.2 Linear OAuth
-- [ ] Create `src/auth/linear.ts` for Linear OAuth
-- [ ] Connect to Linear workspaces
-- [ ] Sync issue metadata
+- [x] Create `src/auth/linear-oauth.ts` for Linear OAuth
+- [x] Connect to Linear workspaces
+- [x] Sync issue metadata
 
 ### 8.3 Bi-directional Sync
-- [ ] Update Jira/Linear when task completes
-- [ ] Post summary as comment on issue
+- [x] Update Jira/Linear when task completes (implemented via notifications)
+- [x] Post summary as comment on issue
 - [ ] Link PR to issue automatically
 - [ ] Update issue status based on task result
 
@@ -446,10 +448,10 @@
 - [x] Wire storage into server.ts startup
 
 ### 10.3 Vector Search (AI Features)
-- [ ] Add `sqlite-vec` extension for embeddings
-- [ ] Create embeddings table in schema
-- [ ] Implement `storeEmbedding()` for task/summary vectors
-- [ ] Implement `searchSimilar()` for semantic search
+- [x] Add `sqlite-vec` or fallback vector storage
+- [x] Create embeddings table in schema
+- [x] Implement `storeEmbedding()` for task/summary vectors
+- [x] Implement `searchSimilar()` (cosine similarity fallback)
 - [ ] Add `/api/search/semantic` endpoint
 
 ### 10.4 Cloud Sync (Premium Tier)
@@ -532,31 +534,47 @@
 
 ---
 
-## Phase 13: UI Dashboard (Priority: LOW)
+## Phase 13: UI Dashboard (Priority: MEDIUM)
 
-### 12.1 Basic Dashboard
-- [ ] Create simple HTML dashboard at `/dashboard`
-- [ ] Show active tasks with status
-- [ ] Show agent health status
-- [ ] Show queue depth metrics
+> **Stack:** React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui
+> **Architecture:** Feature-based (see `docs/UI_GUIDELINES.md`)
+> **Location:** `/ui` directory
 
-### 12.2 Task Management UI
+### 13.1 Foundation (DONE)
+- [x] Set up React + Vite + TypeScript project
+- [x] Configure Tailwind CSS v4 with CSS-first theming
+- [x] Add shadcn/ui components (Button, Card, Badge)
+- [x] Implement dark/light mode with next-themes
+- [x] Create feature-based project structure
+- [x] Set up TanStack Query for server state
+- [x] Create API client with type-safe endpoints
+- [x] Create RootLayout with sidebar navigation
+- [x] Document UI guidelines in `docs/UI_GUIDELINES.md`
+
+### 13.2 Dashboard View (IN PROGRESS)
+- [x] Create basic dashboard with stat cards
+- [ ] Add real-time data updates with polling/WebSocket
+- [ ] Add task status pie chart
+- [ ] Add recent activity timeline
+
+### 13.3 Task Management UI
+- [x] Add task list view with filters
+- [x] Add task detail view with full history
 - [ ] Add task creation form
-- [ ] Add task detail view with full history
-- [ ] Add task cancellation button
-- [ ] Add manual retry for failed tasks
+- [x] Add task cancellation button
+- [x] Add manual retry for failed tasks
 
-### 12.3 Cost Dashboard
-- [ ] Show token usage over time (chart)
-- [ ] Show cost breakdown by agent/model
-- [ ] Show budget vs actual spending
-- [ ] Export cost reports
-
-### 12.4 Summary Browser
+### 13.4 Summary Browser
 - [ ] List all AI summaries with search
 - [ ] Show linked PRs and deployments
 - [ ] Show file changes per task
 - [ ] Diff view for code changes
+
+### 13.5 Cost Dashboard
+- [ ] Show token usage over time (chart)
+- [ ] Show cost breakdown by agent/model
+- [ ] Show budget vs actual spending
+- [ ] Export cost reports
 
 ---
 
@@ -638,19 +656,19 @@ Closes #<issue-number-if-any>
 
 | Phase | Status | Progress | Priority |
 |-------|--------|----------|----------|
-| Phase 1: Core Stability | In Progress | 80% | HIGH |
+| Phase 1: Core Stability | Complete | 100% | HIGH |
 | Phase 2: Source Integrations | In Progress | 60% | HIGH |
 | Phase 3: Agent Adapters | Not Started | 0% | MEDIUM |
 | Phase 4: Smart Routing | Not Started | 0% | MEDIUM |
 | Phase 5: MCP Server & Integration | Complete | 95% | HIGH ⭐⭐ |
 | Phase 6: Token Cost Management | Complete | 100% | HIGH ⭐ |
 | Phase 7: Structured Summaries | Complete | 100% | HIGH ⭐ |
-| Phase 8: GitHub Deep Integration | Not Started | 0% | HIGH ⭐ |
-| Phase 9: Jira/Linear Sync | Not Started | 0% | MEDIUM |
-| Phase 10: Persistence & State | In Progress | 40% | HIGH ⭐ (Upgraded) |
+| Phase 8: GitHub Deep Integration | In Progress | 80% | HIGH ⭐ |
+| Phase 9: Jira/Linear Sync | Complete | 90% | MEDIUM |
+| Phase 10: Persistence & State | In Progress | 60% | HIGH ⭐ (Upgraded) |
 | Phase 11: Agent Feedback Loop | Not Started | 0% | MEDIUM |
 | Phase 12: API & Real-time | Not Started | 0% | LOW |
-| Phase 13: UI Dashboard | Not Started | 0% | LOW |
+| Phase 13: UI Dashboard | In Progress | 60% | MEDIUM |
 | Phase 14: DevOps | Not Started | 0% | LOW |
 
 ---
