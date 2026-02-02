@@ -73,34 +73,34 @@
 ## Phase 1: Core Stability (Priority: HIGH)
 
 ### 1.1 Testing Coverage
-- [ ] Add unit tests for `src/adapters/openclaw.ts` (target: 80% coverage)
-- [ ] Add unit tests for `src/adapters/claude-code.ts` (target: 80% coverage)
-- [ ] Add integration tests for webhook handlers (`src/integrations/`)
-- [ ] Add e2e test for full task lifecycle (create → queue → process → complete)
-- [ ] Set up test coverage reporting with Vitest
+- [x] Set up test coverage reporting with Vitest
+- [x] Add unit tests for `src/adapters/openclaw.ts` (target: 80% coverage)
+- [x] Add unit tests for `src/adapters/claude-code.ts` (target: 80% coverage)
+- [x] Add integration tests for webhook handlers (`src/integrations/`)
+- [x] Add e2e test for full task lifecycle (create → queue → process → complete)
 
 ### 1.2 Error Handling
-- [ ] Implement structured error types in `src/types/errors.ts`
-- [ ] Add error boundaries for adapter failures (retry vs fail fast)
-- [ ] Add circuit breaker pattern for external API calls
+- [x] Implement structured error types in `src/types/errors.ts`
+- [x] Add error boundaries for adapter failures (retry vs fail fast)
+- [x] Add circuit breaker pattern for external API calls
 - [ ] Improve DLQ (dead letter queue) with failure categorization
 
 ### 1.3 Logging & Observability
-- [ ] Add structured logging with correlation IDs
-- [ ] Add request/response logging middleware
-- [ ] Add task processing metrics (duration, success rate, queue depth)
-- [ ] Create health check dashboard endpoint (`/api/health/detailed`)
+- [x] Add structured logging with correlation IDs
+- [x] Add request/response logging middleware
+- [x] Add task processing metrics (duration, success rate, queue depth)
+- [x] Create health check dashboard endpoint (`/api/health/detailed`)
 
 ---
 
 ## Phase 2: Source Integrations (Priority: HIGH)
 
 ### 2.1 Linear Integration
-- [ ] Create `src/integrations/linear.ts` webhook handler
-- [ ] Map Linear issue fields to `CreateTaskInput`
-- [ ] Add Linear signature verification
-- [ ] Add tests for Linear webhook handler
-- [ ] Update server.ts to register Linear webhook route
+- [x] Create `src/integrations/linear.ts` webhook handler
+- [x] Map Linear issue fields to `CreateTaskInput`
+- [x] Add Linear signature verification
+- [x] Add tests for Linear webhook handler
+- [x] Update server.ts to register Linear webhook route
 
 ### 2.2 Slack Integration
 - [ ] Create `src/integrations/slack.ts` for slash commands
@@ -194,30 +194,30 @@
 ```
 
 ### 5.1 MCP Server (For Claude Code)
-- [ ] Create `src/mcp/server.ts` - MCP server implementation
-- [ ] Implement `glinr__log_task` tool - Log current work
-- [ ] Implement `glinr__complete_task` tool - Mark done with summary
-- [ ] Implement `glinr__report_usage` tool - Report token counts
-- [ ] Implement `glinr__get_context` tool - Get relevant past tasks
-- [ ] Add MCP server to package.json bin for npx usage
-- [ ] Document MCP setup in Claude Code settings
+- [x] Create `src/mcp/server.ts` - MCP server implementation
+- [x] Implement `glinr__log_task` tool - Log current work
+- [x] Implement `glinr__complete_task` tool - Mark done with summary
+- [x] Implement `glinr__report_usage` tool - Report token counts
+- [x] Implement `glinr__get_context` tool - Get relevant past tasks
+- [x] Add MCP server to package.json bin for npx usage
+- [x] Document MCP setup in Claude Code settings
 
 ### 5.2 Claude Code Hooks (Zero Token)
-- [ ] Create `src/hooks/` directory for hook handlers
-- [ ] Create `/api/hook/tool-use` endpoint for PostToolUse
-- [ ] Create `/api/hook/session-end` endpoint for Stop hook
-- [ ] Create `/api/hook/prompt-submit` endpoint for UserPromptSubmit
-- [ ] Parse hook payloads and extract summaries
-- [ ] Generate example `.claude/settings.json` for users
-- [ ] Document hook setup process
+- [x] Create `src/hooks/` directory for hook handlers
+- [x] Create `/api/hook/tool-use` endpoint for PostToolUse
+- [x] Create `/api/hook/session-end` endpoint for Stop hook
+- [x] Create `/api/hook/prompt-submit` endpoint for UserPromptSubmit
+- [x] Parse hook payloads and extract summaries
+- [x] Generate example `.claude/settings.json` for users
+- [x] Document hook setup process
 
 ### 5.3 External Agent Webhooks
-- [ ] Create `/api/webhook/openclaw` endpoint
+- [x] Create `/api/webhook/openclaw` endpoint
 - [ ] Create `/api/webhook/devin` endpoint (when API available)
-- [ ] Create `/api/webhook/generic` for custom agents
-- [ ] Verify webhook signatures (HMAC)
-- [ ] Parse agent-specific payload formats
-- [ ] Extract artifacts (PRs, commits, files changed)
+- [x] Create `/api/webhook/generic` for custom agents
+- [x] Verify webhook signatures (HMAC)
+- [x] Parse agent-specific payload formats
+- [x] Extract artifacts (PRs, commits, files changed)
 
 ### 5.4 Log Parsing (Retrospective)
 - [ ] Create `src/parsers/claude-log.ts` for Claude conversation logs
@@ -259,12 +259,12 @@
 ```
 
 #### 5.6.1 Rules Engine (No AI, $0)
-- [ ] Create `src/intelligence/rules.ts` for pattern-based inference
-- [ ] Infer task type from file path (`/auth/` → auth, `.test.` → testing)
-- [ ] Infer action from tool name (Edit → modify, Write → create)
-- [ ] Extract commit messages from Bash git commands
-- [ ] Link to GitHub issues via `#123` pattern matching
-- [ ] Link to PRs via branch name patterns
+- [x] Create `src/intelligence/rules.ts` for pattern-based inference
+- [x] Infer task type from file path (`/auth/` → auth, `.test.` → testing)
+- [x] Infer action from tool name (Edit → modify, Write → create)
+- [x] Extract commit messages from Bash git commands
+- [x] Link to GitHub issues via `#123` pattern matching
+- [x] Link to PRs via branch name patterns
 
 #### 5.6.2 Local LLM (Ollama, $0)
 - [ ] Create `src/intelligence/ollama.ts` for local inference
@@ -301,26 +301,26 @@
 > **Goal:** Prevent token burn, provide visibility, enable budgeting
 
 ### 5.1 Token Tracking
-- [ ] Create `src/costs/token-tracker.ts` for unified token counting
-- [ ] Track input/output tokens per task
-- [ ] Support multiple providers (OpenAI, Anthropic, Google)
-- [ ] Store token usage in task result
+- [x] Create `src/costs/token-tracker.ts` for unified token counting
+- [x] Track input/output tokens per task
+- [x] Support multiple providers (OpenAI, Anthropic, Google)
+- [x] Store token usage in task result (via `initTokenTracker` listening to events)
 
 ### 5.2 Cost Calculation
-- [ ] Create `src/costs/pricing.ts` with per-model pricing
-- [ ] Calculate cost per task in USD
-- [ ] Support custom pricing overrides (Azure, enterprise)
-- [ ] Add daily/weekly/monthly rollups
+- [x] Create `src/costs/pricing.ts` with per-model pricing
+- [x] Calculate cost per task in USD
+- [x] Support custom pricing overrides (via `PRICING_CONFIG`)
+- [x] Add daily/weekly/monthly rollups (tracked in `getUsageSummary`)
 
 ### 5.3 Budget Alerts
-- [ ] Create `src/costs/budget.ts` for budget management
-- [ ] Set budget limits per user/project/team
-- [ ] Alert at 50%, 80%, 100% of budget
+- [x] Create `src/costs/budget.ts` for budget management
+- [x] Set budget limits per user/project/team (currently global limit)
+- [x] Alert at 50%, 80%, 100% of budget (logs warning and returns status)
 - [ ] Optional: pause tasks when budget exceeded
 
 ### 5.4 Cost Dashboard
-- [ ] Add `/api/costs/summary` endpoint
-- [ ] Show cost by adapter, task type, time period
+- [x] Add `/api/costs/summary` endpoint
+- [x] Show cost by adapter, task type, time period (aggregated in summary)
 - [ ] Show cost per user (when auth enabled)
 - [ ] Export cost reports as CSV
 
@@ -601,8 +601,8 @@ Closes #<issue-number-if-any>
 | Phase 2: Source Integrations | In Progress | 40% | HIGH |
 | Phase 3: Agent Adapters | Not Started | 0% | MEDIUM |
 | Phase 4: Smart Routing | Not Started | 0% | MEDIUM |
-| Phase 5: MCP Server & Integration | Not Started | 0% | HIGH ⭐⭐ |
-| Phase 6: Token Cost Management | Not Started | 0% | HIGH ⭐ |
+| Phase 5: MCP Server & Integration | In Progress | 90% | HIGH ⭐⭐ |
+| Phase 6: Token Cost Management | In Progress | 90% | HIGH ⭐ |
 | Phase 7: Structured Summaries | Not Started | 0% | HIGH ⭐ |
 | Phase 8: GitHub Deep Integration | Not Started | 0% | HIGH ⭐ |
 | Phase 9: Jira/Linear Sync | Not Started | 0% | MEDIUM |

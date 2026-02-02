@@ -40,7 +40,10 @@ GLINR Task Manager is an open-source task queue and orchestration system for AI 
 
 - **Multi-Agent Support** - Works with OpenClaw, Claude Code, and custom adapters
 - **Priority Queue** - Tasks processed by priority with retry support
-- **GitHub Integration** - Create tasks from issues, post results as comments
+- **GitHub/Jira/Linear Integration** - Create tasks from issues, post results as comments
+- **MCP Server** - Native Claude Code integration via Model Context Protocol
+- **Zero-Cost Hooks** - Track AI activity without burning tokens
+- **Rules Engine** - Pattern-based inference for task classification
 - **Extensible** - Add new agents and integrations easily
 - **Audit Trail** - Track what AI did, when, and results
 
@@ -142,8 +145,11 @@ Comment `/ai fix this bug` on any issue to trigger a task:
 | `/api/tasks/:id` | GET | Get task details |
 | `/api/agents` | GET | List available agents |
 | `/webhooks/github` | POST | GitHub webhook receiver |
-| `/webhooks/jira` | POST | Jira webhook (coming soon) |
-| `/webhooks/linear` | POST | Linear webhook (coming soon) |
+| `/webhooks/jira` | POST | Jira webhook receiver |
+| `/webhooks/linear` | POST | Linear webhook receiver |
+| `/api/hook/tool-use` | POST | Claude Code PostToolUse hook |
+| `/api/hook/session-end` | POST | Claude Code session end hook |
+| `/api/hook/sessions` | GET | List recent Claude sessions |
 
 ## Adding Custom Agents
 
@@ -191,12 +197,18 @@ See [docker-compose.yml](./docker-compose.yml) for the full configuration.
 - [x] OpenClaw adapter
 - [x] Claude Code adapter
 - [x] GitHub webhook integration
-- [ ] Jira integration
-- [ ] Linear integration
+- [x] Jira integration
+- [x] Linear integration
+- [x] MCP Server for Claude Code
+- [x] Zero-cost hook endpoints
+- [x] Rules-based inference engine
+- [ ] Token cost tracking
+- [ ] Structured summaries
+- [ ] GitHub OAuth & PR linking
 - [ ] Web dashboard
-- [ ] Cost tracking (token usage)
-- [ ] Multi-tenant support
 - [ ] Slack notifications
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the complete roadmap.
 
 ## Contributing
 

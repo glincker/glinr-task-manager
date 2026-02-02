@@ -1,6 +1,21 @@
 # AI Agent Guidelines
 
-Instructions for AI agents (Jules, OpenClaw, GitHub Copilot, Claude Code) working on this codebase.
+Instructions for AI agents (Jules, OpenClaw, GitHub Copilot, Claude Code, Antigravity) working on this codebase.
+
+---
+
+## BEFORE YOU START
+
+1. **Read `docs/HANDOFF.md`** - Current project status and recommended tasks
+2. **Check `docs/ROADMAP.md`** - Full feature checklist with completion status
+3. **Pick an unassigned task** - Don't duplicate work another agent is doing
+
+### Current Agent Assignments (2026-02-01)
+
+| Agent | Current Task | Status |
+|-------|--------------|--------|
+| Claude Code | Phase 5: MCP Integration | 75% complete |
+| Antigravity | Unassigned | Pick from HANDOFF.md |
 
 ---
 

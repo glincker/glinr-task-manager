@@ -1,20 +1,26 @@
 
 import { describe, it, expect } from 'vitest';
 import { DefaultAgentRegistry } from './registry.js';
-import { AgentAdapterFactory } from '../types/agent.js';
+import type { AgentAdapterFactory, AgentAdapter, AgentHealth } from '../types/agent.js';
+import type { Task, TaskResult } from '../types/task.js';
 
 describe('DefaultAgentRegistry', () => {
-  const mockFactory: AgentAdapterFactory = (config) => ({
-    config,
-    processTask: async (task) => ({
-      id: '1',
-      taskId: task.id,
-      status: 'completed',
-      output: 'done',
-      metadata: {},
-      createdAt: new Date(),
-      updatedAt: new Date()
-    })
+  const mockFactory: AgentAdapterFactory = (config): AgentAdapter => ({
+    type: config.type,
+    name: `Mock ${config.type}`,
+    description: 'Mock adapter for testing',
+    capabilities: ['code_generation'],
+    healthCheck: async (): Promise<AgentHealth> => ({
+      healthy: true,
+      latencyMs: 0,
+      message: 'Mock is healthy',
+      lastChecked: new Date(),
+    }),
+    executeTask: async (task: Task): Promise<TaskResult> => ({
+      success: true,
+      output: 'Mock task completed',
+      duration: 100,
+    }),
   });
 
   it('should return default adapter types', () => {
