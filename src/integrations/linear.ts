@@ -76,7 +76,7 @@ export async function handleLinearWebhook(
  * Handle issue created events
  */
 function handleIssueCreatedEvent(payload: any): CreateTaskInput | null {
-  const { issue } = payload;
+  const { issue } = payload as { issue: LinearIssue };
 
   // Create task from issue
   return {
@@ -99,7 +99,7 @@ function handleIssueCreatedEvent(payload: any): CreateTaskInput | null {
  * Handle issue updated events
  */
 function handleIssueUpdatedEvent(payload: any): CreateTaskInput | null {
-  const { issue } = payload;
+  const { issue } = payload as { issue: LinearIssue };
 
   // Create task from updated issue
   return {
@@ -122,13 +122,28 @@ function handleIssueUpdatedEvent(payload: any): CreateTaskInput | null {
  * Extract labels from Linear issue
  * Linear issues can have labels as an array of label objects with a 'name' property
  */
-function extractLabels(issue: any): string[] {
+function extractLabels(issue: LinearIssue): string[] {
   // Linear webhooks include labels as an array of label objects
   if (issue.labels && Array.isArray(issue.labels)) {
     return issue.labels
-      .map((label: any) => label?.name)
+      .map((label: LinearLabel) => label?.name)
       .filter((name: string | undefined) => name !== undefined);
   }
   
   return [];
+}
+
+// Linear API types (simplified)
+interface LinearLabel {
+  name: string;
+}
+
+interface LinearIssue {
+  id: string;
+  title: string;
+  description?: string | null;
+  url: string;
+  createdAt: string;
+  updatedAt?: string;
+  labels?: LinearLabel[] | null;
 }
