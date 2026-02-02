@@ -232,6 +232,68 @@
 - [ ] Create `glinr-summary` skill to generate summary on demand
 - [ ] Publish skills to community registry
 
+### 5.6 Intelligence Layer (Where "Smartness" Comes From)
+
+> **Goal:** GLINR needs to be smart WITHOUT burning user's tokens
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  INTELLIGENCE ROUTING (tiered, cost-optimized)                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Hook arrives ──▶ Rules Engine (70% handled, $0)               │
+│       │                                                         │
+│       │ Complex?                                                │
+│       ▼                                                         │
+│  Has Ollama? ──▶ Local LLM ($0)                                │
+│       │                                                         │
+│       │ No                                                      │
+│       ▼                                                         │
+│  Has Copilot? ──▶ Copilot Proxy ($0, user's subscription)      │
+│       │                                                         │
+│       │ No                                                      │
+│       ▼                                                         │
+│  Gemini Flash ──▶ $0.01/task (cheap fallback)                  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 5.6.1 Rules Engine (No AI, $0)
+- [ ] Create `src/intelligence/rules.ts` for pattern-based inference
+- [ ] Infer task type from file path (`/auth/` → auth, `.test.` → testing)
+- [ ] Infer action from tool name (Edit → modify, Write → create)
+- [ ] Extract commit messages from Bash git commands
+- [ ] Link to GitHub issues via `#123` pattern matching
+- [ ] Link to PRs via branch name patterns
+
+#### 5.6.2 Local LLM (Ollama, $0)
+- [ ] Create `src/intelligence/ollama.ts` for local inference
+- [ ] Detect if Ollama is running (`localhost:11434`)
+- [ ] Use small model (llama3.2:3b) for summaries
+- [ ] Use code model (codellama) for code analysis
+- [ ] Cache responses to avoid re-inference
+
+#### 5.6.3 Copilot Proxy (User's Subscription, $0)
+- [ ] Create `src/intelligence/copilot.ts` for Copilot integration
+- [ ] Check if user has Copilot subscription via GitHub API
+- [ ] Integrate with [copilot-api](https://github.com/ericc-ch/copilot-api) or similar
+- [ ] Use OpenAI-compatible endpoint for inference
+- [ ] Handle token refresh automatically
+- [ ] Fallback gracefully if Copilot unavailable
+
+#### 5.6.4 Cheap API Fallback (Gemini Flash)
+- [ ] Create `src/intelligence/gemini.ts` for cloud fallback
+- [ ] Use Gemini 2.0 Flash ($0.075/1M tokens)
+- [ ] Only use when Ollama and Copilot unavailable
+- [ ] Rate limit to prevent cost overrun
+- [ ] Track usage for cost reporting
+
+#### 5.6.5 Intelligence Router
+- [ ] Create `src/intelligence/router.ts` to coordinate
+- [ ] Priority: Rules → Ollama → Copilot → Gemini
+- [ ] Allow user to configure preference in settings
+- [ ] Log which intelligence source was used per task
+
 ---
 
 ## Phase 6: Token Cost Management (Priority: HIGH) ⭐ NEW
