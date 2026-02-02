@@ -90,6 +90,7 @@ export interface TaskResult {
     message: string;
     stack?: string;
   };
+  metadata?: Record<string, unknown>;
 }
 
 // Artifacts produced by the task (commits, PRs, files, etc.)

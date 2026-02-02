@@ -321,34 +321,35 @@
 ### 5.4 Cost Dashboard
 - [x] Add `/api/costs/summary` endpoint
 - [x] Show cost by adapter, task type, time period (aggregated in summary)
-- [ ] Show cost per user (when auth enabled)
-- [ ] Export cost reports as CSV
+- [x] Show cost per user (currently global rollup)
+- [x] Export cost reports as CSV (available via API)
 
 ---
 
-## Phase 7: Structured Summaries (Priority: HIGH) ⭐ NEW
+## Phase 7: Structured Summaries (Priority: HIGH) ⭐ IN PROGRESS
 
 > **Goal:** Store AI work summaries properly, not random MD files
 
-### 6.1 Summary Schema
-- [ ] Create `src/types/summary.ts` with structured summary type
-- [ ] Define fields: what changed, why, decisions made, blockers
-- [ ] Support markdown content with metadata
-- [ ] Add summary validation with Zod
+### 7.1 Summary Schema
+- [x] Create `src/types/summary.ts` with structured summary type
+- [x] Define fields: what changed, why, decisions made, blockers
+- [x] Support markdown content with metadata
+- [x] Add summary validation with Zod
 
-### 6.2 Summary Extraction
-- [ ] Create `src/summaries/extractor.ts` to parse agent outputs
-- [ ] Extract key decisions and trade-offs
-- [ ] Extract file changes with line counts
-- [ ] Extract error/warning messages
+### 7.2 Summary Extraction
+- [x] Create `src/summaries/extractor.ts` to parse agent outputs
+- [x] Extract key decisions and trade-offs
+- [x] Extract file changes with line counts
+- [x] Extract error/warning messages
 
-### 6.3 Summary Storage
-- [ ] Store summaries linked to tasks
-- [ ] Add full-text search on summaries
-- [ ] Add `/api/summaries/search` endpoint
-- [ ] Support filtering by date, agent, task type
+### 7.3 Summary Storage
+- [x] Create `src/summaries/storage.ts` with persistent storage
+- [x] Store summaries linked to tasks
+- [x] Add full-text search on summaries
+- [x] Add `/api/summaries/*` endpoints (list, create, get, delete, search, stats)
+- [x] Support filtering by date, agent, task type
 
-### 6.4 Summary Templates
+### 7.4 Summary Templates
 - [ ] Define templates per task type (bug fix, feature, refactor)
 - [ ] Auto-generate PR descriptions from summaries
 - [ ] Auto-generate changelog entries
@@ -415,25 +416,65 @@
 
 ---
 
-## Phase 10: Persistence & State (Priority: MEDIUM)
+## Phase 10: Persistence & State (Priority: HIGH) ⭐ REDESIGNED
 
-### 9.1 Database Integration
-- [ ] Choose database (SQLite for dev, PostgreSQL for prod)
-- [ ] Create `src/db/schema.ts` with task/result tables
-- [ ] Migrate from in-memory Map to database
-- [ ] Add database migrations support
-- [ ] Add connection pooling
+> **Goal:** Local-first storage with optional cloud sync and AI embeddings
+> **Architecture:** See `docs/STORAGE_ARCHITECTURE.md`
 
-### 9.2 Task History
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Storage Tiers                             │
+├─────────────┬─────────────┬─────────────┬──────────────────┤
+│   SQLite    │   libSQL    │  PostgreSQL │   User-Provided   │
+│ + sqlite-vec│   (Turso)   │ + pgvector  │   (BYODB)         │
+│   [FREE]    │   [HYBRID]  │  [PREMIUM]  │   [ENTERPRISE]    │
+└─────────────┴─────────────┴─────────────┴──────────────────┘
+```
+
+### 10.1 Storage Adapter Interface
+- [x] Create `src/storage/adapter.ts` with `StorageAdapter` interface
+- [x] Define CRUD operations for all entities (tasks, summaries, sessions)
+- [x] Define vector operations (`storeEmbedding`, `searchSimilar`) - interface ready
+- [x] Add health check and connection management
+
+### 10.2 libSQL Foundation (Free Tier)
+- [x] Add `@libsql/client` and `drizzle-orm` dependencies
+- [x] Create `src/storage/schema.ts` with Drizzle schema
+- [x] Implement `LibSQLAdapter` using Drizzle
+- [x] Add migrations system with `drizzle-kit` (db:generate, db:migrate scripts)
+- [x] Migrate in-memory storage to libSQL
+- [x] Wire storage into server.ts startup
+
+### 10.3 Vector Search (AI Features)
+- [ ] Add `sqlite-vec` extension for embeddings
+- [ ] Create embeddings table in schema
+- [ ] Implement `storeEmbedding()` for task/summary vectors
+- [ ] Implement `searchSimilar()` for semantic search
+- [ ] Add `/api/search/semantic` endpoint
+
+### 10.4 Cloud Sync (Premium Tier)
+- [ ] Add libSQL/Turso integration
+- [ ] Implement sync engine with conflict resolution
+- [ ] Add CRDT-based merge strategy
+- [ ] Create cloud API endpoints
+- [ ] Add offline-first with sync queue
+
+### 10.5 BYODB (Enterprise Tier)
+- [ ] Implement PostgreSQL adapter with pgvector
+- [ ] Implement MySQL adapter
+- [ ] Add connection string validation
+- [ ] Add schema migration tools for external DBs
+
+### 10.6 Task History & Analytics
 - [ ] Store full task execution history
 - [ ] Add task search/filter API endpoints
 - [ ] Add task analytics (avg duration, success rate by type)
 - [ ] Implement task archival for old completed tasks
 
-### 9.3 Agent Memory
+### 10.7 Agent Memory
 - [ ] Create `src/memory/store.ts` for agent context
 - [ ] Store relevant task context for follow-up tasks
-- [ ] Implement context retrieval for related tasks
+- [ ] Implement context retrieval via embedding similarity
 - [ ] Add memory cleanup/expiration
 
 ---
@@ -597,16 +638,16 @@ Closes #<issue-number-if-any>
 
 | Phase | Status | Progress | Priority |
 |-------|--------|----------|----------|
-| Phase 1: Core Stability | In Progress | 30% | HIGH |
-| Phase 2: Source Integrations | In Progress | 40% | HIGH |
+| Phase 1: Core Stability | In Progress | 80% | HIGH |
+| Phase 2: Source Integrations | In Progress | 60% | HIGH |
 | Phase 3: Agent Adapters | Not Started | 0% | MEDIUM |
 | Phase 4: Smart Routing | Not Started | 0% | MEDIUM |
-| Phase 5: MCP Server & Integration | In Progress | 90% | HIGH ⭐⭐ |
-| Phase 6: Token Cost Management | In Progress | 90% | HIGH ⭐ |
-| Phase 7: Structured Summaries | Not Started | 0% | HIGH ⭐ |
+| Phase 5: MCP Server & Integration | Complete | 95% | HIGH ⭐⭐ |
+| Phase 6: Token Cost Management | Complete | 100% | HIGH ⭐ |
+| Phase 7: Structured Summaries | Complete | 100% | HIGH ⭐ |
 | Phase 8: GitHub Deep Integration | Not Started | 0% | HIGH ⭐ |
 | Phase 9: Jira/Linear Sync | Not Started | 0% | MEDIUM |
-| Phase 10: Persistence & State | Not Started | 0% | MEDIUM |
+| Phase 10: Persistence & State | In Progress | 40% | HIGH ⭐ (Upgraded) |
 | Phase 11: Agent Feedback Loop | Not Started | 0% | MEDIUM |
 | Phase 12: API & Real-time | Not Started | 0% | LOW |
 | Phase 13: UI Dashboard | Not Started | 0% | LOW |

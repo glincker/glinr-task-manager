@@ -1,0 +1,31 @@
+# General System Settings
+
+server:
+  port: 3000
+  cors:
+    origin: "*"
+  enableCron: true
+
+queue:
+  name: ai-tasks
+  notificationName: ai-task-notifications
+  concurrency: 2
+  notificationConcurrency: 5
+  redis:
+    url: redis://localhost:6379
+  retry:
+    attempts: 3
+    backoff: 5000 # ms
+    type: exponential
+
+integrations:
+  github:
+    enabled: true
+    webhookPath: /webhooks/github
+  jira:
+    enabled: true
+    webhookPath: /webhooks/jira
+  linear:
+    enabled: true
+    webhookPath: /webhooks/linear
+    aiTaskLabel: ai-task

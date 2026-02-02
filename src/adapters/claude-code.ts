@@ -122,6 +122,9 @@ export class ClaudeCodeAdapter implements AgentAdapter {
         output: result.output,
         artifacts,
         duration: Date.now() - startTime,
+        metadata: {
+          model: this.model,
+        },
       };
     } catch (error) {
       return {

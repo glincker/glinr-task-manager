@@ -24,6 +24,32 @@ import { startAllCronJobs, stopAllCronJobs, getHealthStatus } from './cron/index
 import { CreateTaskSchema } from './types/task.js';
 import { initTokenTracker, getUsageSummary } from './costs/token-tracker.js';
 import { getBudgetStatus } from './costs/budget.js';
+import { loadConfig } from './utils/config-loader.js';
+import { initStorage } from './storage/index.js';
+import {
+  createSummary,
+  getSummary,
+  getTaskSummaries,
+  querySummaries,
+  searchSummaries,
+  getSummaryStats,
+  getRecentSummaries,
+  deleteSummary,
+  CreateSummaryInputSchema,
+  SummaryQuerySchema,
+} from './summaries/index.js';
+
+interface SettingsYaml {
+  server: {
+    port: number;
+    cors: {
+      origin: string;
+    };
+    enableCron: boolean;
+  };
+}
+
+const settings = loadConfig<SettingsYaml>('settings.yml');
 
 const app = new Hono();
 
@@ -38,7 +64,7 @@ app.use('*', (c, next) => {
 app.use(
   '*',
   cors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: process.env.CORS_ORIGIN || settings.server?.cors?.origin || '*',
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   })
 );
@@ -92,6 +118,16 @@ app.get('/', (c) => {
       costs: {
         summary: 'GET /api/costs/summary',
         budget: 'GET /api/costs/budget',
+      },
+      summaries: {
+        list: 'GET /api/summaries',
+        create: 'POST /api/summaries',
+        get: 'GET /api/summaries/:id',
+        delete: 'DELETE /api/summaries/:id',
+        search: 'GET /api/summaries/search',
+        stats: 'GET /api/summaries/stats',
+        recent: 'GET /api/summaries/recent',
+        byTask: 'GET /api/tasks/:taskId/summaries',
       },
     },
   });
@@ -544,10 +580,175 @@ app.get('/api/costs/budget', (c) => {
   return c.json(status);
 });
 
+// === Summary API ===
+
+// Get summary statistics (before :id route to avoid conflict)
+app.get('/api/summaries/stats', async (c) => {
+  const stats = await getSummaryStats();
+  return c.json(stats);
+});
+
+// Get recent summaries (before :id route to avoid conflict)
+app.get('/api/summaries/recent', async (c) => {
+  const limit = parseInt(c.req.query('limit') || '50');
+  const summaries = await getRecentSummaries(limit);
+
+  return c.json({
+    summaries,
+    count: summaries.length,
+  });
+});
+
+// Search summaries (before :id route to avoid conflict)
+app.get('/api/summaries/search', async (c) => {
+  const q = c.req.query('q');
+  const limit = parseInt(c.req.query('limit') || '20');
+
+  if (!q) {
+    return c.json({ error: 'Query parameter "q" is required' }, 400);
+  }
+
+  const summaries = await searchSummaries(q, limit);
+  return c.json({
+    query: q,
+    summaries,
+    count: summaries.length,
+  });
+});
+
+// List/query summaries
+app.get('/api/summaries', async (c) => {
+  const queryParams: Record<string, unknown> = {};
+
+  // Extract query parameters
+  const taskId = c.req.query('taskId');
+  const sessionId = c.req.query('sessionId');
+  const agent = c.req.query('agent');
+  const taskType = c.req.query('taskType');
+  const component = c.req.query('component');
+  const repository = c.req.query('repository');
+  const from = c.req.query('from');
+  const to = c.req.query('to');
+  const search = c.req.query('search');
+  const sortBy = c.req.query('sortBy');
+  const sortOrder = c.req.query('sortOrder');
+  const limit = c.req.query('limit');
+  const offset = c.req.query('offset');
+
+  if (taskId) queryParams.taskId = taskId;
+  if (sessionId) queryParams.sessionId = sessionId;
+  if (agent) queryParams.agent = agent;
+  if (taskType) queryParams.taskType = taskType;
+  if (component) queryParams.component = component;
+  if (repository) queryParams.repository = repository;
+  if (from) queryParams.from = from;
+  if (to) queryParams.to = to;
+  if (search) queryParams.search = search;
+  if (sortBy) queryParams.sortBy = sortBy;
+  if (sortOrder) queryParams.sortOrder = sortOrder;
+  if (limit) queryParams.limit = parseInt(limit);
+  if (offset) queryParams.offset = parseInt(offset);
+
+  // Validate query
+  const parsed = SummaryQuerySchema.partial().safeParse(queryParams);
+  if (!parsed.success) {
+    return c.json(
+      {
+        error: 'Invalid query parameters',
+        details: parsed.error.flatten(),
+      },
+      400
+    );
+  }
+
+  const result = await querySummaries(parsed.data);
+  return c.json({
+    summaries: result.summaries,
+    total: result.total,
+    limit: queryParams.limit || 50,
+    offset: queryParams.offset || 0,
+  });
+});
+
+// Create summary
+app.post('/api/summaries', async (c) => {
+  try {
+    const body = await c.req.json();
+    const parsed = CreateSummaryInputSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: 'Validation failed',
+          details: parsed.error.flatten(),
+        },
+        400
+      );
+    }
+
+    const summary = await createSummary(parsed.data);
+
+    return c.json(
+      {
+        message: 'Summary created',
+        summary,
+      },
+      201
+    );
+  } catch (error) {
+    console.error('[API] Error creating summary:', error);
+    return c.json(
+      {
+        error: 'Failed to create summary',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
+      500
+    );
+  }
+});
+
+// Get single summary
+app.get('/api/summaries/:id', async (c) => {
+  const id = c.req.param('id');
+  const summary = await getSummary(id);
+
+  if (!summary) {
+    return c.json({ error: 'Summary not found' }, 404);
+  }
+
+  return c.json({ summary });
+});
+
+// Delete summary
+app.delete('/api/summaries/:id', async (c) => {
+  const id = c.req.param('id');
+  const deleted = await deleteSummary(id);
+
+  if (!deleted) {
+    return c.json({ error: 'Summary not found' }, 404);
+  }
+
+  return c.json({ message: 'Summary deleted' });
+});
+
+// Get summaries for a task (nested route)
+app.get('/api/tasks/:taskId/summaries', async (c) => {
+  const taskId = c.req.param('taskId');
+  const summaries = await getTaskSummaries(taskId);
+
+  return c.json({
+    taskId,
+    summaries,
+    count: summaries.length,
+  });
+});
+
 // === Server Startup ===
 
-const PORT = parseInt(process.env.PORT || '3000');
-const ENABLE_CRON = process.env.ENABLE_CRON !== 'false'; // Default enabled
+const PORT = parseInt(process.env.PORT || settings.server?.port?.toString() || '3000');
+const ENABLE_CRON = process.env.ENABLE_CRON !== undefined 
+  ? process.env.ENABLE_CRON !== 'false' 
+  : (settings.server?.enableCron !== undefined ? settings.server.enableCron : true);
 
 async function main() {
   console.log('🚀 GLINR Task Manager starting...');
@@ -566,47 +767,60 @@ async function main() {
   initTokenTracker();
   console.log('✅ Token tracker initialized');
 
-  // Initialize default agents from env
+  // Initialize storage (SQLite/libSQL)
+  try {
+    await initStorage();
+    console.log('✅ Storage initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize storage:', error);
+    console.log('⚠️  Running with in-memory storage only');
+  }
+
+  // Initialize default agents from config
   const registry = getAgentRegistry();
 
-  // Auto-configure OpenClaw if env vars present
-  if (process.env.OPENCLAW_GATEWAY_TOKEN) {
-    try {
-      registry.createAdapter({
-        id: 'openclaw-default',
-        type: 'openclaw',
-        enabled: true,
-        maxConcurrent: 2,
-        priority: 10,
-        config: {
-          baseUrl: process.env.OPENCLAW_BASE_URL,
-          token: process.env.OPENCLAW_GATEWAY_TOKEN,
-          workingDir: process.env.OPENCLAW_WORKING_DIR,
-        },
-      });
-      console.log('✅ OpenClaw adapter configured');
-    } catch (error) {
-      console.error('❌ Failed to configure OpenClaw:', error);
+  interface AgentsYaml {
+    agents: any[];
+  }
+
+  const agentsConfig = loadConfig<AgentsYaml>('agents.yml');
+
+  if (agentsConfig.agents && Array.isArray(agentsConfig.agents)) {
+    for (const agentDef of agentsConfig.agents) {
+      try {
+        // Filter out agent if required config is missing (from interpolated env vars)
+        if (agentDef.type === 'openclaw' && !agentDef.config?.token) {
+          console.log(`ℹ️  Skipping agent ${agentDef.id}: Missing OpenClaw token`);
+          continue;
+        }
+
+        registry.createAdapter(agentDef);
+        console.log(`✅ Agent ${agentDef.id} (${agentDef.type}) configured`);
+      } catch (error) {
+        console.error(`❌ Failed to configure agent ${agentDef.id}:`, error);
+      }
     }
   }
 
-  // Auto-configure Claude Code if available
-  try {
-    const { execSync } = await import('child_process');
-    execSync('which claude', { stdio: 'ignore' });
-    registry.createAdapter({
-      id: 'claude-code-default',
-      type: 'claude-code',
-      enabled: true,
-      maxConcurrent: 1,
-      priority: 5,
-      config: {
-        workingDir: process.env.CLAUDE_WORKING_DIR || process.cwd(),
-      },
-    });
-    console.log('✅ Claude Code adapter configured');
-  } catch {
-    console.log('ℹ️  Claude Code CLI not found, skipping adapter');
+  // Fallback for Claude Code if not in config but available on system
+  if (!registry.getActiveAdapters().some(a => a.type === 'claude-code')) {
+    try {
+      const { execSync } = await import('child_process');
+      execSync('which claude', { stdio: 'ignore' });
+      registry.createAdapter({
+        id: 'claude-code-auto',
+        type: 'claude-code',
+        enabled: true,
+        maxConcurrent: 1,
+        priority: 5,
+        config: {
+          workingDir: process.env.CLAUDE_WORKING_DIR || process.cwd(),
+        },
+      });
+      console.log('✅ Claude Code adapter auto-configured (CLI found)');
+    } catch {
+      // CLI not found, ignore
+    }
   }
 
   // Start cron jobs for autonomous operation

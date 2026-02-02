@@ -1,0 +1,24 @@
+# AI Agent Definitions
+
+agents:
+  - id: openclaw-default
+    type: openclaw
+    enabled: true
+    maxConcurrent: 2
+    priority: 10
+    config:
+      baseUrl: ${OPENCLAW_BASE_URL}
+      token: ${OPENCLAW_GATEWAY_TOKEN}
+      workingDir: ${OPENCLAW_WORKING_DIR}
+    labels: [code, research, sysadmin]
+    taskTypes: [feature, bug_fix, refactor]
+
+  - id: claude-code-default
+    type: claude-code
+    enabled: true
+    maxConcurrent: 1
+    priority: 5
+    config:
+      workingDir: ${CLAUDE_WORKING_DIR}
+    labels: [code, research]
+    taskTypes: [feature, bug_fix, code_review]

@@ -18,7 +18,13 @@ export function loadConfig<T>(fileName: string): T {
     }
 
     const fileContents = fs.readFileSync(configPath, 'utf8');
-    const config = yaml.load(fileContents) as T;
+    
+    // Interpolate environment variables: ${VAR_NAME} or ${VAR_NAME:-default}
+    const interpolated = fileContents.replace(/\${(\w+)(?::-([^}]*))?}/g, (_, name, defaultValue) => {
+      return process.env[name] || defaultValue || '';
+    });
+
+    const config = yaml.load(interpolated) as T;
     
     logger.info(`Loaded configuration from ${fileName}`);
     return config;

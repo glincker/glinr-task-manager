@@ -3,6 +3,8 @@ import type { Task, TaskResult, CreateTaskInput, TaskStatusType } from '../types
 import { getAgentRegistry } from '../adapters/registry.js';
 import { randomUUID } from 'crypto';
 import { postResultToSource } from './notifications.js';
+import { extractFromTaskResult, createSummary } from '../summaries/index.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Task Queue Manager
@@ -14,9 +16,30 @@ import { postResultToSource } from './notifications.js';
  * - Result storage
  */
 
-const QUEUE_NAME = 'ai-tasks';
-const NOTIFICATION_QUEUE_NAME = 'ai-task-notifications';
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+import { loadConfig } from '../utils/config-loader.js';
+
+interface SettingsYaml {
+  queue: {
+    name: string;
+    notificationName: string;
+    concurrency: number;
+    notificationConcurrency: number;
+    redis: {
+      url: string;
+    };
+    retry: {
+      attempts: number;
+      backoff: number;
+      type: 'exponential' | 'fixed';
+    };
+  };
+}
+
+const settings = loadConfig<SettingsYaml>('settings.yml');
+
+const QUEUE_NAME = settings.queue?.name || 'ai-tasks';
+const NOTIFICATION_QUEUE_NAME = settings.queue?.notificationName || 'ai-task-notifications';
+const REDIS_URL = process.env.REDIS_URL || settings.queue?.redis?.url || 'redis://localhost:6379';
 
 // Connection config
 const connection = {
@@ -53,10 +76,10 @@ export async function initTaskQueue(): Promise<void> {
   taskQueue = new Queue<Task>(QUEUE_NAME, {
     connection,
     defaultJobOptions: {
-      attempts: 3,
+      attempts: settings.queue?.retry?.attempts || 3,
       backoff: {
-        type: 'exponential',
-        delay: 5000,
+        type: settings.queue?.retry?.type || 'exponential',
+        delay: settings.queue?.retry?.backoff || 5000,
       },
       removeOnComplete: {
         age: 86400, // Keep completed jobs for 24 hours
@@ -76,7 +99,7 @@ export async function initTaskQueue(): Promise<void> {
     },
     {
       connection,
-      concurrency: parseInt(process.env.TASK_CONCURRENCY || '2'),
+      concurrency: parseInt(process.env.TASK_CONCURRENCY || '') || settings.queue?.concurrency || 2,
     }
   );
 
@@ -202,7 +225,20 @@ export async function processTask(job: Job<Task>): Promise<TaskResult> {
   task.result = result;
 
   if (result.success) {
-    // Post results back to source (e.g., GitHub comment)
+    // 1. Create structured summary
+    try {
+      const summaryInput = extractFromTaskResult(result, {
+        taskId: task.id,
+        agent: adapter.type,
+        model: result.metadata?.model as string,
+        startedAt: task.startedAt,
+      });
+      await createSummary(summaryInput);
+    } catch (error) {
+      logger.error(`[Queue] Failed to create summary for task ${task.id}:`, error as Error);
+    }
+
+    // 2. Post results back to source (e.g., GitHub comment)
     if (notificationQueue) {
       await notificationQueue.add('notify-source', { task, result });
     } else {
