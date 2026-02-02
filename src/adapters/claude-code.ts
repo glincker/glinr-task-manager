@@ -183,18 +183,20 @@ export class ClaudeCodeAdapter implements AgentAdapter {
         },
       });
 
-      let stdout = '';
-      let stderr = '';
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
 
       proc.stdout?.on('data', (data) => {
-        stdout += data.toString();
+        stdoutChunks.push(Buffer.from(data));
       });
 
       proc.stderr?.on('data', (data) => {
-        stderr += data.toString();
+        stderrChunks.push(Buffer.from(data));
       });
 
       proc.on('close', (code) => {
+        const stdout = Buffer.concat(stdoutChunks).toString();
+        const stderr = Buffer.concat(stderrChunks).toString();
         resolve({
           success: code === 0,
           output: stdout,
@@ -203,6 +205,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       });
 
       proc.on('error', (error) => {
+        const stdout = Buffer.concat(stdoutChunks).toString();
         resolve({
           success: false,
           output: stdout,
