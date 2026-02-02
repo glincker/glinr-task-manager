@@ -8,9 +8,9 @@ import type { Task, TaskResult, TaskArtifact } from '../types/task.js';
 
 // Regex patterns for artifact extraction
 // Defined at module scope to avoid recompilation
-const COMMIT_PATTERN = /commit\s+([a-f0-9]{7,40})/i;
-const PR_PATTERN = /https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/;
-const FILE_PATTERN = /(?:created|modified|edited|wrote)\s+(?:file\s+)?[`"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`"]?/i;
+const COMMIT_PATTERN = /commit\s+([a-f0-9]{7,40})/gi;
+const PR_PATTERN = /https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/g;
+const FILE_PATTERN = /(?:created|modified|edited|wrote)\s+(?:file\s+)?[`"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`"]?/gi;
 
 /**
  * OpenClaw Agent Adapter
@@ -143,7 +143,7 @@ export class OpenClawAdapter implements AgentAdapter {
       const result = await response.json() as OpenClawResponse;
 
       // Parse the response and extract artifacts
-      const artifacts = this.extractArtifacts(result);
+      const artifacts = extractArtifacts(result);
 
       return {
         success: true,
@@ -259,53 +259,6 @@ Guidelines:
   }
 
   /**
-   * Extract artifacts (commits, PRs, files) from OpenClaw response
-   */
-  private extractArtifacts(result: OpenClawResponse): TaskArtifact[] {
-    const artifacts: TaskArtifact[] = [];
-
-    // Parse the response text for commits
-    COMMIT_PATTERN.lastIndex = 0;
-    let match;
-    while ((match = COMMIT_PATTERN.exec(result.message || '')) !== null) {
-      artifacts.push({
-        type: 'commit',
-        sha: match[1],
-      });
-    }
-
-    // Parse for PR URLs
-    PR_PATTERN.lastIndex = 0;
-    while ((match = PR_PATTERN.exec(result.message || '')) !== null) {
-      artifacts.push({
-        type: 'pull_request',
-        url: match[0],
-        metadata: {
-          owner: match[1],
-          repo: match[2],
-          number: parseInt(match[3]),
-        },
-      });
-    }
-
-    // Parse for file paths (simple heuristic)
-    FILE_PATTERN.lastIndex = 0;
-    while ((match = FILE_PATTERN.exec(result.message || '')) !== null) {
-      artifacts.push({
-        type: 'file',
-        path: match[1],
-      });
-    }
-
-    // Add any artifacts from structured response
-    if (result.artifacts) {
-      artifacts.push(...result.artifacts);
-    }
-
-    return artifacts;
-  }
-
-  /**
    * Get request headers
    */
   private getHeaders(): Record<string, string> {
@@ -317,7 +270,7 @@ Guidelines:
 }
 
 // OpenClaw API response type
-interface OpenClawResponse {
+export interface OpenClawResponse {
   message?: string;
   response?: string;
   usage?: {
@@ -326,6 +279,53 @@ interface OpenClawResponse {
     total_tokens?: number;
   };
   artifacts?: TaskArtifact[];
+}
+
+/**
+ * Extract artifacts (commits, PRs, files) from OpenClaw response
+ */
+export function extractArtifacts(result: OpenClawResponse): TaskArtifact[] {
+  const artifacts: TaskArtifact[] = [];
+
+  // Parse the response text for commits
+  COMMIT_PATTERN.lastIndex = 0;
+  let match;
+  while ((match = COMMIT_PATTERN.exec(result.message || '')) !== null) {
+    artifacts.push({
+      type: 'commit',
+      sha: match[1],
+    });
+  }
+
+  // Parse for PR URLs
+  PR_PATTERN.lastIndex = 0;
+  while ((match = PR_PATTERN.exec(result.message || '')) !== null) {
+    artifacts.push({
+      type: 'pull_request',
+      url: match[0],
+      metadata: {
+        owner: match[1],
+        repo: match[2],
+        number: parseInt(match[3]),
+      },
+    });
+  }
+
+  // Parse for file paths (simple heuristic)
+  FILE_PATTERN.lastIndex = 0;
+  while ((match = FILE_PATTERN.exec(result.message || '')) !== null) {
+    artifacts.push({
+      type: 'file',
+      path: match[1],
+    });
+  }
+
+  // Add any artifacts from structured response
+  if (result.artifacts) {
+    artifacts.push(...result.artifacts);
+  }
+
+  return artifacts;
 }
 
 /**

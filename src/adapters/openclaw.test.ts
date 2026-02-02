@@ -1,22 +1,8 @@
 
 import { describe, it, expect } from 'vitest';
-import { OpenClawAdapter } from './openclaw.js';
-import type { AgentConfig } from '../types/agent.js';
+import { extractArtifacts } from './openclaw.js';
 
-describe('OpenClawAdapter', () => {
-  const config: AgentConfig = {
-    id: 'test-agent',
-    type: 'openclaw',
-    enabled: true,
-    maxConcurrent: 1,
-    priority: 1,
-    config: {
-      token: 'test-token',
-    },
-  };
-
-  const adapter = new OpenClawAdapter(config);
-
+describe('extractArtifacts', () => {
   it('extracts artifacts correctly', () => {
     const message = `
       Result:
@@ -29,8 +15,7 @@ describe('OpenClawAdapter', () => {
       message,
     };
 
-    // @ts-ignore - Accessing private method
-    const artifacts = (adapter as any).extractArtifacts(response);
+    const artifacts = extractArtifacts(response);
 
     expect(artifacts).toHaveLength(3);
 
@@ -46,14 +31,13 @@ describe('OpenClawAdapter', () => {
   });
 
   it('handles multiple artifacts of same type', () => {
-    const message = `
+     const message = `
       commit 1111111
       commit 2222222
     `;
 
     const response = { message };
-    // @ts-ignore
-    const artifacts = (adapter as any).extractArtifacts(response);
+    const artifacts = extractArtifacts(response);
 
     expect(artifacts).toHaveLength(2);
     expect(artifacts[0].sha).toBe('1111111');
