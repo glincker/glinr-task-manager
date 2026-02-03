@@ -105,7 +105,6 @@ export function TaskDetail() {
                    <Button
                      variant="outline"
                      size="icon"
-                     className="rounded-xl glass border-white/5 hover:bg-white/5"
                      onClick={() => retryMutation.mutate()}
                      disabled={retryMutation.isPending}
                      title="Retry task"
@@ -119,28 +118,27 @@ export function TaskDetail() {
                  )}
                  {(task.status === 'in_progress' || task.status === 'pending') && (
                    <Button
-                     className="rounded-xl glass bg-red-500/80 text-white hover:bg-red-500 px-6 shadow-lg shadow-red-500/20"
+                     variant="destructive"
                      onClick={() => cancelMutation.mutate()}
                      disabled={cancelMutation.isPending}
                    >
                      {cancelMutation.isPending ? (
                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                      ) : (
-                       <Square className="mr-2 h-4 w-4 fill-white" />
+                       <Square className="mr-2 h-4 w-4 fill-current" />
                      )}
                      Cancel
                    </Button>
                  )}
                  {(task.status === 'failed' || task.status === 'completed') && (
                    <Button
-                     className="rounded-xl glass bg-[var(--primary)] text-white hover:brightness-110 px-6 shadow-lg shadow-[var(--primary)]/20"
                      onClick={() => retryMutation.mutate()}
                      disabled={retryMutation.isPending}
                    >
                      {retryMutation.isPending ? (
                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                      ) : (
-                       <Play className="mr-2 h-4 w-4 fill-white" />
+                       <Play className="mr-2 h-4 w-4 fill-current" />
                      )}
                      Run Again
                    </Button>

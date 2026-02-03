@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { postResultToSource } from './notifications.js';
 import { extractFromTaskResult, createSummary } from '../summaries/index.js';
 import { logger } from '../utils/logger.js';
+import { getStorage } from '../storage/index.js';
 
 /**
  * Task Queue Manager
@@ -56,9 +57,61 @@ let taskWorker: Worker<Task, TaskResult> | null = null;
 let notificationQueue: Queue<{ task: Task; result: TaskResult }> | null = null;
 let notificationWorker: Worker<{ task: Task; result: TaskResult }, void> | null = null;
 
-// In-memory task store (replace with DB in production)
+// In-memory task store (cache, synced with DB)
 const taskStore = new Map<string, Task>();
 const eventCallbacks = new Map<string, (event: TaskEvent) => void>();
+
+/**
+ * Ensure a value is a Date object (handles ISO strings from BullMQ)
+ */
+function ensureDate(value: Date | string | undefined): Date | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) return value;
+  return new Date(value);
+}
+
+/**
+ * Persist task to database (async, non-blocking)
+ */
+async function persistTask(task: Task): Promise<void> {
+  try {
+    const storage = getStorage();
+
+    // Ensure date fields are proper Date objects (BullMQ serializes to strings)
+    const taskWithDates = {
+      ...task,
+      createdAt: ensureDate(task.createdAt) || new Date(),
+      updatedAt: ensureDate(task.updatedAt) || new Date(),
+      startedAt: ensureDate(task.startedAt),
+      completedAt: ensureDate(task.completedAt),
+    };
+
+    const existing = await storage.getTask(task.id);
+    if (existing) {
+      await storage.updateTask(task.id, taskWithDates);
+    } else {
+      await storage.createTask(taskWithDates);
+    }
+  } catch (error) {
+    logger.error('[Queue] Failed to persist task to DB:', { taskId: task.id, error });
+  }
+}
+
+/**
+ * Load tasks from database into memory cache
+ */
+async function loadTasksFromDB(): Promise<void> {
+  try {
+    const storage = getStorage();
+    const { tasks } = await storage.getTasks({ limit: 10000 });
+    for (const task of tasks) {
+      taskStore.set(task.id, task);
+    }
+    logger.info(`[Queue] Loaded ${tasks.length} tasks from database`);
+  } catch (error) {
+    logger.warn('[Queue] Failed to load tasks from DB, starting fresh:', { error });
+  }
+}
 
 interface TaskEvent {
   type: 'created' | 'queued' | 'started' | 'progress' | 'completed' | 'failed';
@@ -72,6 +125,9 @@ interface TaskEvent {
  * Initialize the task queue
  */
 export async function initTaskQueue(): Promise<void> {
+  // Load existing tasks from database
+  await loadTasksFromDB();
+
   // Create queue
   taskQueue = new Queue<Task>(QUEUE_NAME, {
     connection,
@@ -104,13 +160,14 @@ export async function initTaskQueue(): Promise<void> {
   );
 
   // Set up event handlers
-  taskWorker.on('completed', (job, result) => {
+  taskWorker.on('completed', async (job, result) => {
     const task = taskStore.get(job.data.id);
     if (task) {
       task.status = 'completed';
       task.completedAt = new Date();
       task.result = result;
       taskStore.set(task.id, task);
+      await persistTask(task); // Persist to DB
 
       emitEvent({
         type: 'completed',
@@ -122,7 +179,7 @@ export async function initTaskQueue(): Promise<void> {
     console.log(`[Queue] Task ${job.data.id} completed`);
   });
 
-  taskWorker.on('failed', (job, err) => {
+  taskWorker.on('failed', async (job, err) => {
     if (!job) return;
     const task = taskStore.get(job.data.id);
     if (task) {
@@ -137,6 +194,7 @@ export async function initTaskQueue(): Promise<void> {
         },
       };
       taskStore.set(task.id, task);
+      await persistTask(task); // Persist to DB
 
       emitEvent({
         type: 'failed',
@@ -199,6 +257,7 @@ export async function processTask(job: Job<Task>): Promise<TaskResult> {
   task.status = 'in_progress';
   task.startedAt = new Date();
   taskStore.set(task.id, task);
+  persistTask(task); // Persist to DB
 
   emitEvent({
     type: 'started',
@@ -272,8 +331,11 @@ export async function addTask(input: CreateTaskInput): Promise<Task> {
     maxAttempts: 3,
   };
 
-  // Store task
+  // Store task in memory
   taskStore.set(task.id, task);
+
+  // Persist to DB FIRST (before adding to queue to avoid race condition)
+  await persistTask(task);
 
   emitEvent({
     type: 'created',
@@ -289,6 +351,7 @@ export async function addTask(input: CreateTaskInput): Promise<Task> {
 
   task.status = 'queued';
   taskStore.set(task.id, task);
+  await persistTask(task); // Update status in DB
 
   emitEvent({
     type: 'queued',
@@ -423,6 +486,7 @@ export async function cancelTask(id: string): Promise<boolean> {
     },
   };
   taskStore.set(id, task);
+  await persistTask(task); // Persist cancellation to DB
 
   // Try to remove from BullMQ if pending
   if (taskQueue) {

@@ -1,5 +1,74 @@
-import type { Task, CreateTaskInput } from '../types/task.js';
+import type { Task, CreateTaskInput, TaskEvent as TaskEventType } from '../types/task.js';
 import type { Summary, CreateSummaryInput, SummaryQuery, SummaryStats } from '../types/summary.js';
+
+/**
+ * Task Event for audit logging
+ */
+export interface TaskEventInput {
+  taskId: string;
+  type: 'created' | 'queued' | 'assigned' | 'started' | 'progress' | 'completed' | 'failed' | 'cancelled' | 'retried';
+  agentId?: string;
+  message?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Task Analytics Summary
+ */
+export interface TaskAnalytics {
+  // Overall stats
+  totalTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+  pendingTasks: number;
+  inProgressTasks: number;
+  cancelledTasks: number;
+
+  // Performance metrics
+  successRate: number;
+  avgDurationMs: number;
+  minDurationMs: number;
+  maxDurationMs: number;
+
+  // Breakdowns
+  byStatus: Record<string, number>;
+  byPriority: Record<number, number>;
+  bySource: Record<string, number>;
+  byAgent: Record<string, { count: number; successRate: number; avgDurationMs: number }>;
+
+  // Time series (last 30 days)
+  daily: Array<{
+    date: string;
+    created: number;
+    completed: number;
+    failed: number;
+  }>;
+
+  // Recent activity
+  recentCompletions: number; // last 24h
+  recentFailures: number; // last 24h
+}
+
+/**
+ * Task filter options for advanced queries
+ */
+export interface TaskFilterOptions {
+  status?: string | string[];
+  priority?: number | number[];
+  source?: string | string[];
+  agent?: string;
+  labels?: string[];
+  createdAfter?: Date;
+  createdBefore?: Date;
+  completedAfter?: Date;
+  completedBefore?: Date;
+  repository?: string;
+  searchQuery?: string;
+  limit?: number;
+  offset?: number;
+  sortBy?: 'createdAt' | 'updatedAt' | 'priority' | 'completedAt';
+  sortOrder?: 'asc' | 'desc';
+}
 
 /**
  * Generic Storage Adapter Interface
@@ -42,4 +111,20 @@ export interface StorageAdapter {
     totalCost: number;
     totalTokens: number;
   }>;
+
+  // Generic SQL operations (for settings, etc.)
+  query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
+  execute(sql: string, params?: unknown[]): Promise<void>;
+
+  // Task Events (Audit Log) - Optional
+  recordTaskEvent?(event: TaskEventInput): Promise<void>;
+  getTaskEvents?(taskId: string): Promise<TaskEventType[]>;
+
+  // Task Analytics - Optional
+  getTaskAnalytics?(): Promise<TaskAnalytics>;
+  getTasksFiltered?(options: TaskFilterOptions): Promise<{ tasks: Task[]; total: number }>;
+
+  // Task Archival - Optional
+  archiveOldTasks?(olderThanDays: number): Promise<{ archived: number }>;
+  getArchivedTasks?(options: { limit?: number; offset?: number }): Promise<{ tasks: Task[]; total: number }>;
 }

@@ -31,8 +31,8 @@ export function ThemeToggle() {
           Appearance
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-white/5" />
-        
-        <DropdownMenuItem 
+
+        <DropdownMenuItem
           onClick={() => setTheme('light')}
           className="flex items-center justify-between rounded-xl px-2 py-2.5 cursor-pointer hover:bg-white/5"
         >
@@ -43,12 +43,8 @@ export function ThemeToggle() {
           {theme === 'light' && <Check className="h-4 w-4" />}
         </DropdownMenuItem>
 
-        <DropdownMenuItem 
-          onClick={() => {
-            setTheme('dark');
-            localStorage.setItem('glinr-dark-variant', 'dark');
-            window.dispatchEvent(new CustomEvent('glinr-theme-variant-change', { detail: 'dark' }));
-          }}
+        <DropdownMenuItem
+          onClick={() => setTheme('dark')}
           className="flex items-center justify-between rounded-xl px-2 py-2.5 cursor-pointer hover:bg-white/5"
         >
           <div className="flex items-center gap-2">
@@ -58,24 +54,20 @@ export function ThemeToggle() {
           {theme === 'dark' && <Check className="h-4 w-4" />}
         </DropdownMenuItem>
 
-        <DropdownMenuItem 
-          onClick={() => {
-            setTheme('midnight');
-            localStorage.setItem('glinr-dark-variant', 'midnight');
-            window.dispatchEvent(new CustomEvent('glinr-theme-variant-change', { detail: 'midnight' }));
-          }}
+        <DropdownMenuItem
+          onClick={() => setTheme('midnight')}
           className="flex items-center justify-between rounded-xl px-2 py-2.5 cursor-pointer hover:bg-white/5"
         >
           <div className="flex items-center gap-2">
-            <Moon className="h-4 w-4 text-slate-400" />
-            <span className="text-[13px]">Midnight Black</span>
+            <Moon className="h-4 w-4 text-purple-400" />
+            <span className="text-[13px]">Midnight Purple</span>
           </div>
           {theme === 'midnight' && <Check className="h-4 w-4" />}
         </DropdownMenuItem>
 
         <DropdownMenuSeparator className="bg-white/5" />
-        
-        <DropdownMenuItem 
+
+        <DropdownMenuItem
           onClick={() => setTheme('system')}
           className="flex items-center justify-between rounded-xl px-2 py-2.5 cursor-pointer hover:bg-white/5"
         >

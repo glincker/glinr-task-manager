@@ -7,6 +7,7 @@ import type {
 import type { Task } from '../types/task.js';
 import { createOpenClawAdapter } from './openclaw.js';
 import { createClaudeCodeAdapter } from './claude-code.js';
+import { createOllamaAdapter } from './ollama.js';
 
 /**
  * Default Agent Registry Implementation
@@ -23,6 +24,7 @@ export class DefaultAgentRegistry implements AgentRegistry {
     // Register built-in adapters
     this.registerAdapter('openclaw', createOpenClawAdapter);
     this.registerAdapter('claude-code', createClaudeCodeAdapter);
+    this.registerAdapter('ollama', createOllamaAdapter);
   }
 
   /**

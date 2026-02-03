@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusIndicator } from '@/components/shared/StatusIndicator';
+import { CodeBlock, InlineCode } from '@/components/ui/code-block';
 import {
   Github,
   ExternalLink,
@@ -283,21 +284,21 @@ export function WebhookStatus() {
           )}
 
           {/* Setup Instructions */}
-          <div className="mt-4 p-4 rounded-2xl bg-black/20 border border-white/5">
+          <div className="mt-4 p-4 rounded-2xl bg-muted/50 border border-border">
             <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
               Quick Setup
             </p>
             <p className="text-[12px] text-muted-foreground mb-3">
-              Add this to your <code className="px-1.5 py-0.5 rounded bg-black/30 font-mono">~/.claude/settings.json</code>:
+              Add this to your <InlineCode>~/.claude/settings.json</InlineCode>:
             </p>
-            <pre className="text-[10px] font-mono text-muted-foreground bg-black/30 p-3 rounded-xl overflow-x-auto">
+            <CodeBlock filename="~/.claude/settings.json" language="json">
 {`{
   "hooks": {
     "PostToolUse": "curl -X POST ${hookEndpoints?.toolUse || 'http://localhost:3000/api/hook/tool-use'}",
     "Stop": "curl -X POST ${hookEndpoints?.sessionEnd || 'http://localhost:3000/api/hook/session-end'}"
   }
 }`}
-            </pre>
+            </CodeBlock>
           </div>
         </CardContent>
       </Card>

@@ -2,12 +2,13 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, BarChart, Bar, Legend
 } from 'recharts';
-import { 
-  Coins, TrendingUp, CreditCard, Activity, 
-  ArrowUpRight, ArrowDownRight, Zap 
+import {
+  Coins, TrendingUp, CreditCard, Activity,
+  ArrowUpRight, ArrowDownRight, Zap, Download
 } from 'lucide-react';
 import { useCostAnalytics, useCostBudget } from '../api/costs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
@@ -43,9 +44,22 @@ export function CostDashboard() {
           <h2 className="text-2xl font-bold tracking-tight">Cost Analytics</h2>
           <p className="text-muted-foreground text-sm">Real-time visualization of AI operation expenses.</p>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 rounded-full glass border-white/10">
-          <Zap className="h-4 w-4 text-yellow-400 fill-yellow-400" />
-          <span className="text-[10px] font-bold uppercase tracking-widest">Live Billing</span>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full gap-2"
+            onClick={() => {
+              window.open('/api/costs/export', '_blank');
+            }}
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full glass border-white/10">
+            <Zap className="h-4 w-4 text-yellow-400 fill-yellow-400" />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Live Billing</span>
+          </div>
         </div>
       </header>
 

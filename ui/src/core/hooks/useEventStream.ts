@@ -28,7 +28,7 @@ const API_BASE = 'http://localhost:3000';
 export function useEventStream() {
   const queryClient = useQueryClient();
   const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const connect = useCallback(() => {
     // Don't create multiple connections

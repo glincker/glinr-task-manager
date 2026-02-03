@@ -171,6 +171,182 @@ const TOOLS = [
       required: ['query'],
     },
   },
+  // --- Ticket Tools ---
+  {
+    name: 'glinr__create_ticket',
+    description: 'Create a new ticket in GLINR. Use this when you identify a new task, bug, or feature that needs to be tracked.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Title of the ticket',
+        },
+        description: {
+          type: 'string',
+          description: 'Detailed description of the ticket',
+        },
+        type: {
+          type: 'string',
+          enum: ['task', 'bug', 'feature', 'improvement', 'epic', 'story', 'subtask'],
+          description: 'Type of ticket (default: task)',
+        },
+        priority: {
+          type: 'string',
+          enum: ['urgent', 'high', 'medium', 'low', 'none'],
+          description: 'Priority level (default: medium)',
+        },
+        labels: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Labels to categorize the ticket',
+        },
+        parentId: {
+          type: 'string',
+          description: 'Parent ticket ID for subtasks',
+        },
+      },
+      required: ['title'],
+    },
+  },
+  {
+    name: 'glinr__update_ticket',
+    description: 'Update an existing ticket. Use this to modify ticket details.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        ticketId: {
+          type: 'string',
+          description: 'The ticket ID to update (e.g., GLINR-123 or UUID)',
+        },
+        title: {
+          type: 'string',
+          description: 'New title for the ticket',
+        },
+        description: {
+          type: 'string',
+          description: 'New description for the ticket',
+        },
+        priority: {
+          type: 'string',
+          enum: ['urgent', 'high', 'medium', 'low', 'none'],
+          description: 'New priority level',
+        },
+        labels: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'New labels (replaces existing)',
+        },
+      },
+      required: ['ticketId'],
+    },
+  },
+  {
+    name: 'glinr__transition_ticket',
+    description: 'Change the status of a ticket. Use this when starting, completing, or changing the state of work.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        ticketId: {
+          type: 'string',
+          description: 'The ticket ID to transition',
+        },
+        status: {
+          type: 'string',
+          enum: ['backlog', 'todo', 'in_progress', 'in_review', 'done', 'cancelled'],
+          description: 'New status for the ticket',
+        },
+      },
+      required: ['ticketId', 'status'],
+    },
+  },
+  {
+    name: 'glinr__get_ticket',
+    description: 'Get details of a specific ticket. Use this to check ticket status or get context.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        ticketId: {
+          type: 'string',
+          description: 'The ticket ID to retrieve',
+        },
+        include: {
+          type: 'string',
+          enum: ['comments', 'links', 'history', 'all'],
+          description: 'Additional data to include (default: none)',
+        },
+      },
+      required: ['ticketId'],
+    },
+  },
+  {
+    name: 'glinr__list_tickets',
+    description: 'List tickets with optional filtering. Use this to find tickets to work on or check progress.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        status: {
+          type: 'string',
+          enum: ['backlog', 'todo', 'in_progress', 'in_review', 'done', 'cancelled'],
+          description: 'Filter by status',
+        },
+        type: {
+          type: 'string',
+          enum: ['task', 'bug', 'feature', 'improvement', 'epic', 'story', 'subtask'],
+          description: 'Filter by type',
+        },
+        priority: {
+          type: 'string',
+          enum: ['urgent', 'high', 'medium', 'low', 'none'],
+          description: 'Filter by priority',
+        },
+        assignedToMe: {
+          type: 'boolean',
+          description: 'Only show tickets assigned to the current AI agent',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of results (default: 20)',
+        },
+      },
+    },
+  },
+  {
+    name: 'glinr__add_comment',
+    description: 'Add a comment to a ticket. Use this to document progress, findings, or notes.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        ticketId: {
+          type: 'string',
+          description: 'The ticket ID to comment on',
+        },
+        content: {
+          type: 'string',
+          description: 'The comment content (supports markdown)',
+        },
+      },
+      required: ['ticketId', 'content'],
+    },
+  },
+  {
+    name: 'glinr__assign_ticket',
+    description: 'Assign a ticket to yourself (AI agent). Use this when starting work on a ticket.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        ticketId: {
+          type: 'string',
+          description: 'The ticket ID to assign',
+        },
+        agent: {
+          type: 'string',
+          description: 'Agent ID to assign to (defaults to current session agent)',
+        },
+      },
+      required: ['ticketId'],
+    },
+  },
 ];
 
 // Handle tool listing
@@ -195,6 +371,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
 
       case 'glinr__get_context':
         return await handleGetContext(args as unknown as GetContextArgs);
+
+      // Ticket tools
+      case 'glinr__create_ticket':
+        return await handleCreateTicket(args as unknown as CreateTicketArgs);
+
+      case 'glinr__update_ticket':
+        return await handleUpdateTicket(args as unknown as UpdateTicketArgs);
+
+      case 'glinr__transition_ticket':
+        return await handleTransitionTicket(args as unknown as TransitionTicketArgs);
+
+      case 'glinr__get_ticket':
+        return await handleGetTicket(args as unknown as GetTicketArgs);
+
+      case 'glinr__list_tickets':
+        return await handleListTickets(args as unknown as ListTicketsArgs);
+
+      case 'glinr__add_comment':
+        return await handleAddComment(args as unknown as AddCommentArgs);
+
+      case 'glinr__assign_ticket':
+        return await handleAssignTicket(args as unknown as AssignTicketArgs);
 
       default:
         return {
@@ -235,6 +433,52 @@ interface ReportUsageArgs {
 interface GetContextArgs {
   query: string;
   limit?: number;
+}
+
+// Ticket argument types
+interface CreateTicketArgs {
+  title: string;
+  description?: string;
+  type?: 'task' | 'bug' | 'feature' | 'improvement' | 'epic' | 'story' | 'subtask';
+  priority?: 'urgent' | 'high' | 'medium' | 'low' | 'none';
+  labels?: string[];
+  parentId?: string;
+}
+
+interface UpdateTicketArgs {
+  ticketId: string;
+  title?: string;
+  description?: string;
+  priority?: 'urgent' | 'high' | 'medium' | 'low' | 'none';
+  labels?: string[];
+}
+
+interface TransitionTicketArgs {
+  ticketId: string;
+  status: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
+}
+
+interface GetTicketArgs {
+  ticketId: string;
+  include?: 'comments' | 'links' | 'history' | 'all';
+}
+
+interface ListTicketsArgs {
+  status?: 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
+  type?: 'task' | 'bug' | 'feature' | 'improvement' | 'epic' | 'story' | 'subtask';
+  priority?: 'urgent' | 'high' | 'medium' | 'low' | 'none';
+  assignedToMe?: boolean;
+  limit?: number;
+}
+
+interface AddCommentArgs {
+  ticketId: string;
+  content: string;
+}
+
+interface AssignTicketArgs {
+  ticketId: string;
+  agent?: string;
 }
 
 // Tool handlers
@@ -405,6 +649,321 @@ async function handleGetContext(args: GetContextArgs): Promise<CallToolResult> {
       },
     ],
   };
+}
+
+// --- Ticket Handlers ---
+
+async function handleCreateTicket(args: CreateTicketArgs): Promise<CallToolResult> {
+  try {
+    const response = await fetch(`${GLINR_API_URL}/api/tickets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: args.title,
+        description: args.description || '',
+        type: args.type || 'task',
+        priority: args.priority || 'medium',
+        labels: args.labels || [],
+        parentId: args.parentId,
+        createdBy: 'ai',
+        aiAgent: sessionState.sessionId,
+        aiSessionId: sessionState.sessionId,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      return {
+        content: [{ type: 'text', text: `Failed to create ticket: ${error}` }],
+        isError: true,
+      };
+    }
+
+    const data = (await response.json()) as { ticket: { id: string; sequence: number; title: string } };
+    const ticket = data.ticket;
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Ticket created: GLINR-${ticket.sequence}\nID: ${ticket.id}\nTitle: ${ticket.title}`,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: `Error creating ticket: ${error instanceof Error ? error.message : 'Unknown error'}` }],
+      isError: true,
+    };
+  }
+}
+
+async function handleUpdateTicket(args: UpdateTicketArgs): Promise<CallToolResult> {
+  try {
+    const updates: Record<string, unknown> = {};
+    if (args.title) updates.title = args.title;
+    if (args.description) updates.description = args.description;
+    if (args.priority) updates.priority = args.priority;
+    if (args.labels) updates.labels = args.labels;
+
+    const response = await fetch(`${GLINR_API_URL}/api/tickets/${args.ticketId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      return {
+        content: [{ type: 'text', text: `Failed to update ticket: ${error}` }],
+        isError: true,
+      };
+    }
+
+    const data = (await response.json()) as { ticket: { id: string; sequence: number; title: string } };
+    const ticket = data.ticket;
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Ticket updated: GLINR-${ticket.sequence}\nTitle: ${ticket.title}`,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: `Error updating ticket: ${error instanceof Error ? error.message : 'Unknown error'}` }],
+      isError: true,
+    };
+  }
+}
+
+async function handleTransitionTicket(args: TransitionTicketArgs): Promise<CallToolResult> {
+  try {
+    const response = await fetch(`${GLINR_API_URL}/api/tickets/${args.ticketId}/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: args.status }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      return {
+        content: [{ type: 'text', text: `Failed to transition ticket: ${error}` }],
+        isError: true,
+      };
+    }
+
+    const data = (await response.json()) as { ticket: { id: string; sequence: number; status: string } };
+    const ticket = data.ticket;
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Ticket transitioned: GLINR-${ticket.sequence} → ${ticket.status}`,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: `Error transitioning ticket: ${error instanceof Error ? error.message : 'Unknown error'}` }],
+      isError: true,
+    };
+  }
+}
+
+async function handleGetTicket(args: GetTicketArgs): Promise<CallToolResult> {
+  try {
+    const include = args.include ? `?include=${args.include}` : '';
+    const response = await fetch(`${GLINR_API_URL}/api/tickets/${args.ticketId}${include}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return {
+          content: [{ type: 'text', text: `Ticket not found: ${args.ticketId}` }],
+          isError: true,
+        };
+      }
+      const error = await response.text();
+      return {
+        content: [{ type: 'text', text: `Failed to get ticket: ${error}` }],
+        isError: true,
+      };
+    }
+
+    const data = (await response.json()) as {
+      ticket: {
+        id: string;
+        sequence: number;
+        title: string;
+        description: string;
+        type: string;
+        priority: string;
+        status: string;
+        labels: string[];
+        assigneeAgent?: string;
+        comments?: Array<{ content: string; authorName: string; createdAt: string }>;
+      };
+    };
+    const ticket = data.ticket;
+
+    let text = `GLINR-${ticket.sequence}: ${ticket.title}\n`;
+    text += `Status: ${ticket.status} | Type: ${ticket.type} | Priority: ${ticket.priority}\n`;
+    if (ticket.labels?.length) text += `Labels: ${ticket.labels.join(', ')}\n`;
+    if (ticket.assigneeAgent) text += `Assigned to: ${ticket.assigneeAgent}\n`;
+    if (ticket.description) text += `\nDescription:\n${ticket.description}\n`;
+
+    if (ticket.comments?.length) {
+      text += `\nComments (${ticket.comments.length}):\n`;
+      for (const comment of ticket.comments.slice(-3)) {
+        text += `- ${comment.authorName}: ${comment.content.slice(0, 100)}${comment.content.length > 100 ? '...' : ''}\n`;
+      }
+    }
+
+    return {
+      content: [{ type: 'text', text }],
+    };
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: `Error getting ticket: ${error instanceof Error ? error.message : 'Unknown error'}` }],
+      isError: true,
+    };
+  }
+}
+
+async function handleListTickets(args: ListTicketsArgs): Promise<CallToolResult> {
+  try {
+    const params = new URLSearchParams();
+    if (args.status) params.set('status', args.status);
+    if (args.type) params.set('type', args.type);
+    if (args.priority) params.set('priority', args.priority);
+    if (args.assignedToMe) params.set('assigneeAgent', sessionState.sessionId);
+    params.set('limit', String(args.limit || 20));
+
+    const response = await fetch(`${GLINR_API_URL}/api/tickets?${params}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      return {
+        content: [{ type: 'text', text: `Failed to list tickets: ${error}` }],
+        isError: true,
+      };
+    }
+
+    const data = (await response.json()) as {
+      tickets: Array<{
+        sequence: number;
+        title: string;
+        status: string;
+        priority: string;
+        type: string;
+      }>;
+      total: number;
+    };
+
+    if (data.tickets.length === 0) {
+      return {
+        content: [{ type: 'text', text: 'No tickets found matching the criteria.' }],
+      };
+    }
+
+    let text = `Found ${data.total} tickets:\n\n`;
+    for (const t of data.tickets) {
+      text += `GLINR-${t.sequence}: ${t.title}\n`;
+      text += `  Status: ${t.status} | Priority: ${t.priority} | Type: ${t.type}\n`;
+    }
+
+    return {
+      content: [{ type: 'text', text }],
+    };
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: `Error listing tickets: ${error instanceof Error ? error.message : 'Unknown error'}` }],
+      isError: true,
+    };
+  }
+}
+
+async function handleAddComment(args: AddCommentArgs): Promise<CallToolResult> {
+  try {
+    const response = await fetch(`${GLINR_API_URL}/api/tickets/${args.ticketId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: args.content,
+        authorType: 'ai',
+        authorId: sessionState.sessionId,
+        authorName: `AI Agent (${sessionState.sessionId.slice(0, 8)})`,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      return {
+        content: [{ type: 'text', text: `Failed to add comment: ${error}` }],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Comment added to ticket ${args.ticketId}`,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: `Error adding comment: ${error instanceof Error ? error.message : 'Unknown error'}` }],
+      isError: true,
+    };
+  }
+}
+
+async function handleAssignTicket(args: AssignTicketArgs): Promise<CallToolResult> {
+  try {
+    const agent = args.agent || sessionState.sessionId;
+
+    const response = await fetch(`${GLINR_API_URL}/api/tickets/${args.ticketId}/assign-agent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      return {
+        content: [{ type: 'text', text: `Failed to assign ticket: ${error}` }],
+        isError: true,
+      };
+    }
+
+    const data = (await response.json()) as { ticket: { sequence: number; assigneeAgent: string } };
+    const ticket = data.ticket;
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Ticket GLINR-${ticket.sequence} assigned to: ${ticket.assigneeAgent}`,
+        },
+      ],
+    };
+  } catch (error) {
+    return {
+      content: [{ type: 'text', text: `Error assigning ticket: ${error instanceof Error ? error.message : 'Unknown error'}` }],
+      isError: true,
+    };
+  }
 }
 
 // Cost calculation (simplified)

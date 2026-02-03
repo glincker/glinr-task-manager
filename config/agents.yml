@@ -6,8 +6,9 @@
 # Supported agent types:
 #   - openclaw: OpenClaw gateway (requires OPENCLAW_BASE_URL + OPENCLAW_GATEWAY_TOKEN)
 #   - claude-code: Claude Code CLI (requires claude CLI installed + CLAUDE_WORKING_DIR)
+#   - ollama: Local LLM via Ollama (requires Ollama running on OLLAMA_BASE_URL)
 #
-# To enable auto-discovery of installed CLIs, set:
+# To enable auto-discovery of installed CLIs/services, set:
 #   AUTO_DISCOVER_AGENTS=true or agents.autoDiscover: true in settings.yml
 
 agents:
@@ -37,3 +38,18 @@ agents:
       workingDir: ${CLAUDE_WORKING_DIR}
     labels: [code, research]
     taskTypes: [feature, bug_fix, code_review]
+
+  # Ollama - Local LLM agent (FREE, no API tokens needed!)
+  # Requires Ollama running: https://ollama.ai
+  # Install: curl -fsSL https://ollama.com/install.sh | sh
+  # Pull model: ollama pull llama3.2
+  - id: ollama-default
+    type: ollama
+    enabled: true
+    maxConcurrent: 2
+    priority: 3
+    config:
+      baseUrl: ${OLLAMA_BASE_URL:-http://localhost:11434}
+      model: ${OLLAMA_MODEL:-llama3.2}
+    labels: [code, research, docs]
+    taskTypes: [feature, bug_fix, documentation, code_review]

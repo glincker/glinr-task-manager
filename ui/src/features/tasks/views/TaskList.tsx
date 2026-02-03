@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { CreateTaskModal } from '../components/CreateTaskModal';
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'All Status', icon: ListTodo },
@@ -120,6 +121,7 @@ export function TaskList() {
             {total} total tasks • {filteredTasks.length} showing
           </p>
         </div>
+        <CreateTaskModal />
       </header>
 
       {/* Filters Bar */}

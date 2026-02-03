@@ -1,133 +1,266 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ListTodo,
   CheckCircle2,
-  AlertCircle,
   Clock,
   Bot,
-  FileText,
   Loader2,
   TrendingUp,
   WifiOff,
   RefreshCw,
+  Ticket,
+  FolderKanban,
+  Zap,
+  Sparkles,
+  Plus,
+  ArrowRight,
+  MessageSquare,
+  Settings,
+  GitBranch,
+  ChevronRight,
 } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { formatDistanceToNow } from 'date-fns';
 import { api } from '@/core/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { StatusIndicator } from '@/components/shared/StatusIndicator';
+import { VelocityChart } from '../components/VelocityChart';
 
-// Polling interval for real-time updates (5 seconds)
 const POLL_INTERVAL = 5000;
 
+// Status colors for charts
+const STATUS_COLORS = {
+  pending: '#facc15',
+  queued: '#fb923c',
+  assigned: '#60a5fa',
+  in_progress: '#3b82f6',
+  completed: '#22c55e',
+  failed: '#ef4444',
+  cancelled: '#6b7280',
+};
+
+// Priority colors for tickets (matches TicketPriority type)
+const PRIORITY_COLORS: Record<string, string> = {
+  urgent: 'text-red-500',
+  high: 'text-orange-400',
+  medium: 'text-yellow-400',
+  low: 'text-blue-400',
+  none: 'text-gray-400',
+};
+
+// ============================================================================
+// SMALL COMPONENTS
+// ============================================================================
+
 function StatCard({
-  title,
+  label,
   value,
   icon: Icon,
-  description,
   trend,
-  glowColor,
+  color,
+  href,
 }: {
-  title: string;
-  value: string | number;
+  label: string;
+  value: number | string;
   icon: React.ElementType;
-  description?: string;
-  trend?: 'up' | 'down' | 'neutral';
-  glowColor?: string;
+  trend?: string;
+  color: string;
+  href?: string;
+}) {
+  const content = (
+    <div className={cn(
+      "group relative overflow-hidden rounded-2xl p-4 transition-all",
+      "bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-sm",
+      "border border-white/10 hover:border-white/20",
+      "hover:shadow-lg hover:shadow-black/5",
+      href && "cursor-pointer"
+    )}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider">{label}</p>
+          <p className="text-3xl font-bold mt-1 tracking-tight">{value}</p>
+          {trend && (
+            <p className="text-xs text-muted-foreground mt-1">{trend}</p>
+          )}
+        </div>
+        <div className={cn(
+          "h-10 w-10 rounded-xl flex items-center justify-center",
+          "bg-gradient-to-br shadow-inner",
+          color
+        )}>
+          <Icon className="h-5 w-5 text-white" />
+        </div>
+      </div>
+      {href && (
+        <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors" />
+      )}
+    </div>
+  );
+
+  if (href) {
+    return <Link to={href}>{content}</Link>;
+  }
+  return content;
+}
+
+function MiniDonut({ completed, running, pending, failed }: { completed: number; running: number; pending: number; failed: number }) {
+  const data = [
+    { name: 'Completed', value: completed, color: STATUS_COLORS.completed },
+    { name: 'Running', value: running, color: STATUS_COLORS.in_progress },
+    { name: 'Pending', value: pending, color: STATUS_COLORS.pending },
+    { name: 'Failed', value: failed, color: STATUS_COLORS.failed },
+  ].filter((d) => d.value > 0);
+
+  const total = completed + running + pending + failed;
+
+  if (total === 0) {
+    return (
+      <div className="h-full w-full flex items-center justify-center">
+        <div className="text-center">
+          <div className="h-12 w-12 rounded-full bg-muted/20 flex items-center justify-center mx-auto mb-2">
+            <ListTodo className="h-5 w-5 text-muted-foreground/40" />
+          </div>
+          <p className="text-xs text-muted-foreground">No tasks</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative h-full w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            innerRadius={35}
+            outerRadius={50}
+            paddingAngle={2}
+            dataKey="value"
+            strokeWidth={0}
+          >
+            {data.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.color} />
+            ))}
+          </Pie>
+          <Tooltip
+            content={({ active, payload }) => {
+              if (active && payload && payload.length) {
+                const d = payload[0].payload;
+                return (
+                  <div className="px-2.5 py-1.5 rounded-lg bg-black/90 text-white text-xs border border-white/10">
+                    {d.name}: {d.value}
+                  </div>
+                );
+              }
+              return null;
+            }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="text-xl font-bold">{total}</span>
+      </div>
+    </div>
+  );
+}
+
+function QuickActionButton({ icon: Icon, label, onClick, variant = 'default' }: {
+  icon: React.ElementType;
+  label: string;
+  onClick: () => void;
+  variant?: 'default' | 'primary';
 }) {
   return (
-    <Card className="glass hover-lift transition-liquid overflow-hidden relative group">
-      {/* Background glow */}
-      {glowColor && (
-        <div
-          className={cn(
-            'absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity',
-            glowColor
-          )}
-        />
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
+        variant === 'primary'
+          ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20"
+          : "bg-white/5 hover:bg-white/10 border border-white/10"
       )}
-      <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {title}
-        </CardTitle>
-        <div className="h-8 w-8 rounded-lg glass-heavy flex items-center justify-center">
-          <Icon className="h-4 w-4 text-blue-400" />
-        </div>
-      </CardHeader>
-      <CardContent className="relative z-10">
-        <div className="flex items-end gap-2">
-          <span className="text-3xl font-bold">{value}</span>
-          {trend && (
-            <TrendingUp
-              className={cn(
-                'h-4 w-4 mb-1',
-                trend === 'up' && 'text-green-500',
-                trend === 'down' && 'text-red-500 rotate-180',
-                trend === 'neutral' && 'text-muted-foreground'
-              )}
-            />
-          )}
-        </div>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-1">{description}</p>
-        )}
-      </CardContent>
-    </Card>
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}
+
+function SectionHeader({ icon: Icon, title, href, linkText }: {
+  icon: React.ElementType;
+  title: string;
+  href?: string;
+  linkText?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold">{title}</h3>
+      </div>
+      {href && (
+        <Link to={href} className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1">
+          {linkText || 'View All'} <ArrowRight className="h-3 w-3" />
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function EmptyPlaceholder({ icon: Icon, title, action }: {
+  icon: React.ElementType;
+  title: string;
+  action?: { label: string; href: string };
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-6 text-center">
+      <div className="h-10 w-10 rounded-xl bg-muted/10 flex items-center justify-center mb-2">
+        <Icon className="h-5 w-5 text-muted-foreground/40" />
+      </div>
+      <p className="text-xs text-muted-foreground mb-2">{title}</p>
+      {action && (
+        <Link to={action.href} className="text-xs text-primary hover:underline font-medium">
+          {action.label}
+        </Link>
+      )}
+    </div>
   );
 }
 
 function BackendOffline({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground text-sm">
-            Real-time overview of your AI agent operations.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 px-4 py-2 rounded-full glass border-red-500/20">
-          <StatusIndicator status="error" label="OFFLINE" showLabel={true} />
-        </div>
-      </header>
-
-      <Card className="glass rounded-[28px] border-red-500/10">
-        <CardContent className="p-12">
-          <div className="flex flex-col items-center justify-center text-center">
-            <div className="h-20 w-20 rounded-full glass-heavy flex items-center justify-center mb-6 border border-red-500/20">
-              <WifiOff className="h-10 w-10 text-red-400" />
-            </div>
-            <h3 className="text-xl font-bold mb-2">Backend Not Running</h3>
-            <p className="text-muted-foreground max-w-md mb-6">
-              Unable to connect to the API server. Make sure the backend is running on port 3000.
-            </p>
-            <div className="space-y-3">
-              <code className="block px-4 py-2 rounded-lg bg-black/20 font-mono text-sm text-muted-foreground">
-                pnpm dev
-              </code>
-              <p className="text-xs text-muted-foreground">
-                This will start both the API server and UI together
-              </p>
-            </div>
-            <Button
-              onClick={onRetry}
-              variant="outline"
-              className="mt-6 rounded-xl"
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Retry Connection
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+      <div className="h-20 w-20 rounded-2xl bg-red-500/10 flex items-center justify-center mb-6 border border-red-500/20">
+        <WifiOff className="h-10 w-10 text-red-400" />
+      </div>
+      <h2 className="text-xl font-bold mb-2">Backend Offline</h2>
+      <p className="text-muted-foreground text-sm max-w-md mb-6">
+        Unable to connect to the API. Make sure the server is running.
+      </p>
+      <code className="px-4 py-2 rounded-lg bg-black/20 font-mono text-sm text-muted-foreground mb-4">
+        pnpm dev
+      </code>
+      <Button onClick={onRetry} variant="outline" className="rounded-xl gap-2">
+        <RefreshCw className="h-4 w-4" />
+        Retry
+      </Button>
     </div>
   );
 }
 
+// ============================================================================
+// MAIN DASHBOARD
+// ============================================================================
+
 export function Dashboard() {
-  // Tasks with real-time polling (only when no error)
+  const navigate = useNavigate();
+
+  // Core data queries
   const {
     data: tasksData,
     isLoading: tasksLoading,
@@ -136,11 +269,9 @@ export function Dashboard() {
   } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => api.tasks.list({ limit: 100 }),
-    refetchInterval: (query) => query.state.error ? false : POLL_INTERVAL,
-    refetchIntervalInBackground: false,
+    refetchInterval: (q) => (q.state.error ? false : POLL_INTERVAL),
   });
 
-  // Summary stats with polling
   const {
     data: statsData,
     isLoading: statsLoading,
@@ -149,236 +280,454 @@ export function Dashboard() {
   } = useQuery({
     queryKey: ['summaries', 'stats'],
     queryFn: () => api.summaries.stats(),
-    refetchInterval: (query) => query.state.error ? false : POLL_INTERVAL * 2,
+    refetchInterval: (q) => (q.state.error ? false : POLL_INTERVAL * 2),
   });
 
-  // Recent summaries with polling
   const {
-    data: recentSummaries,
-    isLoading: summariesLoading,
-    error: summariesError,
-    refetch: refetchSummaries,
+    data: dashboardStats,
+    isLoading: dashboardLoading,
+    error: dashboardError,
+    refetch: refetchDashboard,
   } = useQuery({
-    queryKey: ['summaries', 'recent'],
-    queryFn: () => api.summaries.recent(5),
-    refetchInterval: (query) => query.state.error ? false : POLL_INTERVAL,
+    queryKey: ['stats', 'dashboard'],
+    queryFn: () => api.stats.dashboard(),
+    refetchInterval: (q) => (q.state.error ? false : POLL_INTERVAL * 2),
   });
 
-  const hasError = tasksError || statsError || summariesError;
-  const isLoading = tasksLoading || statsLoading || summariesLoading;
+  // Personalized data
+  const { data: conversationsData, refetch: refetchConversations } = useQuery({
+    queryKey: ['chat', 'conversations', 'recent'],
+    queryFn: () => api.chat.conversations.recent(4),
+    refetchInterval: (q) => (q.state.error ? false : POLL_INTERVAL * 3),
+  });
+
+  const { data: projectsData, refetch: refetchProjects } = useQuery({
+    queryKey: ['projects', 'list'],
+    queryFn: () => api.projects.list({ limit: 4, sortBy: 'updatedAt', sortOrder: 'desc' }),
+    refetchInterval: (q) => (q.state.error ? false : POLL_INTERVAL * 3),
+  });
+
+  const { data: ticketsData, refetch: refetchTickets } = useQuery({
+    queryKey: ['tickets', 'recent'],
+    queryFn: () => api.tickets.list({ limit: 5, sortBy: 'updatedAt', sortOrder: 'desc' }),
+    refetchInterval: (q) => (q.state.error ? false : POLL_INTERVAL * 2),
+  });
+
+  const { data: agentsData, refetch: refetchAgents } = useQuery({
+    queryKey: ['gateway', 'agents'],
+    queryFn: () => api.gateway.agents(),
+    refetchInterval: (q) => (q.state.error ? false : POLL_INTERVAL * 4),
+  });
+
+  const hasError = tasksError || statsError || dashboardError;
+  const isLoading = tasksLoading || statsLoading || dashboardLoading;
 
   const handleRetry = () => {
     refetchTasks();
     refetchStats();
-    refetchSummaries();
+    refetchDashboard();
+    refetchConversations();
+    refetchProjects();
+    refetchTickets();
+    refetchAgents();
   };
 
-  // Show offline state if any API call fails
   if (hasError && !isLoading) {
     return <BackendOffline onRetry={handleRetry} />;
   }
 
+  // Extract data
   const tasks = tasksData?.tasks ?? [];
   const pendingCount = tasks.filter((t) => t.status === 'pending').length;
   const runningCount = tasks.filter((t) => t.status === 'in_progress').length;
   const completedCount = tasks.filter((t) => t.status === 'completed').length;
   const failedCount = tasks.filter((t) => t.status === 'failed').length;
 
+  const totalTickets = dashboardStats?.tickets.total ?? 0;
+  const openTickets = dashboardStats?.tickets.open ?? 0;
+  const totalProjects = dashboardStats?.projects.total ?? 0;
+  const activeSprints = dashboardStats?.sprints.active ?? 0;
+
+  const conversations = conversationsData?.conversations ?? [];
+  const projects = projectsData?.projects ?? [];
+  const tickets = ticketsData?.tickets ?? [];
+  const agents = agentsData?.agents ?? [];
+  const healthyAgents = agents.filter((a) => a.health?.healthy).length;
+
+  const handleCreateTask = () => navigate('/tasks?create=true');
+  const handleCreateTicket = () => navigate('/tickets?create=true');
+
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <header className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
-            <p className="text-muted-foreground text-sm">
-              Real-time overview of your AI agent operations.
-            </p>
-          </div>
-        </header>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-32 rounded-[20px] glass animate-pulse" />
-          ))}
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <header className="flex items-center justify-between">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Header with Quick Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground text-sm">
-            Real-time overview of your AI agent operations.
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Overview of your AI operations</p>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 rounded-full glass border-white/10">
-          <StatusIndicator status="online" label="LIVE" showLabel={true} />
+        <div className="flex items-center gap-2">
+          <QuickActionButton icon={Plus} label="New Task" onClick={handleCreateTask} variant="primary" />
+          <QuickActionButton icon={Ticket} label="New Ticket" onClick={handleCreateTicket} />
+          <QuickActionButton icon={MessageSquare} label="Chat" onClick={() => navigate('/chat')} />
         </div>
-      </header>
+      </div>
 
       {/* Main Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Total Tasks"
+          label="Tasks"
           value={tasks.length}
           icon={ListTodo}
-          description="All tasks in queue"
-          glowColor="bg-blue-500"
+          trend={runningCount > 0 ? `${runningCount} running` : undefined}
+          color="from-blue-500 to-blue-600"
+          href="/tasks"
         />
         <StatCard
-          title="Pending"
-          value={pendingCount}
-          icon={Clock}
-          description="Waiting to start"
-          glowColor="bg-yellow-500"
+          label="Tickets"
+          value={totalTickets}
+          icon={Ticket}
+          trend={openTickets > 0 ? `${openTickets} open` : undefined}
+          color="from-purple-500 to-purple-600"
+          href="/tickets"
         />
         <StatCard
-          title="Running"
-          value={runningCount}
-          icon={Loader2}
-          description="Currently executing"
-          glowColor="bg-blue-500"
+          label="Projects"
+          value={totalProjects}
+          icon={FolderKanban}
+          trend={activeSprints > 0 ? `${activeSprints} active sprints` : undefined}
+          color="from-pink-500 to-pink-600"
+          href="/projects"
         />
         <StatCard
-          title="Completed"
+          label="Completed"
           value={completedCount}
           icon={CheckCircle2}
-          description="Successfully finished"
-          trend={completedCount > 0 ? 'up' : 'neutral'}
-          glowColor="bg-green-500"
-        />
-        <StatCard
-          title="Failed"
-          value={failedCount}
-          icon={AlertCircle}
-          description="Need attention"
-          trend={failedCount > 0 ? 'down' : 'neutral'}
-          glowColor="bg-red-500"
+          color="from-green-500 to-green-600"
         />
       </div>
 
-      {/* Secondary Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <StatCard
-          title="Total Summaries"
-          value={statsData?.totalCount ?? 0}
-          icon={FileText}
-          glowColor="bg-purple-500"
-        />
-        <StatCard
-          title="Active Agents"
-          value={Object.keys(statsData?.byAgent ?? {}).length}
-          icon={Bot}
-          glowColor="bg-cyan-500"
-        />
-        <StatCard
-          title="Files Changed"
-          value={statsData?.filesChangedCount ?? 0}
-          icon={FileText}
-          glowColor="bg-orange-500"
-        />
-      </div>
-
-      {/* Recent Activity Panels */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Recent Tasks */}
-        <Card className="glass rounded-[28px]">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg font-bold">Recent Tasks</CardTitle>
-            <Link
-              to="/tasks"
-              className="text-xs text-primary hover:underline font-bold tracking-tight"
-            >
-              VIEW ALL →
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {tasks.slice(0, 5).map((task) => (
-                <Link
-                  key={task.id}
-                  to={`/tasks/${task.id}`}
-                  className="flex items-center justify-between rounded-2xl glass-heavy p-4 hover-lift transition-liquid group"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate font-bold group-hover:text-primary transition-colors">
-                      {task.title}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">{task.source}</p>
+      {/* Two Column Layout */}
+      <div className="grid gap-6 lg:grid-cols-5">
+        {/* Left Column - 3/5 width */}
+        <div className="lg:col-span-3 space-y-6">
+          {/* Activity Overview Card */}
+          <Card className="glass overflow-hidden">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                Activity Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4">
+                {/* Mini Chart */}
+                <div className="h-32">
+                  <MiniDonut
+                    completed={completedCount}
+                    running={runningCount}
+                    pending={pendingCount}
+                    failed={failedCount}
+                  />
+                  <div className="flex justify-center gap-3 mt-2">
+                    {[
+                      { color: STATUS_COLORS.completed, label: 'Done' },
+                      { color: STATUS_COLORS.in_progress, label: 'Active' },
+                      { color: STATUS_COLORS.pending, label: 'Pending' },
+                    ].map((item) => (
+                      <div key={item.label} className="flex items-center gap-1">
+                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+                        <span className="text-[10px] text-muted-foreground">{item.label}</span>
+                      </div>
+                    ))}
                   </div>
-                  <Badge
-                    variant={
-                      task.status === 'completed'
-                        ? 'success'
-                        : task.status === 'failed'
-                          ? 'destructive'
-                          : task.status === 'in_progress'
-                            ? 'info'
-                            : 'secondary'
-                    }
-                    className={cn(
-                      "rounded-full px-3 py-1 text-[10px] font-bold uppercase",
-                      task.status === 'in_progress' && 'animate-pulse'
-                    )}
-                  >
-                    {task.status}
-                  </Badge>
-                </Link>
-              ))}
-              {tasks.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-center opacity-40">
-                  <ListTodo className="h-16 w-16 text-muted-foreground mb-4" />
-                  <p className="font-bold">No tasks found</p>
-                  <p className="text-xs">Connect a webhook or CLI to get started</p>
                 </div>
-              )}
+
+                {/* Quick Stats */}
+                <div className="col-span-2 grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-muted/10">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Zap className="h-3.5 w-3.5 text-amber-400" />
+                      <span className="text-xs text-muted-foreground">Sprints</span>
+                    </div>
+                    <p className="text-lg font-bold">{activeSprints}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-muted/10">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+                      <span className="text-xs text-muted-foreground">AI Created</span>
+                    </div>
+                    <p className="text-lg font-bold">{dashboardStats?.tickets.aiCreated ?? 0}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-muted/10">
+                    <div className="flex items-center gap-2 mb-1">
+                      <GitBranch className="h-3.5 w-3.5 text-cyan-400" />
+                      <span className="text-xs text-muted-foreground">Files Changed</span>
+                    </div>
+                    <p className="text-lg font-bold">{statsData?.filesChangedCount ?? 0}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-muted/10">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Bot className="h-3.5 w-3.5 text-green-400" />
+                      <span className="text-xs text-muted-foreground">Agents</span>
+                    </div>
+                    <p className="text-lg font-bold">{healthyAgents}/{agents.length}</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Velocity Chart */}
+          {(dashboardStats?.velocity.tasks?.length ?? 0) > 0 && (
+            <Card className="glass">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    Velocity (30 days)
+                  </CardTitle>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>Avg: <strong className="text-foreground">{dashboardStats?.velocity.weeklyAvg.created ?? 0}</strong>/wk</span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="h-48">
+                <VelocityChart data={dashboardStats?.velocity.tasks ?? []} showLegend={true} />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Recent Tasks */}
+          <div>
+            <SectionHeader icon={Clock} title="Recent Tasks" href="/tasks" />
+            <Card className="glass">
+              <CardContent className="p-3">
+                {tasks.length > 0 ? (
+                  <div className="space-y-1">
+                    {tasks.slice(0, 5).map((task) => (
+                      <Link
+                        key={task.id}
+                        to={`/tasks/${task.id}`}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-muted/20 transition-colors group"
+                      >
+                        <div className="flex-1 min-w-0 mr-3">
+                          <p className="truncate text-sm font-medium group-hover:text-primary transition-colors">
+                            {task.title}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground uppercase">{task.source}</p>
+                        </div>
+                        <Badge
+                          variant={
+                            task.status === 'completed' ? 'success' :
+                            task.status === 'failed' ? 'destructive' :
+                            task.status === 'in_progress' ? 'info' : 'secondary'
+                          }
+                          className={cn("text-[10px]", task.status === 'in_progress' && 'animate-pulse')}
+                        >
+                          {task.status.replace('_', ' ')}
+                        </Badge>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyPlaceholder
+                    icon={ListTodo}
+                    title="No tasks yet"
+                    action={{ label: 'Create Task', href: '/tasks?create=true' }}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Right Column - 2/5 width */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Projects */}
+          <div>
+            <SectionHeader icon={FolderKanban} title="Projects" href="/projects" />
+            <Card className="glass">
+              <CardContent className="p-3">
+                {projects.length > 0 ? (
+                  <div className="space-y-1">
+                    {projects.slice(0, 4).map((project) => (
+                      <Link
+                        key={project.id}
+                        to={`/projects/${project.id}`}
+                        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/20 transition-colors group"
+                      >
+                        <div
+                          className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden"
+                          style={{ backgroundColor: `${project.color}15` }}
+                        >
+                          <span className="text-sm leading-none">{project.icon?.slice(0, 2) || '📋'}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate text-sm font-medium group-hover:text-primary transition-colors">
+                            {project.name}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">{project.key}</p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyPlaceholder
+                    icon={FolderKanban}
+                    title="No projects"
+                    action={{ label: 'Create Project', href: '/projects' }}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recent Chats */}
+          <div>
+            <SectionHeader icon={MessageSquare} title="Recent Chats" href="/chat" linkText="New Chat" />
+            <Card className="glass">
+              <CardContent className="p-3">
+                {conversations.length > 0 ? (
+                  <div className="space-y-1">
+                    {conversations.slice(0, 4).map((conv) => (
+                      <Link
+                        key={conv.id}
+                        to={`/chat?conversation=${conv.id}`}
+                        className="block p-2.5 rounded-xl hover:bg-muted/20 transition-colors group"
+                      >
+                        <p className="truncate text-sm font-medium group-hover:text-primary transition-colors">
+                          {conv.title || 'Untitled'}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {formatDistanceToNow(new Date(conv.updatedAt), { addSuffix: true })}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyPlaceholder
+                    icon={MessageSquare}
+                    title="No conversations"
+                    action={{ label: 'Start Chat', href: '/chat' }}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recent Tickets */}
+          <div>
+            <SectionHeader icon={Ticket} title="Recent Tickets" href="/tickets" />
+            <Card className="glass">
+              <CardContent className="p-3">
+                {tickets.length > 0 ? (
+                  <div className="space-y-1">
+                    {tickets.slice(0, 4).map((ticket) => (
+                      <Link
+                        key={ticket.id}
+                        to={`/tickets/${ticket.id}`}
+                        className="flex items-center gap-2 p-2.5 rounded-xl hover:bg-muted/20 transition-colors group"
+                      >
+                        <span className={cn("text-[10px] font-mono shrink-0", PRIORITY_COLORS[ticket.priority])}>
+                          #{ticket.sequence}
+                        </span>
+                        <p className="truncate text-sm font-medium group-hover:text-primary transition-colors flex-1">
+                          {ticket.title}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyPlaceholder
+                    icon={Ticket}
+                    title="No tickets"
+                    action={{ label: 'Create Ticket', href: '/tickets?create=true' }}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* AI Agents */}
+          {agents.length > 0 && (
+            <div>
+              <SectionHeader icon={Bot} title="AI Agents" href="/gateway" linkText="Configure" />
+              <Card className="glass">
+                <CardContent className="p-3">
+                  <div className="space-y-1">
+                    {agents.slice(0, 3).map((agent) => (
+                      <div
+                        key={agent.type}
+                        className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/5"
+                      >
+                        <div className={cn(
+                          "h-2 w-2 rounded-full shrink-0",
+                          agent.health?.healthy ? "bg-green-500" : "bg-gray-500"
+                        )} />
+                        <span className="text-sm font-medium capitalize flex-1">
+                          {agent.name || agent.type.replace(/-/g, ' ')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {agent.health?.healthy ? 'Active' : 'Offline'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Getting Started (only for new users) */}
+      {tasks.length === 0 && totalTickets === 0 && totalProjects === 0 && (
+        <Card className="glass border-dashed">
+          <CardContent className="p-6">
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-semibold mb-1">Get Started with GLINR</h3>
+              <p className="text-sm text-muted-foreground">Set up your AI-powered workflow</p>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-3">
+              <Link
+                to="/projects"
+                className="p-4 rounded-xl bg-muted/10 hover:bg-muted/20 transition-colors text-center group"
+              >
+                <FolderKanban className="h-8 w-8 text-pink-400 mx-auto mb-2" />
+                <p className="font-medium text-sm group-hover:text-primary">Create Project</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Organize your work</p>
+              </Link>
+              <Link
+                to="/chat"
+                className="p-4 rounded-xl bg-muted/10 hover:bg-muted/20 transition-colors text-center group"
+              >
+                <MessageSquare className="h-8 w-8 text-blue-400 mx-auto mb-2" />
+                <p className="font-medium text-sm group-hover:text-primary">Chat with AI</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Multiple providers</p>
+              </Link>
+              <Link
+                to="/settings"
+                className="p-4 rounded-xl bg-muted/10 hover:bg-muted/20 transition-colors text-center group"
+              >
+                <Settings className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                <p className="font-medium text-sm group-hover:text-primary">Configure</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Connect integrations</p>
+              </Link>
             </div>
           </CardContent>
         </Card>
-
-        {/* Recent Summaries */}
-        <Card className="glass rounded-[28px]">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg font-bold">Recent Summaries</CardTitle>
-            <Link
-              to="/summaries"
-              className="text-xs text-primary hover:underline font-bold tracking-tight"
-            >
-              VIEW ALL →
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {(recentSummaries ?? []).map((summary) => (
-                <div
-                  key={summary.id}
-                  className="rounded-2xl glass-heavy p-4 hover-lift transition-liquid"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="truncate font-bold">{summary.title}</p>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/5 border border-white/5 uppercase tracking-tighter">
-                      {summary.agent}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                    {summary.whatChanged}
-                  </p>
-                </div>
-              ))}
-              {(recentSummaries ?? []).length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-center opacity-40">
-                  <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-                  <p className="font-bold">No summaries yet</p>
-                  <p className="text-xs">Agent reports will appear here</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      )}
     </div>
   );
 }

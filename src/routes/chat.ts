@@ -1,0 +1,1437 @@
+/**
+ * Chat API Routes
+ *
+ * REST API for AI chat functionality with GLINR intelligence.
+ * Supports multiple providers, conversation history, and context-aware prompts.
+ */
+
+import { Hono } from 'hono';
+import { streamText } from 'hono/streaming';
+import { zValidator } from '@hono/zod-validator';
+import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
+import { aiProvider, MODEL_ALIASES, type ChatMessage, type NativeToolCall, type NativeToolResult, type ProviderConfig } from '../providers/index.js';
+import { saveProviderConfig, loadAllProviderConfigs } from '../storage/index.js';
+import { logger } from '../utils/logger.js';
+import {
+  CHAT_PRESETS,
+  QUICK_ACTIONS,
+  buildSystemPrompt,
+  createConversation,
+  getConversation,
+  listConversations,
+  deleteConversation,
+  addMessage,
+  getConversationMessages,
+  getRecentConversationsWithPreview,
+  compactMessages,
+  getMemoryStats,
+  needsCompaction,
+  // Skills
+  CHAT_SKILLS,
+  MODEL_TIERS,
+  detectIntent,
+  selectModel,
+  buildSkillPrompt,
+  // Tool handler
+  createChatToolHandler,
+  getDefaultChatTools,
+  getAllChatTools,
+  getSessionModel,
+  type ChatContext,
+  type RuntimeInfo,
+  type ConversationMessage,
+} from '../chat/index.js';
+import { getClient } from '../storage/index.js';
+
+const chatRoutes = new Hono();
+
+// === Schemas ===
+
+const ChatMessageSchema = z.object({
+  role: z.enum(['user', 'assistant', 'system']),
+  content: z.string(),
+});
+
+const ChatCompletionSchema = z.object({
+  messages: z.array(ChatMessageSchema),
+  model: z.string().optional(),
+  systemPrompt: z.string().optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().positive().optional(),
+  stream: z.boolean().optional(),
+  // Context linking
+  conversationId: z.string().optional(),
+  ticketId: z.string().optional(),
+  taskId: z.string().optional(),
+});
+
+const ProviderConfigSchema = z.object({
+  type: z.enum([
+    'anthropic', 'openai', 'azure', 'google', 'ollama', 'openrouter', 'groq',
+    'xai', 'mistral', 'cohere', 'perplexity', 'deepseek', 'together', 'cerebras', 'fireworks'
+  ]),
+  apiKey: z.string().optional(),
+  baseUrl: z.string().optional(),
+  // Azure-specific fields
+  resourceName: z.string().optional(),
+  deploymentName: z.string().optional(),
+  apiVersion: z.string().optional(),
+  defaultModel: z.string().optional(),
+  enabled: z.boolean().optional(),
+});
+
+// === Routes ===
+
+/**
+ * POST /api/chat/completions
+ * Generate a chat completion
+ */
+chatRoutes.post(
+  '/completions',
+  zValidator('json', ChatCompletionSchema),
+  async (c) => {
+    const body = c.req.valid('json');
+
+    // Convert to ChatMessage format
+    const messages: ChatMessage[] = body.messages.map((msg) => ({
+      id: randomUUID(),
+      role: msg.role,
+      content: msg.content,
+      timestamp: new Date().toISOString(),
+    }));
+
+    // Handle streaming
+    if (body.stream) {
+      return streamText(c, async (stream) => {
+        try {
+          const response = await aiProvider.chatStream(
+            {
+              messages,
+              model: body.model,
+              systemPrompt: body.systemPrompt,
+              temperature: body.temperature,
+              maxTokens: body.maxTokens,
+            },
+            (chunk) => {
+              // Non-blocking write - fire and forget for speed
+              stream.write(`data: ${JSON.stringify({ content: chunk })}\n\n`).catch((err) => {
+                logger.error('[Chat] Stream write error:', err instanceof Error ? err : undefined);
+              });
+            }
+          );
+
+          // Send final message with usage (this one we await to ensure delivery)
+          await stream.write(
+            `data: ${JSON.stringify({
+              done: true,
+              usage: response.usage,
+              finishReason: response.finishReason,
+            })}\n\n`
+          );
+        } catch (error) {
+          logger.error('[Chat] Stream error:', error instanceof Error ? error : undefined);
+          await stream.write(
+            `data: ${JSON.stringify({
+              error: error instanceof Error ? error.message : 'Chat failed',
+            })}\n\n`
+          );
+        }
+      });
+    }
+
+    // Non-streaming
+    try {
+      const response = await aiProvider.chat({
+        messages,
+        model: body.model,
+        systemPrompt: body.systemPrompt,
+        temperature: body.temperature,
+        maxTokens: body.maxTokens,
+      });
+
+      return c.json({
+        id: response.id,
+        provider: response.provider,
+        model: response.model,
+        message: {
+          role: 'assistant',
+          content: response.content,
+        },
+        finishReason: response.finishReason,
+        usage: response.usage,
+        duration: response.duration,
+      });
+    } catch (error) {
+      logger.error('[Chat] Completion error:', error instanceof Error ? error : undefined);
+      return c.json(
+        {
+          error: error instanceof Error ? error.message : 'Chat completion failed',
+        },
+        500
+      );
+    }
+  }
+);
+
+/**
+ * GET /api/chat/models
+ * List available models
+ */
+chatRoutes.get('/models', async (c) => {
+  const provider = c.req.query('provider') as string | undefined;
+
+  let models;
+  if (provider) {
+    models = aiProvider.getModelsForProvider(provider as any);
+  } else {
+    models = aiProvider.getAllModels();
+  }
+
+  // Convert MODEL_ALIASES to API format dynamically
+  const aliases = Object.entries(MODEL_ALIASES).map(([alias, config]) => ({
+    alias,
+    provider: config.provider,
+    model: config.model,
+  }));
+
+  return c.json({
+    models,
+    aliases,
+  });
+});
+
+/**
+ * GET /api/chat/providers
+ * List configured providers and their status
+ */
+chatRoutes.get('/providers', async (c) => {
+  const configured = aiProvider.getConfiguredProviders();
+  const health = await aiProvider.healthCheck();
+
+  return c.json({
+    default: aiProvider.getDefaultProvider(),
+    providers: configured.map((p) => {
+      const h = health.find((h) => h.provider === p);
+      return {
+        type: p,
+        enabled: true,
+        healthy: h?.healthy ?? false,
+        message: h?.message,
+        latencyMs: h?.latencyMs,
+      };
+    }),
+  });
+});
+
+/**
+ * POST /api/chat/providers/:type/configure
+ * Configure a provider (persists to database)
+ */
+chatRoutes.post(
+  '/providers/:type/configure',
+  zValidator('json', ProviderConfigSchema),
+  async (c) => {
+    const type = c.req.param('type') as any;
+    const config = c.req.valid('json');
+
+    try {
+      // Build provider config (include Azure-specific fields)
+      const providerConfig: ProviderConfig = {
+        type,
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        resourceName: config.resourceName,
+        deploymentName: config.deploymentName,
+        apiVersion: config.apiVersion,
+        defaultModel: config.defaultModel,
+        enabled: config.enabled ?? true,
+      };
+
+      // Configure in memory
+      aiProvider.configure(type, providerConfig);
+
+      // Persist to database (only if we have an API key or baseUrl)
+      if (config.apiKey || config.baseUrl) {
+        await saveProviderConfig({
+          type,
+          apiKey: config.apiKey,
+          baseUrl: config.baseUrl,
+          resourceName: config.resourceName,
+          deploymentName: config.deploymentName,
+          apiVersion: config.apiVersion,
+          defaultModel: config.defaultModel,
+          enabled: config.enabled ?? true,
+        });
+        logger.info(`[Chat] Provider ${type} config saved to database`);
+      }
+
+      return c.json({ success: true, message: `${type} configured` });
+    } catch (error) {
+      logger.error(`[Chat] Failed to configure provider ${type}:`, error instanceof Error ? error : undefined);
+      return c.json(
+        {
+          error: error instanceof Error ? error.message : 'Configuration failed',
+        },
+        400
+      );
+    }
+  }
+);
+
+/**
+ * POST /api/chat/providers/:type/health
+ * Check provider health
+ */
+chatRoutes.post('/providers/:type/health', async (c) => {
+  const type = c.req.param('type') as any;
+
+  const results = await aiProvider.healthCheck(type);
+  const result = results[0];
+
+  if (!result) {
+    return c.json({ error: 'Provider not found' }, 404);
+  }
+
+  return c.json(result);
+});
+
+/**
+ * POST /api/chat/providers/default
+ * Set default provider
+ */
+chatRoutes.post(
+  '/providers/default',
+  zValidator('json', z.object({ provider: ProviderConfigSchema.shape.type })),
+  async (c) => {
+    const { provider } = c.req.valid('json');
+
+    try {
+      aiProvider.setDefaultProvider(provider);
+      return c.json({ success: true, default: provider });
+    } catch (error) {
+      return c.json(
+        {
+          error: error instanceof Error ? error.message : 'Failed to set default',
+        },
+        400
+      );
+    }
+  }
+);
+
+/**
+ * GET /api/chat/providers/:type/models
+ * Fetch available models from a provider (dynamic discovery)
+ */
+chatRoutes.get('/providers/:type/models', async (c) => {
+  const type = c.req.param('type');
+
+  try {
+    // For Ollama, fetch from the local API
+    if (type === 'ollama') {
+      const baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+      const response = await fetch(`${baseUrl}/api/tags`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch Ollama models');
+      }
+      const data = await response.json() as { models?: Array<{ name: string; size: number; modified_at: string }> };
+      return c.json({
+        provider: type,
+        models: (data.models || []).map((m) => ({
+          id: m.name,
+          name: m.name,
+          size: m.size,
+          modifiedAt: m.modified_at,
+        })),
+      });
+    }
+
+    // For OpenRouter, fetch from their API
+    if (type === 'openrouter') {
+      const apiKey = process.env.OPENROUTER_API_KEY;
+      if (!apiKey) {
+        return c.json({ error: 'OpenRouter not configured' }, 400);
+      }
+      const response = await fetch('https://openrouter.ai/api/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch OpenRouter models');
+      }
+      const data = await response.json() as { data?: Array<{ id: string; name: string; pricing?: { prompt: string; completion: string } }> };
+      return c.json({
+        provider: type,
+        models: (data.data || []).map((m) => ({
+          id: m.id,
+          name: m.name || m.id,
+          pricing: m.pricing,
+        })),
+      });
+    }
+
+    // For other providers, return static catalog
+    const models = aiProvider.getModelsForProvider(type as any);
+    return c.json({ provider: type, models });
+  } catch (error) {
+    logger.error(`[Chat] Failed to fetch models for ${type}:`, error instanceof Error ? error : undefined);
+    return c.json(
+      { error: error instanceof Error ? error.message : 'Failed to fetch models' },
+      500
+    );
+  }
+});
+
+/**
+ * POST /api/chat/quick
+ * Quick chat endpoint for simple requests
+ */
+chatRoutes.post(
+  '/quick',
+  zValidator(
+    'json',
+    z.object({
+      prompt: z.string(),
+      model: z.string().optional(),
+      systemPrompt: z.string().optional(),
+      temperature: z.number().optional(),
+    })
+  ),
+  async (c) => {
+    const { prompt, model, systemPrompt, temperature } = c.req.valid('json');
+
+    try {
+      const response = await aiProvider.chat({
+        messages: [
+          {
+            id: randomUUID(),
+            role: 'user',
+            content: prompt,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+        model,
+        systemPrompt,
+        temperature,
+      });
+
+      return c.json({
+        content: response.content,
+        model: response.model,
+        provider: response.provider,
+        usage: response.usage,
+      });
+    } catch (error) {
+      logger.error('[Chat] Quick chat error:', error instanceof Error ? error : undefined);
+      return c.json(
+        {
+          error: error instanceof Error ? error.message : 'Quick chat failed',
+        },
+        500
+      );
+    }
+  }
+);
+
+// === Preset & Context Routes ===
+
+/**
+ * GET /api/chat/presets
+ * List available chat presets
+ */
+chatRoutes.get('/presets', async (c) => {
+  return c.json({
+    presets: CHAT_PRESETS.map((p) => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      icon: p.icon,
+      examples: p.examples,
+    })),
+    default: 'glinr-assistant',
+  });
+});
+
+/**
+ * GET /api/chat/quick-actions
+ * List quick action suggestions
+ */
+chatRoutes.get('/quick-actions', async (c) => {
+  return c.json({ actions: QUICK_ACTIONS });
+});
+
+// === Skills Routes ===
+
+/**
+ * GET /api/chat/skills
+ * List available chat skills
+ */
+chatRoutes.get('/skills', async (c) => {
+  return c.json({
+    skills: CHAT_SKILLS.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      icon: s.icon,
+      capabilities: s.capabilities,
+      preferredModel: s.preferredModel,
+      examples: s.examples,
+    })),
+    modelTiers: MODEL_TIERS.map((t) => ({
+      tier: t.tier,
+      description: t.description,
+      costMultiplier: t.costMultiplier,
+    })),
+  });
+});
+
+/**
+ * POST /api/chat/skills/detect
+ * Detect intent and match skills for a message
+ */
+chatRoutes.post(
+  '/skills/detect',
+  zValidator(
+    'json',
+    z.object({
+      message: z.string(),
+      hasTask: z.boolean().optional(),
+      hasTicket: z.boolean().optional(),
+      hasCode: z.boolean().optional(),
+    })
+  ),
+  async (c) => {
+    const { message, hasTask, hasTicket, hasCode } = c.req.valid('json');
+
+    const matches = detectIntent(message, { hasTask, hasTicket, hasCode });
+
+    return c.json({
+      matches: matches.slice(0, 3).map((m) => ({
+        skillId: m.skill.id,
+        skillName: m.skill.name,
+        confidence: m.confidence,
+        matchedPattern: m.matchedPattern,
+        extractedVars: m.extractedVars,
+        preferredModel: m.skill.preferredModel,
+      })),
+      recommendedSkill: matches[0]
+        ? {
+            id: matches[0].skill.id,
+            name: matches[0].skill.name,
+            confidence: matches[0].confidence,
+          }
+        : null,
+    });
+  }
+);
+
+/**
+ * POST /api/chat/skills/route
+ * Get recommended model and skill for a message
+ */
+chatRoutes.post(
+  '/skills/route',
+  zValidator(
+    'json',
+    z.object({
+      message: z.string(),
+      availableModels: z.array(z.string()).optional(),
+      hasTask: z.boolean().optional(),
+      hasTicket: z.boolean().optional(),
+      hasCode: z.boolean().optional(),
+    })
+  ),
+  async (c) => {
+    const { message, availableModels, hasTask, hasTicket, hasCode } = c.req.valid('json');
+
+    // Get available models from providers if not specified
+    let models = availableModels;
+    if (!models || models.length === 0) {
+      const allModels = aiProvider.getAllModels();
+      models = allModels.map((m) => m.id);
+    }
+
+    // Detect intent
+    const matches = detectIntent(message, { hasTask, hasTicket, hasCode });
+    const bestMatch = matches[0];
+
+    if (!bestMatch) {
+      return c.json({
+        error: 'Could not detect intent',
+        fallback: { model: models[0], tier: 'balanced' },
+      });
+    }
+
+    // Select model based on skill and message
+    const selection = selectModel(bestMatch, message, models);
+
+    return c.json({
+      skill: {
+        id: bestMatch.skill.id,
+        name: bestMatch.skill.name,
+        confidence: bestMatch.confidence,
+      },
+      model: {
+        selected: selection.model,
+        tier: selection.tier.tier,
+        reason: selection.reason,
+        costMultiplier: selection.tier.costMultiplier,
+      },
+      routing: {
+        method: bestMatch.matchedPattern ? 'pattern_match' : 'fallback',
+        pattern: bestMatch.matchedPattern,
+      },
+    });
+  }
+);
+
+// === Conversation Routes ===
+
+/**
+ * GET /api/chat/conversations
+ * List conversations with optional filtering
+ */
+chatRoutes.get('/conversations', async (c) => {
+  const limit = Number(c.req.query('limit')) || 20;
+  const offset = Number(c.req.query('offset')) || 0;
+  const taskId = c.req.query('taskId');
+  const ticketId = c.req.query('ticketId');
+
+  try {
+    const result = await listConversations({ limit, offset, taskId, ticketId });
+    return c.json(result);
+  } catch (error) {
+    logger.error('[Chat] List conversations error:', error instanceof Error ? error : undefined);
+    return c.json({ error: 'Failed to list conversations' }, 500);
+  }
+});
+
+/**
+ * GET /api/chat/conversations/recent
+ * Get recent conversations with preview
+ */
+chatRoutes.get('/conversations/recent', async (c) => {
+  const limit = Number(c.req.query('limit')) || 10;
+
+  try {
+    const conversations = await getRecentConversationsWithPreview(limit);
+    return c.json({ conversations });
+  } catch (error) {
+    logger.error('[Chat] Recent conversations error:', error instanceof Error ? error : undefined);
+    return c.json({ error: 'Failed to get recent conversations' }, 500);
+  }
+});
+
+/**
+ * POST /api/chat/conversations
+ * Create a new conversation
+ */
+chatRoutes.post(
+  '/conversations',
+  zValidator(
+    'json',
+    z.object({
+      title: z.string().optional(),
+      presetId: z.string().optional(),
+      taskId: z.string().optional(),
+      ticketId: z.string().optional(),
+      projectId: z.string().optional(),
+    })
+  ),
+  async (c) => {
+    const body = c.req.valid('json');
+
+    try {
+      const conversation = await createConversation(body);
+      return c.json({ conversation }, 201);
+    } catch (error) {
+      logger.error('[Chat] Create conversation error:', error instanceof Error ? error : undefined);
+      return c.json({ error: 'Failed to create conversation' }, 500);
+    }
+  }
+);
+
+/**
+ * GET /api/chat/conversations/:id
+ * Get a conversation with messages
+ */
+chatRoutes.get('/conversations/:id', async (c) => {
+  const id = c.req.param('id');
+
+  try {
+    const conversation = await getConversation(id);
+    if (!conversation) {
+      return c.json({ error: 'Conversation not found' }, 404);
+    }
+
+    const messages = await getConversationMessages(id);
+    return c.json({ conversation, messages });
+  } catch (error) {
+    logger.error('[Chat] Get conversation error:', error instanceof Error ? error : undefined);
+    return c.json({ error: 'Failed to get conversation' }, 500);
+  }
+});
+
+/**
+ * DELETE /api/chat/conversations/:id
+ * Delete a conversation
+ */
+chatRoutes.delete('/conversations/:id', async (c) => {
+  const id = c.req.param('id');
+
+  try {
+    await deleteConversation(id);
+    return c.json({ message: 'Conversation deleted' });
+  } catch (error) {
+    logger.error('[Chat] Delete conversation error:', error instanceof Error ? error : undefined);
+    return c.json({ error: 'Failed to delete conversation' }, 500);
+  }
+});
+
+/**
+ * GET /api/chat/conversations/:id/memory
+ * Get memory stats for a conversation
+ */
+chatRoutes.get('/conversations/:id/memory', async (c) => {
+  const id = c.req.param('id');
+  const model = c.req.query('model');
+
+  try {
+    const conversation = await getConversation(id);
+    if (!conversation) {
+      return c.json({ error: 'Conversation not found' }, 404);
+    }
+
+    const messages = await getConversationMessages(id);
+    const stats = getMemoryStats(messages, model);
+
+    return c.json({
+      conversationId: id,
+      stats,
+      recommendation: stats.needsCompaction
+        ? 'Conversation will be automatically compacted on next message'
+        : stats.usagePercentage > 50
+          ? 'Approaching context limit, consider starting a new conversation for long discussions'
+          : 'Memory usage healthy',
+    });
+  } catch (error) {
+    logger.error('[Chat] Memory stats error:', error instanceof Error ? error : undefined);
+    return c.json({ error: 'Failed to get memory stats' }, 500);
+  }
+});
+
+/**
+ * POST /api/chat/conversations/:id/compact
+ * Manually trigger compaction for a conversation
+ */
+chatRoutes.post('/conversations/:id/compact', async (c) => {
+  const id = c.req.param('id');
+  const model = c.req.query('model');
+
+  try {
+    const conversation = await getConversation(id);
+    if (!conversation) {
+      return c.json({ error: 'Conversation not found' }, 404);
+    }
+
+    const messages = await getConversationMessages(id);
+    const result = await compactMessages(messages, model);
+
+    if (!result.wasCompacted) {
+      return c.json({
+        compacted: false,
+        message: 'Conversation does not need compaction yet',
+        stats: getMemoryStats(messages, model),
+      });
+    }
+
+    // Note: In a full implementation, we'd save the compacted messages
+    // For now, we just return what the compaction would produce
+    return c.json({
+      compacted: true,
+      originalCount: result.originalCount,
+      compactedCount: result.compactedCount,
+      tokensReduced: result.tokensReduced,
+      summary: result.summary,
+      stats: getMemoryStats(result.messages, model),
+    });
+  } catch (error) {
+    logger.error('[Chat] Manual compaction error:', error instanceof Error ? error : undefined);
+    return c.json({ error: 'Failed to compact conversation' }, 500);
+  }
+});
+
+/**
+ * POST /api/chat/conversations/:id/messages
+ * Send a message in a conversation (with context and history)
+ */
+chatRoutes.post(
+  '/conversations/:id/messages',
+  zValidator(
+    'json',
+    z.object({
+      content: z.string(),
+      model: z.string().optional(),
+      temperature: z.number().min(0).max(2).optional(),
+    })
+  ),
+  async (c) => {
+    const conversationId = c.req.param('id');
+    const body = c.req.valid('json');
+
+    try {
+      // Get conversation and build context
+      const conversation = await getConversation(conversationId);
+      if (!conversation) {
+        return c.json({ error: 'Conversation not found' }, 404);
+      }
+
+      // Build context from linked entities
+      const context: ChatContext = {};
+      const client = getClient();
+
+      if (conversation.taskId) {
+        const taskResult = await client.execute({
+          sql: `SELECT id, description, status, assigned_agent as agent FROM tasks WHERE id = ?`,
+          args: [conversation.taskId],
+        });
+        if (taskResult.rows.length > 0) {
+          const t = taskResult.rows[0];
+          context.task = {
+            id: t.id as string,
+            title: ((t.description as string) || '').slice(0, 100),
+            description: t.description as string,
+            status: t.status as string,
+            agent: t.agent as string | undefined,
+          };
+        }
+      }
+
+      if (conversation.ticketId) {
+        const ticketResult = await client.execute({
+          sql: `SELECT id, title, description, status FROM tickets WHERE id = ?`,
+          args: [conversation.ticketId],
+        });
+        if (ticketResult.rows.length > 0) {
+          const t = ticketResult.rows[0];
+          context.ticket = {
+            id: t.id as string,
+            title: t.title as string,
+            description: t.description as string | undefined,
+            status: t.status as string,
+          };
+        }
+      }
+
+      // Get recent activity for context
+      const statsResult = await client.execute(`
+        SELECT
+          (SELECT COUNT(*) FROM tasks WHERE status = 'completed') as completed,
+          (SELECT COUNT(*) FROM tasks WHERE status = 'pending') as pending
+      `);
+      const stats = statsResult.rows[0];
+      context.recentActivity = {
+        tasksCompleted: Number(stats.completed) || 0,
+        tasksPending: Number(stats.pending) || 0,
+        activeAgents: [],
+      };
+
+      // Add runtime info (model awareness like OpenClaw)
+      const sessionOverride = getSessionModel(conversationId);
+      const resolvedModel = sessionOverride || body.model || 'sonnet';
+      const modelAlias = MODEL_ALIASES[resolvedModel as keyof typeof MODEL_ALIASES];
+      context.runtime = {
+        model: modelAlias ? `${modelAlias.provider}/${modelAlias.model}` : resolvedModel,
+        provider: modelAlias?.provider || 'anthropic',
+        defaultModel: 'anthropic/claude-sonnet-4-5',
+        conversationId,
+        sessionOverride,
+      };
+
+      // Build system prompt with context
+      const systemPrompt = buildSystemPrompt(conversation.presetId, context);
+
+      // Get existing messages
+      const existingMessages = await getConversationMessages(conversationId);
+
+      // Save user message first
+      const userMessage = await addMessage({
+        conversationId,
+        role: 'user',
+        content: body.content,
+      });
+
+      // Add user message to list for compaction check
+      const allMessages: ConversationMessage[] = [
+        ...existingMessages,
+        {
+          id: userMessage.id,
+          conversationId,
+          role: 'user',
+          content: body.content,
+          createdAt: userMessage.createdAt,
+        },
+      ];
+
+      // Check if compaction is needed and compact if necessary
+      let messagesToSend = allMessages;
+      let compactionInfo = null;
+
+      if (needsCompaction(allMessages, body.model)) {
+        logger.info(
+          `[Chat] Compacting conversation ${conversationId} (${allMessages.length} messages)`
+        );
+        const compactionResult = await compactMessages(allMessages, body.model);
+
+        if (compactionResult.wasCompacted) {
+          messagesToSend = compactionResult.messages;
+          compactionInfo = {
+            originalCount: compactionResult.originalCount,
+            compactedCount: compactionResult.compactedCount,
+            tokensReduced: compactionResult.tokensReduced,
+          };
+          logger.info(
+            `[Chat] Compaction complete: ${compactionResult.originalCount} -> ${compactionResult.compactedCount} messages, ${compactionResult.tokensReduced} tokens saved`
+          );
+        }
+      }
+
+      // Build chat messages array from (potentially compacted) messages
+      const chatMessages: ChatMessage[] = messagesToSend.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.createdAt,
+      }));
+
+      // Send to AI
+      const response = await aiProvider.chat({
+        messages: chatMessages,
+        model: body.model,
+        systemPrompt,
+        temperature: body.temperature,
+      });
+
+      // Save assistant response
+      const assistantMessage = await addMessage({
+        conversationId,
+        role: 'assistant',
+        content: response.content,
+        model: response.model,
+        provider: response.provider,
+        tokenUsage: response.usage
+          ? {
+              prompt: response.usage.promptTokens,
+              completion: response.usage.completionTokens,
+              total: response.usage.totalTokens,
+            }
+          : undefined,
+        cost: response.usage?.cost,
+      });
+
+      return c.json({
+        userMessage,
+        assistantMessage: {
+          ...assistantMessage,
+          model: response.model,
+          provider: response.provider,
+        },
+        usage: response.usage,
+        compaction: compactionInfo,
+      });
+    } catch (error) {
+      logger.error('[Chat] Conversation message error:', error instanceof Error ? error : undefined);
+      return c.json(
+        { error: error instanceof Error ? error.message : 'Failed to send message' },
+        500
+      );
+    }
+  }
+);
+
+/**
+ * POST /api/chat/conversations/:id/messages/with-tools
+ * Send a message in a conversation with native tool calling enabled
+ */
+chatRoutes.post(
+  '/conversations/:id/messages/with-tools',
+  zValidator(
+    'json',
+    z.object({
+      content: z.string(),
+      model: z.string().optional(),
+      temperature: z.number().min(0).max(2).optional(),
+      enableTools: z.boolean().optional().default(true),
+    })
+  ),
+  async (c) => {
+    const conversationId = c.req.param('id');
+    const body = c.req.valid('json');
+
+    try {
+      // Get conversation and build context
+      const conversation = await getConversation(conversationId);
+      if (!conversation) {
+        return c.json({ error: 'Conversation not found' }, 404);
+      }
+
+      // Build context from linked entities
+      const context: ChatContext = {};
+      const client = getClient();
+
+      if (conversation.taskId) {
+        const taskResult = await client.execute({
+          sql: `SELECT id, description, status, assigned_agent as agent FROM tasks WHERE id = ?`,
+          args: [conversation.taskId],
+        });
+        if (taskResult.rows.length > 0) {
+          const t = taskResult.rows[0];
+          context.task = {
+            id: t.id as string,
+            title: ((t.description as string) || '').slice(0, 100),
+            description: t.description as string,
+            status: t.status as string,
+            agent: t.agent as string | undefined,
+          };
+        }
+      }
+
+      if (conversation.ticketId) {
+        const ticketResult = await client.execute({
+          sql: `SELECT id, title, description, status FROM tickets WHERE id = ?`,
+          args: [conversation.ticketId],
+        });
+        if (ticketResult.rows.length > 0) {
+          const t = ticketResult.rows[0];
+          context.ticket = {
+            id: t.id as string,
+            title: t.title as string,
+            description: t.description as string | undefined,
+            status: t.status as string,
+          };
+        }
+      }
+
+      // Get recent activity for context
+      const statsResult = await client.execute(`
+        SELECT
+          (SELECT COUNT(*) FROM tasks WHERE status = 'completed') as completed,
+          (SELECT COUNT(*) FROM tasks WHERE status = 'pending') as pending
+      `);
+      const stats = statsResult.rows[0];
+      context.recentActivity = {
+        tasksCompleted: Number(stats.completed) || 0,
+        tasksPending: Number(stats.pending) || 0,
+        activeAgents: [],
+      };
+
+      // Add runtime info (model awareness like OpenClaw)
+      const sessionOverride = getSessionModel(conversationId);
+      const resolvedModel = sessionOverride || body.model || 'sonnet';
+      const modelAlias = MODEL_ALIASES[resolvedModel as keyof typeof MODEL_ALIASES];
+      context.runtime = {
+        model: modelAlias ? `${modelAlias.provider}/${modelAlias.model}` : resolvedModel,
+        provider: modelAlias?.provider || 'anthropic',
+        defaultModel: 'anthropic/claude-sonnet-4-5',
+        conversationId,
+        sessionOverride,
+      };
+
+      // Build system prompt with context
+      const systemPrompt = buildSystemPrompt(conversation.presetId, context);
+
+      // Get existing messages
+      const existingMessages = await getConversationMessages(conversationId);
+
+      // Save user message first
+      const userMessage = await addMessage({
+        conversationId,
+        role: 'user',
+        content: body.content,
+      });
+
+      // Add user message to list for API call
+      const allMessages: ConversationMessage[] = [
+        ...existingMessages,
+        {
+          id: userMessage.id,
+          conversationId,
+          role: 'user',
+          content: body.content,
+          createdAt: userMessage.createdAt,
+        },
+      ];
+
+      // Check if compaction is needed
+      let messagesToSend = allMessages;
+      let compactionInfo = null;
+
+      if (needsCompaction(allMessages, body.model)) {
+        logger.info(
+          `[Chat] Compacting conversation ${conversationId} (${allMessages.length} messages)`
+        );
+        const compactionResult = await compactMessages(allMessages, body.model);
+
+        if (compactionResult.wasCompacted) {
+          messagesToSend = compactionResult.messages;
+          compactionInfo = {
+            originalCount: compactionResult.originalCount,
+            compactedCount: compactionResult.compactedCount,
+            tokensReduced: compactionResult.tokensReduced,
+          };
+        }
+      }
+
+      // Build chat messages array
+      const chatMessages: ChatMessage[] = messagesToSend.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.createdAt,
+      }));
+
+      // Create tool handler for this conversation
+      const toolHandler = await createChatToolHandler({
+        conversationId,
+        securityMode: 'ask',
+      });
+
+      // Get available tools
+      const tools = body.enableTools ? getDefaultChatTools() : [];
+
+      // Send to AI with native tool support
+      const response = await aiProvider.chatWithNativeTools({
+        messages: chatMessages,
+        model: body.model,
+        systemPrompt,
+        temperature: body.temperature,
+        tools,
+        onToolCall: async (toolName: string, args: unknown, toolCallId: string) => {
+          return toolHandler.executeTool(toolName, args, toolCallId);
+        },
+        maxToolRoundtrips: 5,
+      });
+
+      // Get any pending approvals
+      const pendingApprovals = toolHandler.getPendingApprovals();
+
+      // Save assistant response
+      const assistantMessage = await addMessage({
+        conversationId,
+        role: 'assistant',
+        content: response.content,
+        model: response.model,
+        provider: response.provider,
+        tokenUsage: response.usage
+          ? {
+              prompt: response.usage.promptTokens,
+              completion: response.usage.completionTokens,
+              total: response.usage.totalTokens,
+            }
+          : undefined,
+        cost: response.usage?.cost,
+      });
+
+      return c.json({
+        userMessage,
+        assistantMessage: {
+          ...assistantMessage,
+          model: response.model,
+          provider: response.provider,
+        },
+        usage: response.usage,
+        compaction: compactionInfo,
+        toolCalls: response.toolCalls?.map((tc: NativeToolCall) => ({
+          id: tc.id,
+          name: tc.name,
+          arguments: tc.arguments,
+          result: response.toolResults?.find((tr: NativeToolResult) => tr.toolCallId === tc.id)?.result,
+          status: 'success',
+        })),
+        pendingApprovals: pendingApprovals.length > 0
+          ? pendingApprovals.map((a) => ({
+              id: a.id,
+              toolName: a.toolName,
+              params: a.params,
+              securityLevel: 'moderate' as const,
+            }))
+          : undefined,
+        // Tool support info for UI warnings
+        toolSupport: response.toolSupport,
+      });
+    } catch (error) {
+      logger.error('[Chat] Conversation message with tools error:', error instanceof Error ? error : undefined);
+      return c.json(
+        { error: error instanceof Error ? error.message : 'Failed to send message' },
+        500
+      );
+    }
+  }
+);
+
+/**
+ * POST /api/chat/smart
+ * Smart chat with automatic context injection
+ * (Simpler alternative to conversation-based chat)
+ */
+chatRoutes.post(
+  '/smart',
+  zValidator(
+    'json',
+    z.object({
+      messages: z.array(ChatMessageSchema),
+      model: z.string().optional(),
+      presetId: z.string().optional(),
+      taskId: z.string().optional(),
+      ticketId: z.string().optional(),
+      temperature: z.number().min(0).max(2).optional(),
+    })
+  ),
+  async (c) => {
+    const body = c.req.valid('json');
+
+    try {
+      // Build context
+      const context: ChatContext = {};
+      const client = getClient();
+
+      if (body.taskId) {
+        const taskResult = await client.execute({
+          sql: `SELECT id, description, status, assigned_agent as agent FROM tasks WHERE id = ?`,
+          args: [body.taskId],
+        });
+        if (taskResult.rows.length > 0) {
+          const t = taskResult.rows[0];
+          context.task = {
+            id: t.id as string,
+            title: ((t.description as string) || '').slice(0, 100),
+            description: t.description as string,
+            status: t.status as string,
+            agent: t.agent as string | undefined,
+          };
+        }
+      }
+
+      if (body.ticketId) {
+        const ticketResult = await client.execute({
+          sql: `SELECT id, title, description, status FROM tickets WHERE id = ?`,
+          args: [body.ticketId],
+        });
+        if (ticketResult.rows.length > 0) {
+          const t = ticketResult.rows[0];
+          context.ticket = {
+            id: t.id as string,
+            title: t.title as string,
+            description: t.description as string | undefined,
+            status: t.status as string,
+          };
+        }
+      }
+
+      // Build system prompt
+      const systemPrompt = buildSystemPrompt(body.presetId || 'glinr-assistant', context);
+
+      // Convert messages
+      const messages: ChatMessage[] = body.messages.map((msg) => ({
+        id: randomUUID(),
+        role: msg.role,
+        content: msg.content,
+        timestamp: new Date().toISOString(),
+      }));
+
+      // Send to AI
+      const response = await aiProvider.chat({
+        messages,
+        model: body.model,
+        systemPrompt,
+        temperature: body.temperature,
+      });
+
+      return c.json({
+        id: response.id,
+        provider: response.provider,
+        model: response.model,
+        message: {
+          role: 'assistant',
+          content: response.content,
+        },
+        finishReason: response.finishReason,
+        usage: response.usage,
+        duration: response.duration,
+        context: {
+          presetId: body.presetId || 'glinr-assistant',
+          taskId: body.taskId,
+          ticketId: body.ticketId,
+        },
+      });
+    } catch (error) {
+      logger.error('[Chat] Smart chat error:', error instanceof Error ? error : undefined);
+      return c.json(
+        { error: error instanceof Error ? error.message : 'Smart chat failed' },
+        500
+      );
+    }
+  }
+);
+
+// =============================================================================
+// Chat with Tools
+// =============================================================================
+
+/**
+ * POST /api/chat/with-tools
+ * Chat with AI tools enabled (file operations, git, system info, etc.)
+ */
+chatRoutes.post(
+  '/with-tools',
+  zValidator(
+    'json',
+    z.object({
+      messages: z.array(ChatMessageSchema),
+      conversationId: z.string().optional(),
+      model: z.string().optional(),
+      systemPrompt: z.string().optional(),
+      presetId: z.string().optional(),
+      temperature: z.number().min(0).max(2).optional(),
+      enableAllTools: z.boolean().optional(), // Enable all tools vs safe subset
+      securityMode: z.enum(['deny', 'sandbox', 'allowlist', 'ask', 'full']).optional(),
+      workdir: z.string().optional(),
+    })
+  ),
+  async (c) => {
+    const body = c.req.valid('json');
+    const conversationId = body.conversationId || randomUUID();
+
+    try {
+      // Create tool handler with security settings
+      const toolHandler = await createChatToolHandler({
+        conversationId,
+        workdir: body.workdir,
+        securityMode: body.securityMode || 'ask',
+      });
+
+      // Get tools based on user preference
+      const tools = body.enableAllTools ? getAllChatTools() : getDefaultChatTools();
+
+      // Build system prompt
+      let systemPrompt = body.systemPrompt || '';
+      if (body.presetId) {
+        systemPrompt = buildSystemPrompt(body.presetId, {}) + '\n\n' + systemPrompt;
+      }
+
+      // Convert messages
+      const messages: ChatMessage[] = body.messages.map((msg) => ({
+        id: randomUUID(),
+        role: msg.role,
+        content: msg.content,
+        timestamp: new Date().toISOString(),
+      }));
+
+      // Call AI with native tool support
+      const response = await aiProvider.chatWithNativeTools({
+        messages,
+        model: body.model,
+        systemPrompt,
+        temperature: body.temperature,
+        tools,
+        onToolCall: async (toolName: string, args: unknown, toolCallId: string) => {
+          return toolHandler.executeTool(toolName, args, toolCallId);
+        },
+        maxToolRoundtrips: 5,
+      });
+
+      // Check for pending approvals
+      const pendingApprovals = toolHandler.getPendingApprovals();
+
+      return c.json({
+        id: response.id,
+        conversationId,
+        provider: response.provider,
+        model: response.model,
+        message: {
+          role: 'assistant',
+          content: response.content,
+        },
+        finishReason: response.finishReason,
+        usage: response.usage,
+        duration: response.duration,
+        // Tool execution info
+        toolCalls: response.toolCalls,
+        toolResults: response.toolResults,
+        pendingApprovals: pendingApprovals.length > 0 ? pendingApprovals : undefined,
+        steps: response.steps,
+        // Tool support info for UI warnings
+        toolSupport: response.toolSupport,
+      });
+    } catch (error) {
+      logger.error('[Chat] Chat with tools error:', error instanceof Error ? error : undefined);
+      return c.json(
+        { error: error instanceof Error ? error.message : 'Chat with tools failed' },
+        500
+      );
+    }
+  }
+);
+
+/**
+ * GET /api/chat/tools
+ * List available tools for chat
+ */
+chatRoutes.get('/tools', async (c) => {
+  const allTools = c.req.query('all') === 'true';
+
+  const tools = allTools ? getAllChatTools() : getDefaultChatTools();
+
+  return c.json({
+    tools: tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+    })),
+    total: tools.length,
+    mode: allTools ? 'all' : 'default',
+  });
+});
+
+/**
+ * POST /api/chat/tools/approve
+ * Approve a pending tool execution
+ */
+chatRoutes.post(
+  '/tools/approve',
+  zValidator(
+    'json',
+    z.object({
+      conversationId: z.string(),
+      approvalId: z.string(),
+      decision: z.enum(['allow-once', 'allow-always', 'deny']),
+    })
+  ),
+  async (c) => {
+    const { conversationId, approvalId, decision } = c.req.valid('json');
+
+    try {
+      // Create handler for this conversation to access approvals
+      const toolHandler = await createChatToolHandler({ conversationId });
+
+      const result = await toolHandler.handleApproval(approvalId, decision);
+
+      if (!result) {
+        return c.json({ error: 'Approval not found or expired' }, 404);
+      }
+
+      return c.json({
+        success: true,
+        result: result.result,
+        decision,
+      });
+    } catch (error) {
+      logger.error('[Chat] Tool approval error:', error instanceof Error ? error : undefined);
+      return c.json(
+        { error: error instanceof Error ? error.message : 'Approval failed' },
+        500
+      );
+    }
+  }
+);
+
+export { chatRoutes };

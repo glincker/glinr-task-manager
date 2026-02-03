@@ -2,57 +2,48 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { handleGitHubWebhook } from './integrations/github.js';
-import { handleJiraWebhook } from './integrations/jira.js';
-import { handleLinearWebhook } from './integrations/linear.js';
+
+// Route modules
 import {
-  handlePostToolUse,
-  handleSessionEnd,
-  handlePromptSubmit,
-  handleOpenClawWebhook,
-  handleGenericAgentWebhook,
-  getSessionEvents,
-  getSessionSummary,
-  getRecentSessions,
-  getRecentReports,
-  getTaskReports,
-} from './hooks/index.js';
-import { initTaskQueue, addTask, getTask, getTasks, cancelTask, retryTask, closeTaskQueue, registerSSEBroadcaster } from './queue/task-queue.js';
-import { getDeadLetterQueue, retryDeadLetterTask, removeFromDeadLetterQueue } from './queue/failure-handler.js';
+  tasksRoutes,
+  dlqRoutes,
+  agentsRoutes,
+  webhooksRoutes,
+  hooksRoutes,
+  summariesRoutes,
+  costsRoutes,
+  settingsRoutes,
+  tokensRoutes,
+  authRoutes,
+  gatewayRoutes,
+  searchRoutes,
+  ticketsRoutes,
+  projectsRoutes,
+  statsRoutes,
+  syncRoutes,
+  chatRoutes,
+  importRoutes,
+  userRoutes,
+  toolsRoutes,
+  setupRoutes,
+  labelsRoutes,
+} from './routes/index.js';
+
+// Core imports
+import { initTaskQueue, getTasks, registerSSEBroadcaster, closeTaskQueue } from './queue/task-queue.js';
+import { getTaskSummaries } from './summaries/index.js';
 import { getAgentRegistry } from './adapters/registry.js';
 import { startAllCronJobs, stopAllCronJobs, getHealthStatus } from './cron/index.js';
-import { CreateTaskSchema } from './types/task.js';
-import { initTokenTracker, getUsageSummary } from './costs/token-tracker.js';
-import { getBudgetStatus } from './costs/budget.js';
+import { initTokenTracker } from './costs/token-tracker.js';
 import { loadConfig } from './utils/config-loader.js';
-import { initStorage, getStorage } from './storage/index.js';
-import {
-  createSummary,
-  getSummary,
-  getTaskSummaries,
-  querySummaries,
-  searchSummaries,
-  getSummaryStats,
-  getRecentSummaries,
-  deleteSummary,
-  CreateSummaryInputSchema,
-  SummaryQuerySchema,
-} from './summaries/index.js';
-import {
-  redirectToGitHub,
-  handleGitHubCallback,
-} from './auth/github-oauth.js';
-import {
-  redirectToJira,
-  handleJiraCallback,
-} from './auth/jira-oauth.js';
-import {
-  redirectToLinear,
-  handleLinearCallback,
-} from './auth/linear-oauth.js';
-import { generatePRDescription, generateChangelog } from './summaries/templates.js';
-import { getEmbeddingService } from './ai/embedding-service.js';
-import { logger as systemLogger } from './utils/logger.js';
+import { initStorage } from './storage/index.js';
+import { initApiTokensTable, tokenAuthMiddleware } from './auth/api-tokens.js';
+import { getGateway, type GatewayRequest, type WorkflowType } from './gateway/index.js';
+import { CreateTaskSchema } from './types/task.js';
+import { addTask } from './queue/task-queue.js';
+import { initSyncIntegration } from './sync/index.js';
+import { aiProvider } from './providers/index.js';
+import { loadAllProviderConfigs } from './storage/index.js';
 
 interface SettingsYaml {
   server: {
@@ -67,11 +58,16 @@ interface SettingsYaml {
   };
 }
 
-const settings = loadConfig<SettingsYaml>('settings.yml');
+const appSettings = loadConfig<SettingsYaml>('settings.yml');
+const PORT = parseInt(process.env.PORT || appSettings.server?.port?.toString() || '3000');
+const ENABLE_CRON = process.env.ENABLE_CRON !== undefined
+  ? process.env.ENABLE_CRON !== 'false'
+  : (appSettings.server?.enableCron !== undefined ? appSettings.server.enableCron : true);
 
 const app = new Hono();
 
-// Middleware
+// === Middleware ===
+
 const log = logger();
 app.use('*', (c, next) => {
   if (c.req.path === '/health') {
@@ -79,13 +75,27 @@ app.use('*', (c, next) => {
   }
   return log(c, next);
 });
+
+// CORS configuration
+// When credentials: true, origin cannot be "*" - must be explicit or dynamic
+// Priority: CORS_ORIGIN env var > settings.yml > dynamic (echo requesting origin)
+const configuredOrigin = process.env.CORS_ORIGIN || appSettings.server?.cors?.origin;
+
 app.use(
   '*',
   cors({
-    origin: process.env.CORS_ORIGIN || settings.server?.cors?.origin || '*',
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    // If no explicit origin or wildcard configured, dynamically echo the requesting origin
+    // This allows the app to run on any domain/subdomain without hardcoding
+    origin: !configuredOrigin || configuredOrigin === '*'
+      ? (origin) => origin || ''  // Echo back the request origin (works with any domain)
+      : configuredOrigin,
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+    credentials: true,
   })
 );
+
+// === Core Routes ===
 
 // Health check
 app.get('/health', (c) => {
@@ -130,10 +140,10 @@ app.get('/', (c) => {
         sessionSummary: 'GET /api/hook/sessions/:sessionId/summary',
       },
       agentWebhooks: {
-        openclaw: 'POST /api/webhook/openclaw',
-        generic: 'POST /api/webhook/agent',
-        reports: 'GET /api/webhook/reports',
-        taskReports: 'GET /api/webhook/tasks/:taskId/reports',
+        openclaw: 'POST /api/hook/webhook/openclaw',
+        generic: 'POST /api/hook/webhook/agent',
+        reports: 'GET /api/hook/webhook/reports',
+        taskReports: 'GET /api/hook/webhook/tasks/:taskId/reports',
       },
       costs: {
         summary: 'GET /api/costs/summary',
@@ -149,684 +159,112 @@ app.get('/', (c) => {
         recent: 'GET /api/summaries/recent',
         byTask: 'GET /api/tasks/:taskId/summaries',
       },
+      settings: {
+        get: 'GET /api/settings',
+        update: 'PATCH /api/settings',
+        reset: 'POST /api/settings/reset',
+      },
+      gateway: {
+        execute: 'POST /api/gateway/execute',
+        agents: 'GET /api/gateway/agents',
+        workflows: 'GET /api/gateway/workflows',
+        workflow: 'GET /api/gateway/workflows/:type',
+        config: 'GET /api/gateway/config',
+        updateConfig: 'PATCH /api/gateway/config',
+      },
+      search: {
+        semantic: 'GET /api/search/semantic?q={query}',
+        text: 'GET /api/search/text?q={query}',
+        capabilities: 'GET /api/search/capabilities',
+      },
+      tickets: {
+        list: 'GET /api/tickets',
+        create: 'POST /api/tickets',
+        get: 'GET /api/tickets/:id',
+        update: 'PATCH /api/tickets/:id',
+        delete: 'DELETE /api/tickets/:id',
+        transition: 'POST /api/tickets/:id/transition',
+        assignAgent: 'POST /api/tickets/:id/assign-agent',
+        comments: 'GET /api/tickets/:id/comments',
+        addComment: 'POST /api/tickets/:id/comments',
+        links: 'GET /api/tickets/:id/links',
+        addLink: 'POST /api/tickets/:id/links',
+        history: 'GET /api/tickets/:id/history',
+      },
+      projects: {
+        list: 'GET /api/projects',
+        create: 'POST /api/projects',
+        get: 'GET /api/projects/:id',
+        update: 'PATCH /api/projects/:id',
+        archive: 'POST /api/projects/:id/archive',
+        delete: 'DELETE /api/projects/:id',
+        byKey: 'GET /api/projects/by-key/:key',
+        default: 'GET /api/projects/default',
+        migrate: 'POST /api/projects/migrate',
+        externalLinks: 'GET /api/projects/:id/external-links',
+        addExternalLink: 'POST /api/projects/:id/external-links',
+      },
+      sprints: {
+        list: 'GET /api/projects/:projectId/sprints',
+        create: 'POST /api/projects/:projectId/sprints',
+        get: 'GET /api/projects/:projectId/sprints/:sprintId',
+        update: 'PATCH /api/projects/:projectId/sprints/:sprintId',
+        start: 'POST /api/projects/:projectId/sprints/:sprintId/start',
+        complete: 'POST /api/projects/:projectId/sprints/:sprintId/complete',
+        cancel: 'POST /api/projects/:projectId/sprints/:sprintId/cancel',
+        delete: 'DELETE /api/projects/:projectId/sprints/:sprintId',
+        active: 'GET /api/projects/:projectId/sprints/active',
+        tickets: 'GET /api/projects/:projectId/sprints/:sprintId/tickets',
+        addTickets: 'POST /api/projects/:projectId/sprints/:sprintId/tickets',
+        removeTicket: 'DELETE /api/projects/:projectId/sprints/:sprintId/tickets/:ticketId',
+        reorderTickets: 'PUT /api/projects/:projectId/sprints/:sprintId/tickets/reorder',
+      },
     },
   });
 });
 
-// === Auth API ===
-app.get('/auth/github', (c) => redirectToGitHub(c));
-app.get('/auth/github/callback', (c) => handleGitHubCallback(c));
-
-app.get('/auth/jira', (c) => redirectToJira(c));
-app.get('/auth/jira/callback', (c) => handleJiraCallback(c));
-
-app.get('/auth/linear', (c) => redirectToLinear(c));
-app.get('/auth/linear/callback', (c) => handleLinearCallback(c));
-
-// === Task API ===
-
-// List tasks
-app.get('/api/tasks', (c) => {
-  const status = c.req.query('status');
-  const limit = parseInt(c.req.query('limit') || '50');
-  const offset = parseInt(c.req.query('offset') || '0');
-
-  const tasks = getTasks({
-    status: status as any,
-    limit,
-    offset,
-  });
-
-  return c.json({
-    tasks,
-    count: tasks.length,
-    limit,
-    offset,
-  });
-});
-
-// Create task
-app.post('/api/tasks', async (c) => {
-  try {
-    const body = await c.req.json();
-    const parsed = CreateTaskSchema.safeParse(body);
-
-    if (!parsed.success) {
-      return c.json(
-        {
-          error: 'Validation failed',
-          details: parsed.error.flatten(),
-        },
-        400
-      );
-    }
-
-    const task = await addTask(parsed.data);
-
-    return c.json(
-      {
-        message: 'Task created',
-        task,
-      },
-      201
-    );
-  } catch (error) {
-    console.error('[API] Error creating task:', error);
-    return c.json(
-      {
-        error: 'Failed to create task',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      500
-    );
-  }
-});
-
-// Get single task
-app.get('/api/tasks/:id', (c) => {
-  const id = c.req.param('id');
-  const task = getTask(id);
-
-  if (!task) {
-    return c.json({ error: 'Task not found' }, 404);
-  }
-
-  return c.json({ task });
-});
-
-// Cancel a task
-app.post('/api/tasks/:id/cancel', async (c) => {
-  const id = c.req.param('id');
-  const success = await cancelTask(id);
-
-  if (!success) {
-    const task = getTask(id);
-    if (!task) {
-      return c.json({ error: 'Task not found' }, 404);
-    }
-    return c.json({ error: 'Task cannot be cancelled (not running or pending)' }, 400);
-  }
-
-  return c.json({ message: 'Task cancelled', task: getTask(id) });
-});
-
-// Retry a task
-app.post('/api/tasks/:id/retry', async (c) => {
-  const id = c.req.param('id');
-  const newTask = await retryTask(id);
-
-  if (!newTask) {
-    const task = getTask(id);
-    if (!task) {
-      return c.json({ error: 'Task not found' }, 404);
-    }
-    return c.json({ error: 'Task cannot be retried (not failed or completed)' }, 400);
-  }
-
-  return c.json({ message: 'Task queued for retry', task: newTask, originalTaskId: id });
-});
-
-// === Export/Import API ===
-
-// Export all tasks as JSON
-app.get('/api/tasks/export', (_c) => {
-  const tasks = getTasks({ limit: 10000 }); // Get all tasks
-  const exportData = {
-    version: '1.0',
-    exportedAt: new Date().toISOString(),
-    taskCount: tasks.length,
-    tasks: tasks.map(task => ({
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      prompt: task.prompt,
-      status: task.status,
-      priority: task.priority,
-      source: task.source,
-      sourceId: task.sourceId,
-      sourceUrl: task.sourceUrl,
-      repository: task.repository,
-      branch: task.branch,
-      labels: task.labels,
-      assignedAgent: task.assignedAgent,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-      startedAt: task.startedAt,
-      completedAt: task.completedAt,
-    })),
+// Task statistics
+app.get('/api/stats', (c) => {
+  const allTasks = getTasks({ limit: 10000 });
+  const stats = {
+    pending: 0,
+    inProgress: 0,
+    completed: 0,
+    failed: 0,
+    total: allTasks.length,
   };
 
-  return new Response(JSON.stringify(exportData, null, 2), {
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Disposition': `attachment; filename="glinr-tasks-${new Date().toISOString().split('T')[0]}.json"`,
-    },
-  });
-});
-
-// Import tasks from JSON
-app.post('/api/tasks/import', async (c) => {
-  try {
-    const body = await c.req.json();
-
-    // Validate import format
-    if (!body.version || !Array.isArray(body.tasks)) {
-      return c.json({ error: 'Invalid import format. Expected { version, tasks[] }' }, 400);
+  for (const task of allTasks) {
+    if (task.status === 'pending' || task.status === 'queued') {
+      stats.pending++;
+    } else if (task.status === 'in_progress' || task.status === 'assigned') {
+      stats.inProgress++;
+    } else if (task.status === 'completed') {
+      stats.completed++;
+    } else if (task.status === 'failed') {
+      stats.failed++;
     }
-
-    const results = {
-      imported: 0,
-      skipped: 0,
-      errors: [] as string[],
-    };
-
-    for (const taskData of body.tasks) {
-      try {
-        // Check if task with same ID exists
-        const existing = getTask(taskData.id);
-        if (existing) {
-          results.skipped++;
-          continue;
-        }
-
-        // Create task with imported data
-        const parsed = CreateTaskSchema.safeParse({
-          title: taskData.title,
-          description: taskData.description,
-          prompt: taskData.prompt,
-          priority: taskData.priority,
-          source: taskData.source || 'import',
-          sourceId: taskData.sourceId,
-          sourceUrl: taskData.sourceUrl,
-          repository: taskData.repository,
-          branch: taskData.branch,
-          labels: taskData.labels || [],
-          assignedAgent: taskData.assignedAgent,
-        });
-
-        if (!parsed.success) {
-          results.errors.push(`Task "${taskData.title}": ${parsed.error.message}`);
-          continue;
-        }
-
-        await addTask(parsed.data);
-        results.imported++;
-      } catch (error) {
-        results.errors.push(`Task "${taskData.title}": ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    }
-
-    return c.json({
-      message: `Import completed: ${results.imported} imported, ${results.skipped} skipped`,
-      results,
-    });
-  } catch (error) {
-    return c.json({
-      error: 'Import failed',
-      message: error instanceof Error ? error.message : 'Unknown error',
-    }, 500);
-  }
-});
-
-// === Dead Letter Queue API ===
-
-// List dead letter queue tasks
-app.get('/api/dlq', (c) => {
-  const tasks = getDeadLetterQueue();
-  return c.json({
-    tasks,
-    count: tasks.length,
-  });
-});
-
-// Retry a task from DLQ
-app.post('/api/dlq/:id/retry', async (c) => {
-  const id = c.req.param('id');
-  const success = await retryDeadLetterTask(id);
-
-  if (!success) {
-    return c.json({ error: 'Task not found in dead letter queue' }, 404);
   }
 
-  return c.json({ message: 'Task moved back to queue for retry' });
+  return c.json(stats);
 });
 
-// Remove task from DLQ (manual resolution)
-app.delete('/api/dlq/:id', (c) => {
-  const id = c.req.param('id');
-  const success = removeFromDeadLetterQueue(id);
-
-  if (!success) {
-    return c.json({ error: 'Task not found in dead letter queue' }, 404);
-  }
-
-  return c.json({ message: 'Task removed from dead letter queue' });
-});
-
-// === Agent API ===
-
-// List available agents with detailed status
-app.get('/api/agents', async (c) => {
-  const registry = getAgentRegistry();
-  const adapters = registry.getActiveAdapters();
-  const storage = getStorage();
-  
-  let agentStats: Record<string, any> = {};
-  try {
-    agentStats = await storage.getAgentStats();
-  } catch (error) {
-    console.warn('[API] Could not fetch agent stats:', error);
-  }
-
-  const agents = await Promise.all(
-    adapters.map(async (adapter) => {
-      const health = await adapter.healthCheck();
-      const stats = agentStats[adapter.type] || { completed: 0, failed: 0, avgDuration: 0 };
-      
-      return {
-        type: adapter.type,
-        name: adapter.name,
-        description: adapter.description,
-        capabilities: adapter.capabilities,
-        configured: true, // If it's in active adapters, it's partially configured
-        healthy: health,
-        lastActivity: stats.lastActivity || null,
-        stats: {
-          completed: stats.completed,
-          failed: stats.failed,
-          avgDuration: stats.avgDuration,
-        },
-      };
-    })
-  );
-
-  return c.json({ agents });
-});
-
-// List adapter types
-app.get('/api/agents/types', (c) => {
-  const registry = getAgentRegistry();
-  return c.json({
-    types: registry.getAdapterTypes(),
-  });
-});
-
-// === Webhook Endpoints ===
-
-// GitHub webhook
-app.post('/webhooks/github', async (c) => {
-  try {
-    const taskInput = await handleGitHubWebhook(c);
-
-    if (!taskInput) {
-      return c.json({ message: 'Webhook received, no task created' });
-    }
-
-    const task = await addTask(taskInput);
-
-    return c.json({
-      message: 'Task created from GitHub webhook',
-      task,
-    });
-  } catch (error) {
-    console.error('[Webhook] GitHub error:', error);
-    return c.json(
-      {
-        error: 'Webhook processing failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      error instanceof Error && error.message.includes('signature') ? 401 : 500
-    );
-  }
-});
-
-// Jira webhook
-app.post('/webhooks/jira', async (c) => {
-  try {
-    const taskInput = await handleJiraWebhook(c);
-
-    if (!taskInput) {
-      return c.json({ message: 'Webhook received, no task created' });
-    }
-
-    const task = await addTask(taskInput);
-
-    return c.json({
-      message: 'Task created from Jira webhook',
-      task,
-    });
-  } catch (error) {
-    console.error('[Webhook] Jira error:', error);
-    return c.json(
-      {
-        error: 'Webhook processing failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      error instanceof Error && error.message.includes('token') ? 401 : 500
-    );
-  }
-});
-
-// Linear webhook
-app.post('/webhooks/linear', async (c) => {
-  try {
-    const taskInput = await handleLinearWebhook(c);
-
-    if (!taskInput) {
-      return c.json({ message: 'Webhook received, no task created' });
-    }
-
-    const task = await addTask(taskInput);
-
-    return c.json({
-      message: 'Task created from Linear webhook',
-      task,
-    });
-  } catch (error) {
-    console.error('[Webhook] Linear error:', error);
-    return c.json(
-      {
-        error: 'Webhook processing failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      error instanceof Error && error.message.includes('signature') ? 401 : 500
-    );
-  }
-});
-
-// === Hook Endpoints (Zero-Cost Agent Integration) ===
-
-// PostToolUse hook - receives tool usage events from Claude Code
-app.post('/api/hook/tool-use', async (c) => {
-  try {
-    const result = await handlePostToolUse(c);
-
-    if (!result.success) {
-      return c.json(
-        {
-          error: 'Hook processing failed',
-          message: result.error,
-        },
-        400
-      );
-    }
-
-    return c.json({
-      message: 'Hook processed',
-      eventId: result.eventId,
-      inference: result.inference,
-    });
-  } catch (error) {
-    console.error('[Hook] PostToolUse error:', error);
-    return c.json(
-      {
-        error: 'Hook processing failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      500
-    );
-  }
-});
-
-// Session end hook - receives session completion events
-app.post('/api/hook/session-end', async (c) => {
-  try {
-    const result = await handleSessionEnd(c);
-
-    if (!result.success) {
-      return c.json(
-        {
-          error: 'Hook processing failed',
-          message: result.error,
-        },
-        400
-      );
-    }
-
-    return c.json({
-      message: 'Session recorded',
-      eventId: result.eventId,
-      inference: result.inference,
-    });
-  } catch (error) {
-    console.error('[Hook] Session end error:', error);
-    return c.json(
-      {
-        error: 'Hook processing failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      500
-    );
-  }
-});
-
-// User prompt submit hook - receives user prompts for context
-app.post('/api/hook/prompt-submit', async (c) => {
-  try {
-    const result = await handlePromptSubmit(c);
-
-    if (!result.success) {
-      return c.json(
-        {
-          error: 'Hook processing failed',
-          message: result.error,
-        },
-        400
-      );
-    }
-
-    return c.json({
-      message: 'Prompt recorded',
-      eventId: result.eventId,
-    });
-  } catch (error) {
-    console.error('[Hook] Prompt submit error:', error);
-    return c.json(
-      {
-        error: 'Hook processing failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      500
-    );
-  }
-});
-
-// Get session events
-app.get('/api/hook/sessions/:sessionId/events', (c) => {
-  const sessionId = c.req.param('sessionId');
-  const events = getSessionEvents(sessionId);
-
-  return c.json({
-    sessionId,
-    events,
-    count: events.length,
-  });
-});
-
-// Get session summary
-app.get('/api/hook/sessions/:sessionId/summary', (c) => {
-  const sessionId = c.req.param('sessionId');
-  const summary = getSessionSummary(sessionId);
-
-  return c.json({
-    sessionId,
-    ...summary,
-  });
-});
-
-// List recent sessions
-app.get('/api/hook/sessions', (c) => {
-  const limit = parseInt(c.req.query('limit') || '50');
-  const sessions = getRecentSessions(limit);
-
-  return c.json({
-    sessions,
-    count: sessions.length,
-  });
-});
-
-// === Agent Webhook Endpoints ===
-
-// OpenClaw completion webhook
-app.post('/api/webhook/openclaw', async (c) => {
-  try {
-    const report = await handleOpenClawWebhook(c);
-
-    if (!report) {
-      return c.json({ message: 'Webhook received, no action taken' });
-    }
-
-    return c.json({
-      message: 'Agent completion recorded',
-      reportId: report.id,
-      status: report.status,
-    });
-  } catch (error) {
-    console.error('[Webhook] OpenClaw error:', error);
-    return c.json(
-      {
-        error: 'Webhook processing failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      error instanceof Error && error.message.includes('signature') ? 401 : 500
-    );
-  }
-});
-
-// Generic agent completion webhook
-app.post('/api/webhook/agent', async (c) => {
-  try {
-    const report = await handleGenericAgentWebhook(c);
-
-    if (!report) {
-      return c.json({ message: 'Webhook received, no action taken' });
-    }
-
-    return c.json({
-      message: 'Agent completion recorded',
-      reportId: report.id,
-      agent: report.agent,
-      status: report.status,
-    });
-  } catch (error) {
-    console.error('[Webhook] Agent error:', error);
-    return c.json(
-      {
-        error: 'Webhook processing failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      error instanceof Error && error.message.includes('signature') ? 401 : 500
-    );
-  }
-});
-
-// List recent agent reports
-app.get('/api/webhook/reports', (c) => {
-  const limit = parseInt(c.req.query('limit') || '50');
-  const agent = c.req.query('agent');
-
-  const reports = agent
-    ? getRecentReports(limit).filter(r => r.agent === agent)
-    : getRecentReports(limit);
-
-  return c.json({
-    reports,
-    count: reports.length,
-  });
-});
-
-// Get reports for a specific task
-app.get('/api/webhook/tasks/:taskId/reports', (c) => {
+// Get summaries for a task (nested route that spans two domains)
+app.get('/api/tasks/:taskId/summaries', async (c) => {
   const taskId = c.req.param('taskId');
-  const reports = getTaskReports(taskId);
+  const summaries = await getTaskSummaries(taskId);
 
   return c.json({
     taskId,
-    reports,
-    count: reports.length,
+    summaries,
+    count: summaries.length,
   });
 });
 
-// === Server-Sent Events (SSE) for Real-Time Updates ===
-
-// Store active SSE connections
-const sseConnections = new Set<ReadableStreamDefaultController<Uint8Array>>();
-
-// Broadcast event to all connected clients
-export function broadcastEvent(eventType: string, data: any) {
-  const message = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(message);
-
-  sseConnections.forEach((controller) => {
-    try {
-      controller.enqueue(bytes);
-    } catch {
-      // Connection closed, will be cleaned up
-    }
-  });
-}
-
-// SSE endpoint for real-time task updates
-app.get('/api/events', (c) => {
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream({
-    start(controller) {
-      // Add to active connections
-      sseConnections.add(controller);
-
-      // Send initial connection message
-      const connectMsg = `event: connected\ndata: ${JSON.stringify({
-        message: 'Connected to GLINR event stream',
-        timestamp: new Date().toISOString()
-      })}\n\n`;
-      controller.enqueue(encoder.encode(connectMsg));
-
-      // Heartbeat to keep connection alive
-      const heartbeat = setInterval(() => {
-        try {
-          const ping = `event: ping\ndata: ${JSON.stringify({ timestamp: new Date().toISOString() })}\n\n`;
-          controller.enqueue(encoder.encode(ping));
-        } catch {
-          clearInterval(heartbeat);
-          sseConnections.delete(controller);
-        }
-      }, 30000);
-
-      // Cleanup on close
-      c.req.raw.signal.addEventListener('abort', () => {
-        clearInterval(heartbeat);
-        sseConnections.delete(controller);
-        try {
-          controller.close();
-        } catch {
-          // Already closed
-        }
-      });
-    },
-    cancel() {
-      // Will be cleaned up by abort handler
-    }
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no', // Disable nginx buffering
-    },
-  });
-});
-
-// === Integration Status API ===
-
-// Get integration/webhook status
+// Integration status
 app.get('/api/integrations/status', (c) => {
   const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-  // Check which integrations have credentials configured
   const integrations = {
     github: {
       name: 'GitHub',
@@ -865,302 +303,197 @@ app.get('/api/integrations/status', (c) => {
   });
 });
 
-// === Cost API ===
+// === Server-Sent Events (SSE) ===
 
-// Get usage summary
-app.get('/api/costs/summary', (c) => {
-  const summary = getUsageSummary();
-  return c.json(summary);
-});
+const sseConnections = new Set<ReadableStreamDefaultController<Uint8Array>>();
 
-// Get budget status
-app.get('/api/costs/budget', (c) => {
-  const status = getBudgetStatus();
-  return c.json(status);
-});
+export function broadcastEvent(eventType: string, data: any) {
+  const message = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(message);
 
-// Get historical cost analytics
-app.get('/api/costs/analytics', async (c) => {
-  const storage = getStorage();
-  const analytics = await storage.getCostAnalytics();
-  return c.json(analytics);
-});
-
-// === Summary API ===
-
-// Get summary statistics (before :id route to avoid conflict)
-app.get('/api/summaries/stats', async (c) => {
-  const stats = await getSummaryStats();
-  return c.json(stats);
-});
-
-// Get recent summaries (before :id route to avoid conflict)
-app.get('/api/summaries/recent', async (c) => {
-  const limit = parseInt(c.req.query('limit') || '50');
-  const summaries = await getRecentSummaries(limit);
-
-  return c.json({
-    summaries,
-    count: summaries.length,
-  });
-});
-
-// Search summaries (before :id route to avoid conflict)
-app.get('/api/summaries/search', async (c) => {
-  const q = c.req.query('q');
-  const limit = parseInt(c.req.query('limit') || '20');
-
-  if (!q) {
-    return c.json({ error: 'Query parameter "q" is required' }, 400);
-  }
-
-  const summaries = await searchSummaries(q, limit);
-  return c.json({
-    query: q,
-    summaries,
-    count: summaries.length,
-  });
-});
-
-// List/query summaries
-app.get('/api/summaries', async (c) => {
-  const queryParams: Record<string, unknown> = {};
-
-  // Extract query parameters
-  const taskId = c.req.query('taskId');
-  const sessionId = c.req.query('sessionId');
-  const agent = c.req.query('agent');
-  const taskType = c.req.query('taskType');
-  const component = c.req.query('component');
-  const repository = c.req.query('repository');
-  const from = c.req.query('from');
-  const to = c.req.query('to');
-  const search = c.req.query('search');
-  const sortBy = c.req.query('sortBy');
-  const sortOrder = c.req.query('sortOrder');
-  const limit = c.req.query('limit');
-  const offset = c.req.query('offset');
-
-  if (taskId) queryParams.taskId = taskId;
-  if (sessionId) queryParams.sessionId = sessionId;
-  if (agent) queryParams.agent = agent;
-  if (taskType) queryParams.taskType = taskType;
-  if (component) queryParams.component = component;
-  if (repository) queryParams.repository = repository;
-  if (from) queryParams.from = from;
-  if (to) queryParams.to = to;
-  if (search) queryParams.search = search;
-  if (sortBy) queryParams.sortBy = sortBy;
-  if (sortOrder) queryParams.sortOrder = sortOrder;
-  if (limit) queryParams.limit = parseInt(limit);
-  if (offset) queryParams.offset = parseInt(offset);
-
-  // Validate query
-  const parsed = SummaryQuerySchema.partial().safeParse(queryParams);
-  if (!parsed.success) {
-    return c.json(
-      {
-        error: 'Invalid query parameters',
-        details: parsed.error.flatten(),
-      },
-      400
-    );
-  }
-
-  const result = await querySummaries(parsed.data);
-  return c.json({
-    summaries: result.summaries,
-    total: result.total,
-    limit: queryParams.limit || 50,
-    offset: queryParams.offset || 0,
-  });
-});
-
-// Semantic Search
-app.get('/api/summaries/semantic', async (c) => {
-  const query = c.req.query('q');
-  const type = c.req.query('type') as 'task' | 'summary' || 'summary';
-  const limit = parseInt(c.req.query('limit') || '5');
-  
-  if (!query) return c.json({ error: 'Missing query' }, 400);
-
-  try {
-    const storage = getStorage();
-    if (!storage.searchSimilar) {
-      return c.json({ error: 'Semantic search not supported by current storage tier' }, 501);
+  sseConnections.forEach((controller) => {
+    try {
+      controller.enqueue(bytes);
+    } catch {
+      // Connection closed
     }
+  });
+}
 
-    let vector: number[];
-    const vectorStr = c.req.query('vector');
+app.get('/api/events', (c) => {
+  const encoder = new TextEncoder();
 
-    if (vectorStr) {
-      vector = JSON.parse(vectorStr) as number[];
-    } else {
-      // Auto-generate vector from query text
-      const service = getEmbeddingService();
-      vector = await service.generateEmbedding(query);
+  const stream = new ReadableStream({
+    start(controller) {
+      sseConnections.add(controller);
+
+      const connectMsg = `event: connected\ndata: ${JSON.stringify({
+        message: 'Connected to GLINR event stream',
+        timestamp: new Date().toISOString()
+      })}\n\n`;
+      controller.enqueue(encoder.encode(connectMsg));
+
+      const heartbeat = setInterval(() => {
+        try {
+          const ping = `event: ping\ndata: ${JSON.stringify({ timestamp: new Date().toISOString() })}\n\n`;
+          controller.enqueue(encoder.encode(ping));
+        } catch {
+          clearInterval(heartbeat);
+          sseConnections.delete(controller);
+        }
+      }, 30000);
+
+      c.req.raw.signal.addEventListener('abort', () => {
+        clearInterval(heartbeat);
+        sseConnections.delete(controller);
+        try {
+          controller.close();
+        } catch {
+          // Already closed
+        }
+      });
+    },
+    cancel() {
+      // Cleanup handled by abort handler
     }
+  });
 
-    const results = await storage.searchSimilar(type, vector, limit);
-    
-    // Enrich results with actual summaries
-    const enriched = await Promise.all(results.map(async (r: any) => ({
-      ...r,
-      summary: type === 'summary' ? await getSummary(r.entityId) : null
-    })));
-
-    return c.json({ 
-      query,
-      results: enriched 
-    });
-  } catch (error) {
-    systemLogger.error('[API] Semantic search error:', error as Error);
-    return c.json({ error: 'Search failed', message: (error as Error).message }, 500);
-  }
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 });
 
-// Create summary
-app.post('/api/summaries', async (c) => {
+// === Protected Gateway Endpoint ===
+
+app.post('/api/gateway/execute-secure', tokenAuthMiddleware(['gateway:execute']), async (c) => {
   try {
     const body = await c.req.json();
-    const parsed = CreateSummaryInputSchema.safeParse(body);
+    const gateway = getGateway();
 
-    if (!parsed.success) {
-      return c.json(
-        {
-          error: 'Validation failed',
-          details: parsed.error.flatten(),
-        },
-        400
-      );
+    const request: GatewayRequest = {
+      task: body.task,
+      preferredAgent: body.preferredAgent,
+      workflow: body.workflow as WorkflowType,
+      timeoutMs: body.timeoutMs,
+      priority: body.priority,
+      autonomous: body.autonomous ?? false,
+      context: body.context,
+    };
+
+    if (!request.task.id) {
+      const parsed = CreateTaskSchema.safeParse(request.task);
+      if (!parsed.success) {
+        return c.json({ error: 'Invalid task', details: parsed.error.flatten() }, 400);
+      }
+      const createdTask = await addTask(parsed.data);
+      request.task = createdTask;
     }
 
-    const summary = await createSummary(parsed.data);
-
-    return c.json(
-      {
-        message: 'Summary created',
-        summary,
-      },
-      201
-    );
+    const response = await gateway.execute(request);
+    return c.json(response);
   } catch (error) {
-    console.error('[API] Error creating summary:', error);
-    return c.json(
-      {
-        error: 'Failed to create summary',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
-      500
-    );
+    return c.json({ error: 'Gateway execution failed' }, 500);
   }
 });
 
-// Generate PR Description
-app.get('/api/summaries/:id/pr-description', async (c) => {
+// === Mount Route Modules ===
+
+app.route('/auth', authRoutes);
+app.route('/webhooks', webhooksRoutes);
+app.route('/api/tasks', tasksRoutes);
+app.route('/api/dlq', dlqRoutes);
+app.route('/api/agents', agentsRoutes);
+app.route('/api/hook', hooksRoutes);
+app.route('/api/summaries', summariesRoutes);
+app.route('/api/costs', costsRoutes);
+app.route('/api/settings', settingsRoutes);
+app.route('/api/tokens', tokensRoutes);
+app.route('/api/gateway', gatewayRoutes);
+app.route('/api/search', searchRoutes);
+app.route('/api/tickets', ticketsRoutes);
+app.route('/api/projects', projectsRoutes);
+app.route('/api/stats', statsRoutes);
+app.route('/api/sync', syncRoutes);
+app.route('/api/chat', chatRoutes);
+app.route('/api/import', importRoutes);
+app.route('/api/users', userRoutes);
+app.route('/api/auth', authRoutes);
+app.route('/api/tools', toolsRoutes);
+app.route('/api/setup', setupRoutes);
+app.route('/api', labelsRoutes); // Labels routes mount at /api for /api/projects/:id/labels and /api/tickets/:id/labels
+
+// Alias /api/plugins to /api/settings/plugins for backwards compat
+app.get('/api/plugins/health', async (c) => {
+  return c.redirect('/api/settings/plugins/health');
+});
+app.post('/api/plugins/:id/toggle', async (c) => {
   const id = c.req.param('id');
-  const summary = await getSummary(id);
-
-  if (!summary) {
-    return c.json({ error: 'Summary not found' }, 404);
-  }
-
-  const description = generatePRDescription(summary);
-  return c.json({ 
-    id: summary.id,
-    title: summary.title,
-    description 
-  });
-});
-
-// Generate Changelog
-app.get('/api/summaries/changelog', async (c) => {
-  const limit = parseInt(c.req.query('limit') || '50');
-  const version = c.req.query('version');
-  
-  const summaries = await getRecentSummaries(limit);
-  const changelog = generateChangelog(summaries, version);
-
-  return c.json({ 
-    version: version || 'Unreleased',
-    count: summaries.length,
-    changelog 
-  });
-});
-
-// Get single summary
-app.get('/api/summaries/:id', async (c) => {
-  const id = c.req.param('id');
-  const summary = await getSummary(id);
-
-  if (!summary) {
-    return c.json({ error: 'Summary not found' }, 404);
-  }
-
-  return c.json({ summary });
-});
-
-// Delete summary
-app.delete('/api/summaries/:id', async (c) => {
-  const id = c.req.param('id');
-  const deleted = await deleteSummary(id);
-
-  if (!deleted) {
-    return c.json({ error: 'Summary not found' }, 404);
-  }
-
-  return c.json({ message: 'Summary deleted' });
-});
-
-// Get summaries for a task (nested route)
-app.get('/api/tasks/:taskId/summaries', async (c) => {
-  const taskId = c.req.param('taskId');
-  const summaries = await getTaskSummaries(taskId);
-
-  return c.json({
-    taskId,
-    summaries,
-    count: summaries.length,
-  });
+  return c.redirect(`/api/settings/plugins/${id}/toggle`, 307);
 });
 
 // === Server Startup ===
 
-const PORT = parseInt(process.env.PORT || settings.server?.port?.toString() || '3000');
-const ENABLE_CRON = process.env.ENABLE_CRON !== undefined 
-  ? process.env.ENABLE_CRON !== 'false' 
-  : (settings.server?.enableCron !== undefined ? settings.server.enableCron : true);
-
 async function main() {
-  console.log('🚀 GLINR Task Manager starting...');
-  console.log('   Mode: Autonomous');
+  console.log('[GLINR] Task Manager starting...');
+  console.log('[GLINR] Mode: Autonomous');
 
-  // Initialize task queue
+  // Initialize storage FIRST (queue needs it for persistence)
+  try {
+    await initStorage();
+    console.log('[OK] Storage initialized');
+
+    await initApiTokensTable();
+    console.log('[OK] API tokens table initialized');
+
+    // Initialize conversation tables for chat history
+    const { initConversationTables } = await import('./chat/conversations.js');
+    await initConversationTables();
+    console.log('[OK] Chat conversations initialized');
+
+    // Load saved AI provider configurations from database
+    const loadedProviders = await aiProvider.loadSavedConfigs(loadAllProviderConfigs);
+    if (loadedProviders > 0) {
+      console.log(`[OK] Loaded ${loadedProviders} saved AI provider configs`);
+    }
+  } catch (error) {
+    console.error('[ERROR] Failed to initialize storage:', error);
+    console.log('[WARN] Running with in-memory storage only');
+  }
+
+  // Initialize task queue (loads tasks from DB)
   try {
     await initTaskQueue();
-    // Register SSE broadcaster for real-time updates
     registerSSEBroadcaster(broadcastEvent);
-    console.log('✅ Task queue initialized');
-    console.log('✅ SSE event stream registered');
+    console.log('[OK] Task queue initialized');
+    console.log('[OK] SSE event stream registered');
   } catch (error) {
-    console.error('❌ Failed to initialize task queue:', error);
-    console.log('⚠️  Running without Redis (tasks will not be processed)');
+    console.error('[ERROR] Failed to initialize task queue:', error);
+    console.log('[WARN] Running without Redis (tasks will not be processed)');
+  }
+
+  // Initialize sync engine (if configured)
+  try {
+    const syncEngine = await initSyncIntegration();
+    if (syncEngine) {
+      console.log('[OK] Sync engine initialized');
+    } else {
+      console.log('[INFO] Sync engine disabled (enable in config/settings.yml)');
+    }
+  } catch (error) {
+    console.error('[WARN] Sync engine initialization failed:', error);
   }
 
   // Initialize cost tracking
   initTokenTracker();
-  console.log('✅ Token tracker initialized');
+  console.log('[OK] Token tracker initialized');
 
-  // Initialize storage (SQLite/libSQL)
-  try {
-    await initStorage();
-    console.log('✅ Storage initialized');
-  } catch (error) {
-    console.error('❌ Failed to initialize storage:', error);
-    console.log('⚠️  Running with in-memory storage only');
-  }
-
-  // Initialize default agents from config
+  // Initialize agents from config
   const registry = getAgentRegistry();
 
   interface AgentsYaml {
@@ -1172,29 +505,43 @@ async function main() {
   if (agentsConfig.agents && Array.isArray(agentsConfig.agents)) {
     for (const agentDef of agentsConfig.agents) {
       try {
-        // Filter out agent if required config is missing (from interpolated env vars)
         if (agentDef.type === 'openclaw' && !agentDef.config?.token) {
-          console.log(`ℹ️  Skipping agent ${agentDef.id}: Missing OPENCLAW_GATEWAY_TOKEN`);
+          console.log(`[INFO] Skipping agent ${agentDef.id}: Missing OPENCLAW_GATEWAY_TOKEN`);
           continue;
         }
 
         if (agentDef.type === 'claude-code' && !agentDef.config?.workingDir) {
-          console.log(`ℹ️  Skipping agent ${agentDef.id}: Missing CLAUDE_WORKING_DIR`);
+          console.log(`[INFO] Skipping agent ${agentDef.id}: Missing CLAUDE_WORKING_DIR`);
           continue;
         }
 
+        // Check if Ollama is reachable before configuring
+        if (agentDef.type === 'ollama') {
+          const ollamaUrl = agentDef.config?.baseUrl || 'http://localhost:11434';
+          try {
+            const resp = await fetch(`${ollamaUrl}/api/tags`, { signal: AbortSignal.timeout(2000) });
+            if (!resp.ok) {
+              console.log(`[INFO] Skipping agent ${agentDef.id}: Ollama not responding at ${ollamaUrl}`);
+              continue;
+            }
+          } catch {
+            console.log(`[INFO] Skipping agent ${agentDef.id}: Ollama not running at ${ollamaUrl}`);
+            continue;
+          }
+        }
+
         registry.createAdapter(agentDef);
-        console.log(`✅ Agent ${agentDef.id} (${agentDef.type}) configured`);
+        console.log(`[OK] Agent ${agentDef.id} (${agentDef.type}) configured`);
       } catch (error) {
-        console.error(`❌ Failed to configure agent ${agentDef.id}:`, error);
+        console.error(`[ERROR] Failed to configure agent ${agentDef.id}:`, error);
       }
     }
   }
 
-  // Auto-discover agents if enabled (respects settings.yml and env var)
+  // Auto-discover agents if enabled
   const autoDiscover = process.env.AUTO_DISCOVER_AGENTS !== undefined
     ? process.env.AUTO_DISCOVER_AGENTS === 'true'
-    : (settings.agents?.autoDiscover ?? false);
+    : (appSettings.agents?.autoDiscover ?? false);
 
   if (autoDiscover && !registry.getActiveAdapters().some(a => a.type === 'claude-code')) {
     try {
@@ -1210,18 +557,44 @@ async function main() {
           workingDir: process.env.CLAUDE_WORKING_DIR || process.cwd(),
         },
       });
-      console.log('✅ Claude Code adapter auto-discovered (CLI found)');
+      console.log('[OK] Claude Code adapter auto-discovered (CLI found)');
     } catch {
-      // CLI not found, ignore
+      // CLI not found
     }
   }
 
-  // Start cron jobs for autonomous operation
+  // Auto-discover Ollama if running locally
+  if (autoDiscover && !registry.getActiveAdapters().some(a => a.type === 'ollama')) {
+    try {
+      const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+      const response = await fetch(`${ollamaUrl}/api/tags`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (response.ok) {
+        registry.createAdapter({
+          id: 'ollama-auto',
+          type: 'ollama',
+          enabled: true,
+          maxConcurrent: 2,
+          priority: 3,
+          config: {
+            baseUrl: ollamaUrl,
+            model: process.env.OLLAMA_MODEL || 'llama3.2',
+          },
+        });
+        console.log('[OK] Ollama adapter auto-discovered (server running)');
+      }
+    } catch {
+      // Ollama not running
+    }
+  }
+
+  // Start cron jobs
   if (ENABLE_CRON) {
     startAllCronJobs();
-    console.log('✅ Cron jobs started (autonomous mode)');
+    console.log('[OK] Cron jobs started (autonomous mode)');
   } else {
-    console.log('ℹ️  Cron jobs disabled (ENABLE_CRON=false)');
+    console.log('[INFO] Cron jobs disabled (ENABLE_CRON=false)');
   }
 
   // Start server
@@ -1230,39 +603,40 @@ async function main() {
     port: PORT,
   });
 
-  console.log(`\n🎉 GLINR Task Manager running on http://localhost:${PORT}`);
+  console.log(`\n[READY] GLINR Task Manager running on http://localhost:${PORT}`);
   console.log(`\nEndpoints:`);
-  console.log(`  📋 Tasks:    http://localhost:${PORT}/api/tasks`);
-  console.log(`  🤖 Agents:   http://localhost:${PORT}/api/agents`);
-  console.log(`  💀 DLQ:      http://localhost:${PORT}/api/dlq`);
-  console.log(`  🔗 GitHub:   http://localhost:${PORT}/webhooks/github`);
-  console.log(`  🔗 Jira:     http://localhost:${PORT}/webhooks/jira`);
-  console.log(`  🪝 Hooks:    http://localhost:${PORT}/api/hook/tool-use`);
-  console.log(`  📊 Sessions: http://localhost:${PORT}/api/hook/sessions`);
-  console.log(`  ❤️  Health:   http://localhost:${PORT}/health`);
+  console.log(`  Tasks:    http://localhost:${PORT}/api/tasks`);
+  console.log(`  Agents:   http://localhost:${PORT}/api/agents`);
+  console.log(`  DLQ:      http://localhost:${PORT}/api/dlq`);
+  console.log(`  GitHub:   http://localhost:${PORT}/webhooks/github`);
+  console.log(`  Jira:     http://localhost:${PORT}/webhooks/jira`);
+  console.log(`  Hooks:    http://localhost:${PORT}/api/hook/tool-use`);
+  console.log(`  Sessions: http://localhost:${PORT}/api/hook/sessions`);
+  console.log(`  Health:   http://localhost:${PORT}/health`);
+  console.log(`  Gateway:  http://localhost:${PORT}/api/gateway/execute`);
 
   if (ENABLE_CRON) {
     const heartbeatMs = parseInt(process.env.POLL_INTERVAL_HEARTBEAT || '30000', 10);
     const issuesMs = parseInt(process.env.POLL_INTERVAL_ISSUES || '120000', 10);
     const staleMs = parseInt(process.env.POLL_INTERVAL_STALE || '60000', 10);
     console.log(`\nAutonomous Features (configurable via env):`);
-    console.log(`  💓 Heartbeat: ${Math.round(heartbeatMs / 1000)}s (POLL_INTERVAL_HEARTBEAT)`);
-    console.log(`  🔄 Issue Poller: ${Math.round(issuesMs / 1000)}s (POLL_INTERVAL_ISSUES)`);
-    console.log(`  🕐 Stale Checker: ${Math.round(staleMs / 1000)}s (POLL_INTERVAL_STALE)`);
-    console.log(`  📝 Log Level: ${process.env.LOG_LEVEL || 'INFO'} (LOG_LEVEL)`);
+    console.log(`  Heartbeat: ${Math.round(heartbeatMs / 1000)}s (POLL_INTERVAL_HEARTBEAT)`);
+    console.log(`  Issue Poller: ${Math.round(issuesMs / 1000)}s (POLL_INTERVAL_ISSUES)`);
+    console.log(`  Stale Checker: ${Math.round(staleMs / 1000)}s (POLL_INTERVAL_STALE)`);
+    console.log(`  Log Level: ${process.env.LOG_LEVEL || 'INFO'} (LOG_LEVEL)`);
   }
 }
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('\n⏳ Shutting down...');
+  console.log('\n[SHUTDOWN] Shutting down...');
   stopAllCronJobs();
   await closeTaskQueue();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('\n⏳ Shutting down...');
+  console.log('\n[SHUTDOWN] Shutting down...');
   stopAllCronJobs();
   await closeTaskQueue();
   process.exit(0);

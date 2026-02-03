@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { ThemeProvider } from './ThemeProvider';
 import { QueryProvider } from './QueryProvider';
 import { EventStreamProvider } from './EventStreamProvider';
+import { AuthProvider } from '@/features/auth';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -10,11 +11,13 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <QueryProvider>
-      <ThemeProvider>
-        <EventStreamProvider>
-          {children}
-        </EventStreamProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <EventStreamProvider>
+            {children}
+          </EventStreamProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </QueryProvider>
   );
 }

@@ -83,82 +83,85 @@ export function CreateTaskModal() {
           Create Task
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[525px]">
+      <DialogContent className="sm:max-w-[525px] glass rounded-[24px] border-white/10">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create New Task</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-xl font-bold">Create New Task</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
               Create a new task for the AI agents to execute
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="title">Title *</Label>
+              <Label htmlFor="title" className="text-sm font-semibold">Title *</Label>
               <Input
                 id="title"
                 value={title}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)}
                 placeholder="Fix bug in authentication"
+                className="bg-white/5 border-white/10 rounded-xl"
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="description">Description</Label>
+              <Label htmlFor="description" className="text-sm font-semibold">Description</Label>
               <Textarea
                 id="description"
                 value={description}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value)}
                 placeholder="Optional description..."
                 rows={3}
+                className="bg-white/5 border-white/10 rounded-xl resize-none"
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="prompt">AI Prompt *</Label>
+              <Label htmlFor="prompt" className="text-sm font-semibold">AI Prompt *</Label>
               <Textarea
                 id="prompt"
                 value={prompt}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)}
                 placeholder="Detailed instructions for the AI agent..."
                 rows={4}
+                className="bg-white/5 border-white/10 rounded-xl resize-none"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="source">Source</Label>
+                <Label htmlFor="source" className="text-sm font-semibold">Source</Label>
                 <Select value={source} onValueChange={setSource}>
-                  <SelectTrigger id="source">
+                  <SelectTrigger id="source" className="bg-white/5 border-white/10 rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="glass-heavy rounded-xl border-white/10">
                     <SelectItem value="manual">Manual</SelectItem>
                     <SelectItem value="github_issue">GitHub Issue</SelectItem>
                     <SelectItem value="jira">Jira</SelectItem>
-                    <SelectItem value="linear_issue">Linear</SelectItem>
+                    <SelectItem value="linear">Linear</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="priority">Priority</Label>
+                <Label htmlFor="priority" className="text-sm font-semibold">Priority</Label>
                 <Select value={priority} onValueChange={setPriority}>
-                  <SelectTrigger id="priority">
+                  <SelectTrigger id="priority" className="bg-white/5 border-white/10 rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Critical (1)</SelectItem>
-                    <SelectItem value="2">High (2)</SelectItem>
-                    <SelectItem value="3">Medium (3)</SelectItem>
-                    <SelectItem value="4">Low (4)</SelectItem>
+                  <SelectContent className="glass-heavy rounded-xl border-white/10">
+                    <SelectItem value="1">Critical (P1)</SelectItem>
+                    <SelectItem value="2">High (P2)</SelectItem>
+                    <SelectItem value="3">Medium (P3)</SelectItem>
+                    <SelectItem value="4">Low (P4)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>

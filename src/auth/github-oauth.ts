@@ -1,34 +1,20 @@
 import { Context } from 'hono';
-import { loadConfig } from '../utils/config-loader.js';
-
-interface GitHubAuthConfig {
-  clientId: string;
-  clientSecret: string;
-  redirectUri: string;
-}
-
-interface SettingsYaml {
-  github?: {
-    oauth?: GitHubAuthConfig;
-  };
-}
-
-const settings = loadConfig<SettingsYaml>('settings.yml');
+import { getGitHubOAuthConfig } from '../settings/index.js';
 
 /**
  * Redirect user to GitHub for OAuth
  */
 export async function redirectToGitHub(c: Context) {
-  const config = settings.github?.oauth;
+  const config = await getGitHubOAuthConfig();
   if (!config?.clientId) {
     return c.json({ error: 'GitHub OAuth not configured' }, 500);
   }
 
   const state = Math.random().toString(36).substring(7);
   // Store state in session/cookie if needed for CSRF protection
-  
+
   const url = `https://github.com/login/oauth/authorize?client_id=${config.clientId}&redirect_uri=${encodeURIComponent(config.redirectUri)}&scope=repo,user,workflow&state=${state}`;
-  
+
   return c.redirect(url);
 }
 
@@ -38,8 +24,8 @@ export async function redirectToGitHub(c: Context) {
 export async function handleGitHubCallback(c: Context) {
   const code = c.req.query('code');
   const state = c.req.query('state');
-  
-  const config = settings.github?.oauth;
+
+  const config = await getGitHubOAuthConfig();
   if (!config?.clientId || !config?.clientSecret) {
     return c.json({ error: 'GitHub OAuth not configured' }, 500);
   }
@@ -64,7 +50,7 @@ export async function handleGitHubCallback(c: Context) {
     });
 
     const data = await response.json() as any;
-    
+
     if (data.error) {
       return c.json({ error: data.error, description: data.error_description }, 400);
     }

@@ -228,3 +228,220 @@ ui/src/features/summaries/  # All summary-related code together
 - Don't block the event loop
 - Don't ignore TypeScript errors
 - Don't skip tests for new features
+- **Don't hardcode limits/thresholds** - Use environment variables for tunables
+
+## Environment Variables (Tunables)
+
+Performance settings that can be overridden without code changes:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POOL_MAX_CONCURRENT` | 50 | Max concurrent tool executions |
+| `POOL_MAX_QUEUE_SIZE` | 200 | Max pending executions in queue |
+| `POOL_TIMEOUT_MS` | 300000 | Tool execution timeout (5 min) |
+| `POOL_QUEUE_TIMEOUT_MS` | 30000 | Max time waiting in queue (30s) |
+| `STREAM_CHUNK_BATCH_SIZE` | 64 | Batch size before flushing stream |
+| `STREAM_CHUNK_BATCH_TIME_MS` | 30 | Max time before flushing batch |
+
+---
+
+## Reference: OpenClaw Device/Session Management Patterns
+
+> Source: `/Users/gdsks/G-Development/GLINR-V3/openclaw-reference/src/`
+
+### 1. Device Identity (`infra/device-identity.ts`)
+
+Uses ED25519 key pairs for cryptographic device identification:
+
+```typescript
+type DeviceIdentity = {
+  deviceId: string;       // SHA256 hash of public key
+  publicKeyPem: string;   // PEM-encoded public key
+  privateKeyPem: string;  // PEM-encoded private key (secret)
+};
+
+// Pattern: Load or create on first use
+function loadOrCreateDeviceIdentity(filePath = "~/.openclaw/identity/device.json"): DeviceIdentity;
+
+// Pattern: Sign payloads for verification
+function signDevicePayload(privateKeyPem: string, payload: string): string;
+
+// Pattern: Verify signatures from other devices
+function verifyDeviceSignature(publicKey: string, payload: string, signature: string): boolean;
+```
+
+**Key Features:**
+- DeviceId derived from public key (deterministic, can be verified)
+- Secure file storage with `chmod 0o600`
+- Base64URL encoding for transport-safe signatures
+- ED25519 for fast, small signatures
+
+### 2. Device Auth Store (`infra/device-auth-store.ts`)
+
+Token storage per device with role-based access:
+
+```typescript
+type DeviceAuthEntry = {
+  token: string;
+  role: string;
+  scopes: string[];
+  updatedAtMs: number;
+};
+
+type DeviceAuthStore = {
+  version: 1;
+  deviceId: string;
+  tokens: Record<string, DeviceAuthEntry>;  // keyed by role
+};
+
+// Pattern: Load token for specific role
+function loadDeviceAuthToken(params: {
+  deviceId: string;
+  role: string;
+}): DeviceAuthEntry | null;
+
+// Pattern: Store token with scopes
+function storeDeviceAuthToken(params: {
+  deviceId: string;
+  role: string;
+  token: string;
+  scopes?: string[];
+}): DeviceAuthEntry;
+```
+
+**Key Features:**
+- Multiple tokens per device (different roles/services)
+- Scopes for fine-grained permissions
+- File storage with 0o600 permissions
+- Version field for future migrations
+
+### 3. Pairing Store (`pairing/pairing-store.ts`)
+
+Human-friendly pairing codes for new device authorization:
+
+```typescript
+type PairingRequest = {
+  id: string;            // User/device identifier
+  code: string;          // 8-char human-friendly code
+  createdAt: string;
+  lastSeenAt: string;
+  meta?: Record<string, string>;
+};
+
+// Constants
+const PAIRING_CODE_LENGTH = 8;
+const PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // No 0O1I
+const PAIRING_PENDING_TTL_MS = 60 * 60 * 1000;  // 1 hour
+const PAIRING_PENDING_MAX = 3;  // Max concurrent pending requests
+
+// Pattern: Request pairing (creates code)
+async function upsertChannelPairingRequest(params: {
+  channel: PairingChannel;
+  id: string;
+  meta?: Record<string, string>;
+}): Promise<{ code: string; created: boolean }>;
+
+// Pattern: Approve code (adds to allow-list)
+async function approveChannelPairingCode(params: {
+  channel: PairingChannel;
+  code: string;
+}): Promise<{ id: string; entry?: PairingRequest } | null>;
+```
+
+**Key Features:**
+- File locking with `proper-lockfile` for concurrency
+- Automatic TTL expiration of pending requests
+- Allow-list stored separately per channel
+- No ambiguous characters in codes (0/O, 1/I removed)
+
+### 4. Node Pairing (`infra/node-pairing.ts`)
+
+Multi-node management with request/approve workflow:
+
+```typescript
+type NodePairingPendingRequest = {
+  requestId: string;
+  nodeId: string;
+  displayName?: string;
+  platform?: string;      // "macos", "linux", etc.
+  version?: string;
+  deviceFamily?: string;  // "MacBookPro", etc.
+  caps?: string[];        // Capabilities
+  commands?: string[];    // Supported commands
+  permissions?: Record<string, boolean>;
+  isRepair?: boolean;     // Re-pairing existing node
+  ts: number;
+};
+
+type NodePairingPairedNode = {
+  nodeId: string;
+  token: string;          // Auth token after approval
+  // ...metadata
+  createdAtMs: number;
+  approvedAtMs: number;
+  lastConnectedAtMs?: number;
+};
+
+// Pattern: Request pairing
+async function requestNodePairing(req: {
+  nodeId: string;
+  displayName?: string;
+  platform?: string;
+  caps?: string[];
+}): Promise<{ status: "pending"; request: NodePairingPendingRequest; created: boolean }>;
+
+// Pattern: Approve request (generates token)
+async function approveNodePairing(requestId: string): Promise<{
+  requestId: string;
+  node: NodePairingPairedNode;
+} | null>;
+
+// Pattern: Verify node token
+async function verifyNodeToken(nodeId: string, token: string): Promise<{
+  ok: boolean;
+  node?: NodePairingPairedNode;
+}>;
+```
+
+**Key Features:**
+- 5-minute TTL on pending requests
+- Atomic file writes with temp file + rename
+- Capability/permission tracking per node
+- Last connected timestamp for activity monitoring
+- In-memory lock for concurrency safety
+
+### Implementation Notes for GLINR
+
+When implementing similar patterns:
+
+1. **Database-backed storage** - Use SQLite/LibSQL instead of file-based for multi-user deployments
+2. **Token rotation** - Add refresh token support for OAuth flows
+3. **Rate limiting** - Add brute-force protection on pairing codes
+4. **Audit logging** - Log all auth events (login, pair, approve, reject)
+5. **Session management** - Track active sessions per user/device
+
+Example schema additions:
+```sql
+-- Device registry
+CREATE TABLE devices (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id),
+  name TEXT,
+  platform TEXT,
+  device_family TEXT,
+  last_ip TEXT,
+  last_seen_at INTEGER,
+  created_at INTEGER,
+  status TEXT DEFAULT 'active'
+);
+
+-- Pending pairing requests
+CREATE TABLE pairing_requests (
+  id TEXT PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  user_id TEXT,
+  device_info TEXT,  -- JSON
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER
+);
+```
