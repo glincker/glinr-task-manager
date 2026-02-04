@@ -251,6 +251,23 @@ export const BUILT_IN_TEMPLATES: Omit<JobTemplate, 'id' | 'createdAt' | 'updated
     suggestedIntervalMs: 300000, // Every 5 minutes
     isBuiltIn: true,
   },
+  {
+    name: 'Database Maintenance',
+    description: 'Optimize database performance and migrate legacy data formats',
+    icon: '⚙️',
+    category: 'cleanup',
+    jobType: 'tool',
+    payloadTemplate: {
+      tool: 'db_maintenance',
+      params: {
+        optimize: true,
+        migrateSummaries: true,
+        cleanupLogs: false,
+      },
+    },
+    suggestedCron: '0 2 * * *', // Daily at 2 AM
+    isBuiltIn: true,
+  },
 ];
 
 // =============================================================================

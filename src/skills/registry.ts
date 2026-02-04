@@ -6,14 +6,13 @@
  */
 
 import type {
-  Skill,
   SkillEntry,
   SkillSnapshot,
-  SkillsConfig,
-  SkillEligibilityContext,
+  SkillsSystemConfig,
+  SkillSource,
 } from './types.js';
 import { loadAllSkills, filterSkills } from './loader.js';
-import { buildSkillSnapshot, formatSkillsForPrompt, estimateSkillsTokenCost } from './prompt-builder.js';
+import { buildSkillSnapshot, estimateSkillsTokenCost } from './prompt-builder.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -41,7 +40,7 @@ export class SkillsRegistry {
   private entries: Map<string, SkillEntry> = new Map();
   private snapshot: SkillSnapshot | null = null;
   private snapshotVersion = 0;
-  private config: SkillsConfig = {};
+  private config: SkillsSystemConfig | undefined;
   private workspaceDir: string | null = null;
   private mcpServers: Map<string, MCPServerInfo> = new Map();
 
@@ -50,10 +49,10 @@ export class SkillsRegistry {
    */
   async initialize(params: {
     workspaceDir?: string;
-    config?: SkillsConfig;
+    config?: SkillsSystemConfig;
   }): Promise<void> {
     this.workspaceDir = params.workspaceDir || null;
-    this.config = params.config || {};
+    this.config = params.config;
     await this.reload();
   }
 
@@ -63,12 +62,12 @@ export class SkillsRegistry {
   async reload(): Promise<void> {
     const allEntries = await loadAllSkills({
       workspaceDir: this.workspaceDir || undefined,
-      extraDirs: this.config.load?.extraDirs,
+      extraDirs: this.config?.load?.extraDirs,
     });
 
     this.entries.clear();
     for (const entry of allEntries) {
-      this.entries.set(entry.skill.name, entry);
+      this.entries.set(entry.name, entry);
     }
 
     // Invalidate snapshot
@@ -86,30 +85,29 @@ export class SkillsRegistry {
 
     // Create a dynamic skill for this MCP server
     const mcpSkill: SkillEntry = {
-      skill: {
-        name: `mcp-${info.name}`,
-        description: `MCP server: ${info.name} - ${info.tools.length} tools available`,
-        content: this.generateMCPSkillContent(info),
-        filePath: `mcp://${info.name}`,
-        baseDir: `mcp://${info.name}`,
-        source: 'mcp',
-      },
+      name: `mcp-${info.name}`,
+      description: `MCP server: ${info.name} - ${info.tools.length} tools available`,
+      source: 'plugin' as SkillSource, // MCP skills are treated as plugins
+      dirPath: `mcp://${info.name}`,
+      skillMdPath: `mcp://${info.name}/SKILL.md`,
       frontmatter: {
         name: `mcp-${info.name}`,
         description: `MCP server capabilities for ${info.name}`,
       },
       metadata: {
-        category: 'mcp',
-        mcpServer: info.name,
-        tools: info.tools.map((t) => t.name),
+        toolCategories: info.tools.map((t) => t.name),
       },
+      instructions: this.generateMCPSkillContent(info),
       invocation: {
         userInvocable: true,
-        disableModelInvocation: false,
+        modelInvocable: true,
       },
+      eligible: true,
+      eligibilityErrors: [],
+      enabled: true,
     };
 
-    this.entries.set(mcpSkill.skill.name, mcpSkill);
+    this.entries.set(mcpSkill.name, mcpSkill);
 
     // Invalidate snapshot
     this.snapshotVersion++;
@@ -170,12 +168,8 @@ Call these tools using the MCP protocol. The tools will be executed by the MCP s
   /**
    * Get eligible entries based on current context
    */
-  getEligibleEntries(eligibility?: SkillEligibilityContext): SkillEntry[] {
-    const contextWithMcp: SkillEligibilityContext = {
-      ...eligibility,
-      connectedMcpServers: Array.from(this.mcpServers.keys()),
-    };
-    return filterSkills(this.getAllEntries(), this.config, contextWithMcp);
+  getEligibleEntries(): SkillEntry[] {
+    return filterSkills(this.getAllEntries(), this.config);
   }
 
   /**
@@ -195,23 +189,17 @@ Call these tools using the MCP protocol. The tools will be executed by the MCP s
   /**
    * Get or build skills snapshot for the current session
    */
-  async getSnapshot(eligibility?: SkillEligibilityContext): Promise<SkillSnapshot> {
+  async getSnapshot(): Promise<SkillSnapshot> {
     // Return cached snapshot if still valid
     if (this.snapshot && this.snapshot.version === this.snapshotVersion) {
       return this.snapshot;
     }
 
     // Build fresh snapshot
-    const contextWithMcp: SkillEligibilityContext = {
-      ...eligibility,
-      connectedMcpServers: Array.from(this.mcpServers.keys()),
-    };
-
     this.snapshot = await buildSkillSnapshot({
       workspaceDir: this.workspaceDir || undefined,
       config: this.config,
       entries: this.getAllEntries(),
-      eligibility: contextWithMcp,
       version: this.snapshotVersion,
     });
 
@@ -221,26 +209,24 @@ Call these tools using the MCP protocol. The tools will be executed by the MCP s
   /**
    * Get skills prompt for injection into system message
    */
-  async getSkillsPrompt(eligibility?: SkillEligibilityContext): Promise<string> {
-    const snapshot = await this.getSnapshot(eligibility);
+  async getSkillsPrompt(): Promise<string> {
+    const snapshot = await this.getSnapshot();
     return snapshot.prompt;
   }
 
   /**
    * Estimate token cost of current skills
    */
-  async estimateTokenCost(eligibility?: SkillEligibilityContext): Promise<number> {
-    const eligible = this.getEligibleEntries(eligibility);
-    const skills = eligible
-      .filter((e) => e.invocation?.disableModelInvocation !== true)
-      .map((e) => e.skill);
-    return estimateSkillsTokenCost(skills);
+  async estimateTokenCost(): Promise<number> {
+    const eligible = this.getEligibleEntries();
+    const promptEntries = eligible.filter((e) => e.invocation.modelInvocable);
+    return estimateSkillsTokenCost(promptEntries);
   }
 
   /**
    * Update configuration
    */
-  setConfig(config: SkillsConfig): void {
+  setConfig(config: SkillsSystemConfig): void {
     this.config = config;
     // Invalidate snapshot on config change
     this.snapshotVersion++;
@@ -265,20 +251,18 @@ Call these tools using the MCP protocol. The tools will be executed by the MCP s
   } {
     const bySource: Record<string, number> = {};
     for (const entry of this.entries.values()) {
-      const source = entry.skill.source;
+      const source = entry.source;
       bySource[source] = (bySource[source] || 0) + 1;
     }
 
     const eligible = this.getEligibleEntries();
-    const skills = eligible
-      .filter((e) => e.invocation?.disableModelInvocation !== true)
-      .map((e) => e.skill);
+    const promptEntries = eligible.filter((e) => e.invocation.modelInvocable);
 
     return {
       totalSkills: this.entries.size,
       bySource,
       mcpServers: this.mcpServers.size,
-      estimatedTokens: estimateSkillsTokenCost(skills),
+      estimatedTokens: estimateSkillsTokenCost(promptEntries),
     };
   }
 }
@@ -301,7 +285,7 @@ export function getSkillsRegistry(): SkillsRegistry {
  */
 export async function initializeSkillsRegistry(params: {
   workspaceDir?: string;
-  config?: SkillsConfig;
+  config?: SkillsSystemConfig;
 }): Promise<SkillsRegistry> {
   const registry = getSkillsRegistry();
   await registry.initialize(params);

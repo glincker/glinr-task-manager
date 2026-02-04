@@ -1,11 +1,21 @@
 # GLINR Development Tracker
 
-> **Last Updated:** 2026-02-03T06:45:00Z
+> **Last Updated:** 2026-02-03
 > **Active Agents:** Claude Opus (Main)
 
 ---
 
 ## Recently Completed
+
+### Chat UI Polish (Phase 14) ✅
+- [x] Chat sidebar with collapsible design
+- [x] Conversation grouping by time and project
+- [x] Agent mode toggle (tools auto-enable in agentic mode)
+- [x] Compact chat input with inline mode toggle
+- [x] Focused view mode for maximized chat space
+- [x] Lifted shadow effect on chat container
+- [x] Reduced spacing between layout elements
+- [x] localStorage persistence for UI preferences
 
 ### GitHub Projects Import Wizard Enhancement (Phase 12) ✅
 - [x] Enhanced import wizard (6-step modal with preview)

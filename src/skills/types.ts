@@ -1,175 +1,281 @@
 /**
- * Skills System Types
+ * Skills System - Core Types
  *
- * Following OpenClaw's proven patterns for skill management.
- * Skills are Markdown files that teach the AI about available capabilities.
+ * Modular capability system inspired by OpenClaw's SKILL.md format
+ * and the Agent Skills open specification.
+ *
+ * Skills are discoverable instruction packages that extend agent capabilities
+ * via progressive disclosure: metadata loads early, full instructions on demand.
  */
 
-/**
- * Skill metadata from YAML frontmatter
- */
+// =============================================================================
+// SKILL.md Frontmatter
+// =============================================================================
+
+/** Parsed SKILL.md frontmatter (YAML header) */
+export interface SkillFrontmatter {
+  name: string;
+  description: string;
+
+  /** Whether users can invoke this skill via /command */
+  'user-invocable'?: boolean;
+
+  /** Whether AI models can auto-invoke this skill */
+  'disable-model-invocation'?: boolean;
+
+  /** Command dispatch to a tool */
+  'command-dispatch'?: 'tool';
+  'command-tool'?: string;
+  'command-arg-mode'?: 'raw' | 'parsed';
+
+  /** Extended metadata */
+  metadata?: string; // JSON string containing SkillMetadata
+}
+
+/** Extended metadata (parsed from frontmatter.metadata JSON) */
 export interface SkillMetadata {
-  /** Unique skill identifier */
-  name: string;
-  /** Short description shown in skill lists */
-  description: string;
-  /** Optional version */
-  version?: string;
-  /** Optional homepage URL */
-  homepage?: string;
-  /** Extended metadata in JSON format */
-  glinr?: GlinrSkillMetadata;
-}
-
-/**
- * GLINR-specific skill metadata (inside metadata.glinr)
- */
-export interface GlinrSkillMetadata {
-  /** Always include this skill */
+  /** Always enable this skill regardless of requirements */
   always?: boolean;
-  /** Override config key */
+
+  /** Override skill key (for config lookups) */
   skillKey?: string;
-  /** Primary environment variable */
+
+  /** Primary environment variable (API key) */
   primaryEnv?: string;
-  /** UI emoji */
+
+  /** Visual identifier */
   emoji?: string;
-  /** Homepage URL */
+
+  /** Documentation URL */
   homepage?: string;
-  /** Platform filter (darwin, linux, win32) */
-  os?: string[];
-  /** Category for grouping */
-  category?: string;
-  /** Priority for ordering (higher = first) */
-  priority?: number;
-  /** Tools this skill teaches about */
-  tools?: string[];
-  /** MCP server this skill relates to */
-  mcpServer?: string;
-  /** Requirements for skill to be eligible */
+
+  /** Supported platforms */
+  os?: ('darwin' | 'linux' | 'win32')[];
+
+  /** Required dependencies */
   requires?: {
-    /** All binaries must exist on PATH */
+    /** All of these binaries must be available */
     bins?: string[];
-    /** At least one binary must exist */
+    /** At least one of these binaries must be available */
     anyBins?: string[];
-    /** Environment variables must be set */
+    /** All of these env vars must be set */
     env?: string[];
-    /** Config paths must be truthy */
+    /** All of these config paths must be truthy */
     config?: string[];
-    /** MCP server must be connected */
-    mcp?: string[];
   };
+
+  /** Installation instructions for dependencies */
+  install?: SkillInstallSpec[];
+
+  /** Tool categories this skill provides */
+  toolCategories?: string[];
 }
 
-/**
- * Skill invocation policy
- */
-export interface SkillInvocationPolicy {
-  /** Can users invoke via slash command */
-  userInvocable: boolean;
-  /** Exclude from model prompt (user-only) */
-  disableModelInvocation: boolean;
+/** How to install a missing dependency */
+export interface SkillInstallSpec {
+  kind: 'brew' | 'npm' | 'pnpm' | 'go' | 'pip' | 'download';
+  id?: string;
+  label?: string;
+  bins?: string[];
+  os?: string[];
+  formula?: string;   // brew
+  package?: string;    // npm/pip/pnpm
+  module?: string;     // go
+  url?: string;        // download
+  archive?: string;    // tar.gz/zip
+  extract?: boolean;
+  targetDir?: string;
 }
 
-/**
- * Parsed skill frontmatter (raw key-value pairs)
- */
-export type ParsedSkillFrontmatter = Record<string, string>;
+// =============================================================================
+// Skill Entry (Unified representation)
+// =============================================================================
 
-/**
- * Loaded skill entry
- */
-export interface Skill {
-  /** Skill name from frontmatter */
-  name: string;
-  /** Description from frontmatter */
-  description: string;
-  /** Full skill content (Markdown) */
-  content: string;
-  /** Path to SKILL.md file */
-  filePath: string;
-  /** Directory containing the skill */
-  baseDir: string;
-  /** Source location type */
-  source: 'workspace' | 'managed' | 'bundled' | 'plugin' | 'mcp';
-}
+/** Source of a skill */
+export type SkillSource = 'bundled' | 'managed' | 'workspace' | 'plugin';
 
-/**
- * Full skill entry with metadata
- */
+/** A loaded skill entry */
 export interface SkillEntry {
-  skill: Skill;
-  frontmatter: ParsedSkillFrontmatter;
-  metadata?: GlinrSkillMetadata;
-  invocation?: SkillInvocationPolicy;
+  /** Unique skill name */
+  name: string;
+
+  /** Human-readable description */
+  description: string;
+
+  /** Source where this skill was loaded from */
+  source: SkillSource;
+
+  /** Directory path containing the skill */
+  dirPath: string;
+
+  /** SKILL.md file path */
+  skillMdPath: string;
+
+  /** Parsed frontmatter */
+  frontmatter: SkillFrontmatter;
+
+  /** Parsed extended metadata */
+  metadata?: SkillMetadata;
+
+  /** Full instructions (body of SKILL.md after frontmatter) */
+  instructions: string;
+
+  /** Invocation policy */
+  invocation: SkillInvocationPolicy;
+
+  /** Whether this skill is eligible (requirements met) */
+  eligible: boolean;
+
+  /** Reasons skill is ineligible (missing bins, env, etc.) */
+  eligibilityErrors: string[];
+
+  /** Whether this skill is enabled in config */
+  enabled: boolean;
+
+  /** Chat command spec (if user-invocable) */
+  command?: SkillCommandSpec;
 }
 
-/**
- * Skill eligibility context (for remote nodes, etc.)
- */
-export interface SkillEligibilityContext {
-  /** Remote node capabilities */
-  remote?: {
-    platforms: string[];
-    hasBin: (bin: string) => boolean;
-    hasAnyBin: (bins: string[]) => boolean;
-    note?: string;
+/** Controls how the skill can be invoked */
+export interface SkillInvocationPolicy {
+  /** Users can invoke via /command */
+  userInvocable: boolean;
+
+  /** AI models can auto-invoke */
+  modelInvocable: boolean;
+}
+
+/** Chat command mapping */
+export interface SkillCommandSpec {
+  /** Command name (e.g., "python") for /python */
+  name: string;
+
+  /** Skill it maps to */
+  skillName: string;
+
+  /** Description (max 100 chars) */
+  description: string;
+
+  /** Optional: dispatch to a specific tool */
+  dispatch?: {
+    kind: 'tool';
+    toolName: string;
+    argMode?: 'raw' | 'parsed';
   };
-  /** Connected MCP servers */
-  connectedMcpServers?: string[];
 }
 
-/**
- * Cached skill snapshot for a session
- */
+// =============================================================================
+// Skill Snapshot (Lazy-evaluated state)
+// =============================================================================
+
+/** Snapshot of skill state for prompt injection */
 export interface SkillSnapshot {
-  /** Formatted prompt for LLM injection */
+  /** Formatted skills prompt for AI model */
   prompt: string;
-  /** List of eligible skills */
+
+  /** Summary of available skills */
   skills: Array<{
     name: string;
+    description: string;
     primaryEnv?: string;
-    category?: string;
+    source: SkillSource;
   }>;
-  /** Full skill objects */
-  resolvedSkills?: Skill[];
-  /** Snapshot version for cache invalidation */
-  version?: number;
+
+  /** Resolved skill entries */
+  entries: SkillEntry[];
+
+  /** Change tracking version */
+  version: number;
+
+  /** When this snapshot was built */
+  builtAt: number;
 }
 
-/**
- * Skill configuration in glinr.json
- */
+// =============================================================================
+// Skill Configuration
+// =============================================================================
+
+/** Per-skill config (from settings) */
 export interface SkillConfig {
-  /** Enable/disable skill */
   enabled?: boolean;
-  /** API key for primaryEnv */
   apiKey?: string;
-  /** Environment variables to inject */
   env?: Record<string, string>;
-  /** Custom config values */
   config?: Record<string, unknown>;
 }
 
-/**
- * Skills loading configuration
- */
-export interface SkillsLoadConfig {
-  /** Extra directories to load skills from */
-  extraDirs?: string[];
-  /** Watch for changes */
-  watch?: boolean;
-  /** Debounce interval in ms */
-  watchDebounceMs?: number;
+/** Skills system configuration */
+export interface SkillsSystemConfig {
+  /** Directories to load skills from */
+  load: {
+    /** Additional skill directories */
+    extraDirs: string[];
+    /** Watch for file changes */
+    watch: boolean;
+    /** Debounce delay for file watcher */
+    watchDebounceMs: number;
+  };
+
+  /** Installation preferences */
+  install: {
+    /** Prefer brew over other package managers */
+    preferBrew: boolean;
+    /** Node package manager */
+    nodeManager: 'npm' | 'pnpm' | 'yarn';
+  };
+
+  /** Per-skill configuration overrides */
+  entries: Record<string, SkillConfig>;
+
+  /** Bundled skills allowlist (empty = all allowed) */
+  allowBundled: string[];
 }
 
-/**
- * Full skills configuration
- */
-export interface SkillsConfig {
-  /** Per-skill overrides */
-  entries?: Record<string, SkillConfig>;
-  /** Loading options */
-  load?: SkillsLoadConfig;
-  /** Allowlist for bundled skills */
-  allowBundled?: string[];
+/** Default configuration */
+export const DEFAULT_SKILLS_CONFIG: SkillsSystemConfig = {
+  load: {
+    extraDirs: [],
+    watch: true,
+    watchDebounceMs: 250,
+  },
+  install: {
+    preferBrew: true,
+    nodeManager: 'pnpm',
+  },
+  entries: {},
+  allowBundled: [],
+};
+
+// =============================================================================
+// Skill Status (for diagnostics)
+// =============================================================================
+
+/** Detailed status for a single skill */
+export interface SkillStatus {
+  name: string;
+  source: SkillSource;
+  enabled: boolean;
+  eligible: boolean;
+  errors: string[];
+  missing: {
+    bins: string[];
+    env: string[];
+    config: string[];
+  };
+  installOptions: SkillInstallSpec[];
+  metadata?: SkillMetadata;
+}
+
+/** Overall skills system status */
+export interface SkillsStatus {
+  totalLoaded: number;
+  totalEligible: number;
+  totalEnabled: number;
+  skills: SkillStatus[];
+  sources: {
+    bundled: number;
+    managed: number;
+    workspace: number;
+    plugin: number;
+  };
+  version: number;
 }

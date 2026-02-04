@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
-import { eq, and, gte, lte, like, desc, asc, count, sql } from 'drizzle-orm';
+import { eq, and, or, gte, lte, like, desc, asc, count, sql } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import path from 'path';
 import fs from 'fs';
@@ -51,6 +51,7 @@ export class LibSQLAdapter implements StorageAdapter {
         labels TEXT NOT NULL DEFAULT '[]',
         assigned_agent TEXT,
         assigned_agent_id TEXT,
+        ticket_id TEXT,
         created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
         started_at INTEGER,
@@ -61,6 +62,13 @@ export class LibSQLAdapter implements StorageAdapter {
         max_attempts INTEGER NOT NULL DEFAULT 3
       )
     `);
+
+    // Phase 17: Add ticket_id column migration for existing databases
+    try {
+      await this.client.execute(`ALTER TABLE tasks ADD COLUMN ticket_id TEXT`);
+    } catch {
+      // Column already exists - ignore
+    }
 
     await this.client.execute(`
       CREATE TABLE IF NOT EXISTS summaries (
@@ -102,6 +110,24 @@ export class LibSQLAdapter implements StorageAdapter {
         created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Summary blobs table for large raw output (Phase 17)
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS summary_blobs (
+        id TEXT PRIMARY KEY,
+        summary_id TEXT NOT NULL REFERENCES summaries(id) ON DELETE CASCADE,
+        raw_output TEXT NOT NULL,
+        compressed_size INTEGER,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Add has_blob_output column to summaries if it doesn't exist
+    try {
+      await this.client.execute(`ALTER TABLE summaries ADD COLUMN has_blob_output INTEGER DEFAULT 0`);
+    } catch (e) {
+      // Column already exists, ignore
+    }
 
     await this.client.execute(`
       CREATE TABLE IF NOT EXISTS settings (
@@ -247,6 +273,16 @@ export class LibSQLAdapter implements StorageAdapter {
     `);
 
     await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS ticket_relations (
+        id TEXT PRIMARY KEY,
+        source_ticket_id TEXT NOT NULL REFERENCES tickets(id),
+        target_ticket_id TEXT NOT NULL REFERENCES tickets(id),
+        relation_type TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await this.client.execute(`
       CREATE TABLE IF NOT EXISTS ticket_history (
         id TEXT PRIMARY KEY,
         ticket_id TEXT NOT NULL REFERENCES tickets(id),
@@ -296,6 +332,22 @@ export class LibSQLAdapter implements StorageAdapter {
       CREATE TABLE IF NOT EXISTS project_sequence (
         workspace_id TEXT PRIMARY KEY DEFAULT 'default',
         last_sequence INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS states (
+        id TEXT PRIMARY KEY,
+        project_id TEXT REFERENCES projects(id),
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT '#6B7280',
+        description TEXT,
+        state_group TEXT NOT NULL,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        sequence INTEGER NOT NULL DEFAULT 65535,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -583,6 +635,85 @@ export class LibSQLAdapter implements StorageAdapter {
       )
     `);
 
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS dead_letter_tasks (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        prompt TEXT NOT NULL,
+        source TEXT NOT NULL,
+        source_id TEXT,
+        source_url TEXT,
+        repository TEXT,
+        branch TEXT,
+        labels TEXT NOT NULL DEFAULT '[]',
+        assigned_agent TEXT,
+        priority INTEGER NOT NULL DEFAULT 3,
+        attempts INTEGER NOT NULL,
+        max_attempts INTEGER NOT NULL,
+        last_error_code TEXT NOT NULL,
+        last_error_message TEXT NOT NULL,
+        last_error_stack TEXT,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        last_retry_at INTEGER,
+        status TEXT NOT NULL DEFAULT 'pending',
+        resolved_at INTEGER,
+        resolved_by TEXT,
+        resolution_note TEXT,
+        metadata TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        task_created_at INTEGER,
+        task_started_at INTEGER
+      )
+    `);
+
+    // === AGENT SESSIONS TABLES (Phase 23) ===
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS agent_sessions (
+        id TEXT PRIMARY KEY,
+        parent_session_id TEXT REFERENCES agent_sessions(id),
+        conversation_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        goal TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        depth INTEGER NOT NULL DEFAULT 0,
+        current_step INTEGER NOT NULL DEFAULT 0,
+        max_steps INTEGER NOT NULL DEFAULT 20,
+        used_budget INTEGER NOT NULL DEFAULT 0,
+        max_budget INTEGER NOT NULL DEFAULT 20000,
+        final_result TEXT,
+        stop_reason TEXT,
+        allowed_tools TEXT,
+        disallowed_tools TEXT,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        started_at INTEGER,
+        completed_at INTEGER,
+        updated_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        metadata TEXT NOT NULL DEFAULT '{}'
+      )
+    `);
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS session_messages (
+        id TEXT PRIMARY KEY,
+        from_session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+        to_session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+        type TEXT NOT NULL DEFAULT 'message',
+        subject TEXT,
+        content TEXT NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 5,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reply_to_message_id TEXT REFERENCES session_messages(id),
+        expires_at INTEGER,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        delivered_at INTEGER,
+        read_at INTEGER
+      )
+    `);
+
     // Add new columns to scheduled_jobs if they don't exist
     try {
       await this.client.execute(`ALTER TABLE scheduled_jobs ADD COLUMN labels TEXT NOT NULL DEFAULT '[]'`);
@@ -611,6 +742,16 @@ export class LibSQLAdapter implements StorageAdapter {
     `);
     await this.client.execute(`
       CREATE INDEX IF NOT EXISTS idx_task_events_type ON task_events(type)
+    `);
+
+    // Create index for task→ticket relationship (Phase 17)
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_tasks_ticket_id ON tasks(ticket_id)
+    `);
+
+    // Create indexes for summary_blobs (Phase 17)
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_summary_blobs_summary_id ON summary_blobs(summary_id)
     `);
 
     // Create indexes for tickets
@@ -738,8 +879,45 @@ export class LibSQLAdapter implements StorageAdapter {
     await this.client.execute(`
       CREATE INDEX IF NOT EXISTS idx_job_run_history_status ON job_run_history(status)
     `);
+    // Composite index for efficient count queries (Phase 17: enables computing counts instead of storing)
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_job_run_history_job_status ON job_run_history(job_id, status)
+    `);
     await this.client.execute(`
       CREATE INDEX IF NOT EXISTS idx_job_templates_category ON job_templates(category)
+    `);
+
+    // Create indexes for states/relations
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_states_project_id ON states(project_id)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_ticket_relations_source ON ticket_relations(source_ticket_id)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_ticket_relations_target ON ticket_relations(target_ticket_id)
+    `);
+
+    // Create indexes for agent sessions
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_agent_sessions_parent ON agent_sessions(parent_session_id)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_agent_sessions_conversation ON agent_sessions(conversation_id)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_session_messages_to ON session_messages(to_session_id)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_session_messages_status ON session_messages(status)
+    `);
+
+    // Create indexes for DLQ
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_dead_letter_tasks_status ON dead_letter_tasks(status)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_dead_letter_tasks_task_id ON dead_letter_tasks(task_id)
     `);
   }
 
@@ -818,8 +996,12 @@ export class LibSQLAdapter implements StorageAdapter {
     const id = randomUUID();
     const now = new Date();
 
+    // Extract rawOutput to store separately in blob table
+    const { rawOutput, ...summaryData } = input;
+    const hasBlob = !!rawOutput && rawOutput.length > 0;
+
     const newSummary: typeof schema.summaries.$inferInsert = {
-      ...input,
+      ...summaryData,
       id,
       createdAt: now,
       filesChanged: input.filesChanged || [],
@@ -827,15 +1009,73 @@ export class LibSQLAdapter implements StorageAdapter {
       blockers: input.blockers || [],
       artifacts: input.artifacts || [],
       labels: input.labels || [],
+      hasBlobOutput: hasBlob,
+      rawOutput: null, // Don't store in main table anymore
     };
 
     await this.db.insert(schema.summaries).values(newSummary);
-    return { ...newSummary, createdAt: now } as Summary;
+
+    // Store raw output in separate blob table
+    if (hasBlob && rawOutput) {
+      await this.db.insert(schema.summaryBlobs).values({
+        id: randomUUID(),
+        summaryId: id,
+        rawOutput,
+        compressedSize: rawOutput.length, // Future: actual compressed size
+        createdAt: now,
+      });
+    }
+
+    return { ...newSummary, createdAt: now, rawOutput: undefined } as Summary;
   }
 
-  async getSummary(id: string): Promise<Summary | null> {
+  async getSummary(id: string, includeRawOutput = false): Promise<Summary | null> {
     const results = await this.db.select().from(schema.summaries).where(eq(schema.summaries.id, id));
-    return (results[0] as Summary) || null;
+    const summary = results[0] as Summary | undefined;
+
+    if (!summary) return null;
+
+    // Fetch raw output from blob table if requested
+    if (includeRawOutput && summary.hasBlobOutput) {
+      const blob = await this.db.select()
+        .from(schema.summaryBlobs)
+        .where(eq(schema.summaryBlobs.summaryId, id))
+        .limit(1);
+
+      if (blob[0]) {
+        return { ...summary, rawOutput: blob[0].rawOutput } as Summary;
+      }
+    }
+
+    // Strip rawOutput from response if not requested (for backward compat with old data)
+    if (!includeRawOutput) {
+      return { ...summary, rawOutput: undefined } as Summary;
+    }
+
+    return summary;
+  }
+
+  /**
+   * Get raw output for a summary (lazy loading)
+   */
+  async getSummaryRawOutput(summaryId: string): Promise<string | null> {
+    // First check blob table (new storage)
+    const blob = await this.db.select()
+      .from(schema.summaryBlobs)
+      .where(eq(schema.summaryBlobs.summaryId, summaryId))
+      .limit(1);
+
+    if (blob[0]) {
+      return blob[0].rawOutput;
+    }
+
+    // Fallback to inline rawOutput for old summaries
+    const summary = await this.db.select({ rawOutput: schema.summaries.rawOutput })
+      .from(schema.summaries)
+      .where(eq(schema.summaries.id, summaryId))
+      .limit(1);
+
+    return summary[0]?.rawOutput || null;
   }
 
   async getTaskSummaries(taskId: string): Promise<Summary[]> {
@@ -854,7 +1094,7 @@ export class LibSQLAdapter implements StorageAdapter {
     if (query.taskType) conditions.push(eq(schema.summaries.taskType, query.taskType));
     if (query.component) conditions.push(eq(schema.summaries.component, query.component));
     if (query.repository) conditions.push(eq(schema.summaries.repository, query.repository));
-    
+
     if (query.from) conditions.push(gte(schema.summaries.createdAt, query.from));
     if (query.to) conditions.push(lte(schema.summaries.createdAt, query.to));
 
@@ -863,14 +1103,51 @@ export class LibSQLAdapter implements StorageAdapter {
       conditions.push(sql`(${schema.summaries.title} LIKE ${searchPattern} OR ${schema.summaries.whatChanged} LIKE ${searchPattern} OR ${schema.summaries.whyChanged} LIKE ${searchPattern} OR ${schema.summaries.howChanged} LIKE ${searchPattern} OR ${schema.summaries.rawOutput} LIKE ${searchPattern})`);
     }
 
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    // Cursor-based pagination (Phase 17)
+    if (query.cursorCreatedAt && query.cursorId) {
+      const cursorTime = query.cursorCreatedAt;
+      const cursorId = query.cursorId;
+      const isDesc = query.sortOrder !== 'asc';
 
-    const summaries = await this.db.select()
-      .from(schema.summaries)
-      .where(whereClause)
-      .limit(query.limit || 50)
-      .offset(query.offset || 0)
-      .orderBy(query.sortOrder === 'asc' ? asc(schema.summaries.createdAt) : desc(schema.summaries.createdAt));
+      if (isDesc) {
+        conditions.push(
+          or(
+            sql`${schema.summaries.createdAt} < ${cursorTime}`,
+            and(
+              sql`${schema.summaries.createdAt} = ${cursorTime}`,
+              sql`${schema.summaries.id} < ${cursorId}`
+            )
+          )
+        );
+      } else {
+        conditions.push(
+          or(
+            sql`${schema.summaries.createdAt} > ${cursorTime}`,
+            and(
+              sql`${schema.summaries.createdAt} = ${cursorTime}`,
+              sql`${schema.summaries.id} > ${cursorId}`
+            )
+          )
+        );
+      }
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const useCursor = !!(query.cursorCreatedAt && query.cursorId);
+
+    // When using cursor, don't use offset (cursor already filters)
+    const summaries = useCursor
+      ? await this.db.select()
+          .from(schema.summaries)
+          .where(whereClause)
+          .limit(query.limit || 50)
+          .orderBy(query.sortOrder === 'asc' ? asc(schema.summaries.createdAt) : desc(schema.summaries.createdAt))
+      : await this.db.select()
+          .from(schema.summaries)
+          .where(whereClause)
+          .limit(query.limit || 50)
+          .offset(query.offset || 0)
+          .orderBy(query.sortOrder === 'asc' ? asc(schema.summaries.createdAt) : desc(schema.summaries.createdAt));
 
     const totalRes = await this.db.select({ value: count() }).from(schema.summaries).where(whereClause);
 
@@ -886,33 +1163,52 @@ export class LibSQLAdapter implements StorageAdapter {
   }
 
   async getSummaryStats(): Promise<SummaryStats> {
-    const all = await this.db.select().from(schema.summaries);
-    
-    const byAgent: Record<string, number> = {};
-    const byTaskType: Record<string, number> = {};
-    const byComponent: Record<string, number> = {};
-    let totalTokens = 0;
-    let totalCost = 0;
-    let filesChangedCount = 0;
+    // 1. Get totals and counts using SQL aggregation (Phase 17 optimization)
+    const [counts] = await this.db.select({
+      totalCount: count(),
+      totalTokens: sql<number>`SUM(CAST(json_extract(${schema.summaries.tokensUsed}, '$.total') AS INTEGER))`,
+      totalCost: sql<number>`SUM(CAST(json_extract(${schema.summaries.cost}, '$.amount') AS REAL))`,
+    }).from(schema.summaries);
 
-    for (const s of all) {
-      byAgent[s.agent] = (byAgent[s.agent] || 0) + 1;
-      if (s.taskType) byTaskType[s.taskType] = (byTaskType[s.taskType] || 0) + 1;
-      if (s.component) byComponent[s.component] = (byComponent[s.component] || 0) + 1;
-      if (s.tokensUsed) totalTokens += (s.tokensUsed as any).total || 0;
-      if (s.cost) totalCost += (s.cost as any).amount || 0;
-      filesChangedCount += (s.filesChanged as any[]).length;
-    }
+    // 2. Get distributions
+    const agentStats = await this.db.select({
+      agent: schema.summaries.agent,
+      count: count(),
+    }).from(schema.summaries).groupBy(schema.summaries.agent);
+
+    const typeStats = await this.db.select({
+      type: schema.summaries.taskType,
+      count: count(),
+    }).from(schema.summaries).groupBy(schema.summaries.taskType);
+
+    const componentStats = await this.db.select({
+      component: schema.summaries.component,
+      count: count(),
+    }).from(schema.summaries).groupBy(schema.summaries.component);
+
+    // 3. Get files changed count (requires custom SQL for JSON array length)
+    const [filesRes] = await this.db.select({
+      totalFiles: sql<number>`SUM(json_array_length(${schema.summaries.filesChanged}))`,
+    }).from(schema.summaries);
+
+    const byAgent: Record<string, number> = {};
+    agentStats.forEach((s: { agent: string; count: number }) => { byAgent[s.agent] = s.count; });
+
+    const byTaskType: Record<string, number> = {};
+    typeStats.forEach((s: { type: string | null; count: number }) => { if (s.type) byTaskType[s.type] = s.count; });
+
+    const byComponent: Record<string, number> = {};
+    componentStats.forEach((s: { component: string | null; count: number }) => { if (s.component) byComponent[s.component] = s.count; });
 
     return {
-      totalCount: all.length,
+      totalCount: counts.totalCount || 0,
       byAgent,
       byTaskType,
       byComponent,
-      totalTokens,
-      totalCost,
-      averageDuration: 0, 
-      filesChangedCount,
+      totalTokens: Number(counts.totalTokens || 0),
+      totalCost: Number(counts.totalCost || 0),
+      averageDuration: 0,
+      filesChangedCount: Number(filesRes.totalFiles || 0),
     };
   }
 
@@ -1327,6 +1623,36 @@ export class LibSQLAdapter implements StorageAdapter {
       conditions.push(sql`(${schema.tasks.title} LIKE ${searchPattern} OR ${schema.tasks.description} LIKE ${searchPattern} OR ${schema.tasks.prompt} LIKE ${searchPattern})`);
     }
 
+    // Cursor-based pagination (Phase 17)
+    // When cursor is provided, filter for items "after" the cursor
+    if (options.cursorCreatedAt && options.cursorId) {
+      const cursorTime = options.cursorCreatedAt;
+      const cursorId = options.cursorId;
+      const isDesc = options.sortOrder !== 'asc';
+
+      if (isDesc) {
+        conditions.push(
+          or(
+            sql`${schema.tasks.createdAt} < ${cursorTime}`,
+            and(
+              sql`${schema.tasks.createdAt} = ${cursorTime}`,
+              sql`${schema.tasks.id} < ${cursorId}`
+            )
+          )
+        );
+      } else {
+        conditions.push(
+          or(
+            sql`${schema.tasks.createdAt} > ${cursorTime}`,
+            and(
+              sql`${schema.tasks.createdAt} = ${cursorTime}`,
+              sql`${schema.tasks.id} > ${cursorId}`
+            )
+          )
+        );
+      }
+    }
+
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     // Determine sort column and order
@@ -1336,13 +1662,21 @@ export class LibSQLAdapter implements StorageAdapter {
     else if (options.sortBy === 'completedAt') orderByColumn = schema.tasks.completedAt;
 
     const orderFn = options.sortOrder === 'asc' ? asc : desc;
+    const useCursor = !!(options.cursorCreatedAt && options.cursorId);
 
-    const tasks = await this.db.select()
-      .from(schema.tasks)
-      .where(whereClause)
-      .limit(options.limit || 50)
-      .offset(options.offset || 0)
-      .orderBy(orderFn(orderByColumn));
+    // When using cursor, don't use offset (cursor already filters)
+    const tasks = useCursor
+      ? await this.db.select()
+          .from(schema.tasks)
+          .where(whereClause)
+          .limit(options.limit || 50)
+          .orderBy(orderFn(orderByColumn))
+      : await this.db.select()
+          .from(schema.tasks)
+          .where(whereClause)
+          .limit(options.limit || 50)
+          .offset(options.offset || 0)
+          .orderBy(orderFn(orderByColumn));
 
     const totalRes = await this.db.select({ value: count() }).from(schema.tasks).where(whereClause);
 

@@ -209,7 +209,7 @@ const JOB_TYPES = [
     label: 'Tool Execution',
     icon: Wrench,
     description: 'Run a GLINR tool',
-    color: 'from-purple-500/20 to-pink-500/20',
+    color: 'from-indigo-500/20 to-pink-500/20',
     examples: ['Git operations', 'File sync', 'Database backups'],
     defaultPayload: { tool: 'git_status', params: {} },
     guide: 'Execute any registered GLINR tool with custom parameters.',
@@ -1144,7 +1144,7 @@ export function CreateJobModal({ open: controlledOpen, onOpenChange }: CreateJob
                     {description && <div className="text-sm text-muted-foreground mt-0.5">{description}</div>}
                   </div>
                   {jobType && (
-                    <div className={cn('p-2 rounded-lg', jobType === 'http' && 'bg-blue-500/20', jobType === 'tool' && 'bg-purple-500/20', jobType === 'script' && 'bg-green-500/20', jobType === 'message' && 'bg-orange-500/20')}>
+                    <div className={cn('p-2 rounded-lg', jobType === 'http' && 'bg-blue-500/20', jobType === 'tool' && 'bg-indigo-500/20', jobType === 'script' && 'bg-green-500/20', jobType === 'message' && 'bg-orange-500/20')}>
                       {JOB_TYPES.find((t) => t.type === jobType)?.icon && (() => { const Icon = JOB_TYPES.find((t) => t.type === jobType)!.icon; return <Icon className="h-5 w-5" />; })()}
                     </div>
                   )}

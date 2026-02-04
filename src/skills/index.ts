@@ -19,9 +19,8 @@ export * from './types.js';
 export {
   parseFrontmatter,
   getMarkdownContent,
-  resolveGlinrMetadata,
+  resolveMetadata,
   resolveSkillInvocationPolicy,
-  resolveSkillKey,
   parseSkillFile,
 } from './frontmatter.js';
 
@@ -30,6 +29,7 @@ export {
   loadAllSkills,
   filterSkills,
   shouldIncludeSkill,
+  checkSkillEligibility,
   ensureManagedSkillsDir,
   getProjectSkillsDir,
   syncSkills,

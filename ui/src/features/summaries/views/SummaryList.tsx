@@ -113,7 +113,7 @@ export function SummaryList() {
                             <h3 className="font-semibold truncate group-hover:text-primary transition-colors">
                               {summary.title}
                             </h3>
-                            <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">
+                            <Badge className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
                               <Bot className="h-3 w-3 mr-1" />
                               {summary.agent}
                             </Badge>
@@ -128,13 +128,13 @@ export function SummaryList() {
                             {summary.whatChanged}
                           </p>
                           <div className="flex items-center gap-2 mt-3">
-                            {summary.filesChanged.length > 0 && (
+                            {summary.filesChanged?.length > 0 && (
                               <Badge variant="outline" className="text-[10px] border-white/10">
                                 <FileText className="h-3 w-3 mr-1" />
                                 {summary.filesChanged.length} files
                               </Badge>
                             )}
-                            {summary.blockers.length > 0 && (
+                            {summary.blockers?.length > 0 && (
                               <Badge className="text-[10px] bg-red-500/10 text-red-400 border-red-500/20">
                                 {summary.blockers.length} blockers
                               </Badge>

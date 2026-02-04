@@ -1,6 +1,6 @@
 # GLINR Task Manager - Agent Handoff Document
 
-> **Last Updated:** 2026-02-02
+> **Last Updated:** 2026-02-04
 > **For:** Antigravity and other AI agents
 > **Design System:** macOS Sequoia Liquid Glass
 > **Theme Logic:** Smart System Sync (Remembers Dark/Midnight preference)
@@ -38,6 +38,17 @@ AUTO_DISCOVER_AGENTS=true pnpm dev
 ```
 
 The Ollama adapter will auto-register when Ollama is detected running.
+
+### Slack Slash Commands
+
+Environment variables:
+
+- `SLACK_SIGNING_SECRET` (required)
+- `SLACK_COMMAND_NAME` (default: `glinr`)
+- `SLACK_SLASH_EPHEMERAL` (`true` by default; set to `false` for in-channel)
+- `SLACK_APP_URL` (default: `http://localhost:5173`)
+- `SLACK_ALLOWED_USER_IDS` (comma-separated allowlist, optional)
+- `SLACK_ALLOWED_CHANNEL_IDS` (comma-separated allowlist, optional)
 
 ---
 

@@ -3,14 +3,15 @@ import type {
   AgentCapability,
   AgentConfig,
   AgentHealth,
-} from '../types/agent.js';
-import type { Task, TaskResult, TaskArtifact } from '../types/task.js';
+} from "../types/agent.js";
+import type { Task, TaskResult, TaskArtifact } from "../types/task.js";
 
 // Regex patterns for artifact extraction
 // Defined at module scope to avoid recompilation
-const COMMIT_PATTERN = /commit\s+([a-f0-9]{7,40})/gi;
+const COMMIT_PATTERN = /commit\s+([a-f0-9]{6,40})/gi;
 const PR_PATTERN = /https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/g;
-const FILE_PATTERN = /(?:created|modified|edited|wrote)\s+(?:file\s+)?[`"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`"]?/gi;
+const FILE_PATTERN =
+  /(?:created|modified|edited|wrote)\s+(?:file\s+)?[`"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`"]?/gi;
 
 /**
  * OpenClaw Agent Adapter
@@ -21,21 +22,22 @@ const FILE_PATTERN = /(?:created|modified|edited|wrote)\s+(?:file\s+)?[`"]?([a-z
  * @see https://docs.openclaw.ai/
  */
 export class OpenClawAdapter implements AgentAdapter {
-  readonly type = 'openclaw';
-  readonly name = 'OpenClaw';
-  readonly description = 'Open-source autonomous AI agent with 124k+ GitHub stars';
+  readonly type = "openclaw";
+  readonly name = "OpenClaw";
+  readonly description =
+    "Open-source autonomous AI agent with 124k+ GitHub stars";
   readonly capabilities: AgentCapability[] = [
-    'code_generation',
-    'code_review',
-    'bug_fix',
-    'testing',
-    'documentation',
-    'refactoring',
-    'research',
-    'git_operations',
-    'file_operations',
-    'web_browsing',
-    'api_calls',
+    "code_generation",
+    "code_review",
+    "bug_fix",
+    "testing",
+    "documentation",
+    "refactoring",
+    "research",
+    "git_operations",
+    "file_operations",
+    "web_browsing",
+    "api_calls",
   ];
 
   private readonly baseUrl: string;
@@ -51,13 +53,15 @@ export class OpenClawAdapter implements AgentAdapter {
       timeout?: number;
     };
 
-    this.baseUrl = baseUrl || process.env.OPENCLAW_BASE_URL || 'http://localhost:18789';
-    this.token = token || process.env.OPENCLAW_GATEWAY_TOKEN || '';
-    this.workingDir = workingDir || process.env.OPENCLAW_WORKING_DIR || '~/openclaw-workdir';
+    this.baseUrl =
+      baseUrl || process.env.OPENCLAW_BASE_URL || "http://localhost:18789";
+    this.token = token || process.env.OPENCLAW_GATEWAY_TOKEN || "";
+    this.workingDir =
+      workingDir || process.env.OPENCLAW_WORKING_DIR || "~/openclaw-workdir";
     this.timeout = timeout || 300000; // 5 minutes default
 
     if (!this.token) {
-      throw new Error('OpenClaw gateway token is required');
+      throw new Error("OpenClaw gateway token is required");
     }
   }
 
@@ -68,7 +72,7 @@ export class OpenClawAdapter implements AgentAdapter {
     const startTime = Date.now();
     try {
       const response = await fetch(`${this.baseUrl}/api/health`, {
-        method: 'GET',
+        method: "GET",
         headers: this.getHeaders(),
         signal: AbortSignal.timeout(5000),
       });
@@ -79,7 +83,7 @@ export class OpenClawAdapter implements AgentAdapter {
         return {
           healthy: true,
           latencyMs,
-          message: 'OpenClaw gateway is healthy',
+          message: "OpenClaw gateway is healthy",
           lastChecked: new Date(),
         };
       }
@@ -94,7 +98,7 @@ export class OpenClawAdapter implements AgentAdapter {
       return {
         healthy: false,
         latencyMs: Date.now() - startTime,
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: error instanceof Error ? error.message : "Unknown error",
         lastChecked: new Date(),
       };
     }
@@ -112,13 +116,13 @@ export class OpenClawAdapter implements AgentAdapter {
 
       // Send to OpenClaw gateway
       const response = await fetch(`${this.baseUrl}/api/chat`, {
-        method: 'POST',
+        method: "POST",
         headers: this.getHeaders(),
         body: JSON.stringify({
           message: fullPrompt,
           options: {
             workingDir: task.repository
-              ? `${this.workingDir}/${task.repository.split('/').pop()}`
+              ? `${this.workingDir}/${task.repository.split("/").pop()}`
               : this.workingDir,
             // Request structured output for better parsing
             systemPrompt: this.getSystemPrompt(task),
@@ -131,7 +135,7 @@ export class OpenClawAdapter implements AgentAdapter {
         const errorText = await response.text();
         return {
           success: false,
-          output: '',
+          output: "",
           duration: Date.now() - startTime,
           error: {
             code: `HTTP_${response.status}`,
@@ -140,14 +144,14 @@ export class OpenClawAdapter implements AgentAdapter {
         };
       }
 
-      const result = await response.json() as OpenClawResponse;
+      const result = (await response.json()) as OpenClawResponse;
 
       // Parse the response and extract artifacts
       const artifacts = extractArtifacts(result);
 
       return {
         success: true,
-        output: result.message || result.response || '',
+        output: result.message || result.response || "",
         artifacts,
         tokensUsed: result.usage
           ? {
@@ -161,11 +165,11 @@ export class OpenClawAdapter implements AgentAdapter {
     } catch (error) {
       return {
         success: false,
-        output: '',
+        output: "",
         duration: Date.now() - startTime,
         error: {
-          code: 'EXECUTION_ERROR',
-          message: error instanceof Error ? error.message : 'Unknown error',
+          code: "EXECUTION_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error",
           stack: error instanceof Error ? error.stack : undefined,
         },
       };
@@ -176,18 +180,18 @@ export class OpenClawAdapter implements AgentAdapter {
    * Build the full autonomous prompt for OpenClaw
    */
   private buildPrompt(task: Task): string {
-    const repoName = task.repository?.split('/').pop() || 'project';
-    const issueNumber = task.sourceId || 'N/A';
+    const repoName = task.repository?.split("/").pop() || "project";
+    const issueNumber = task.sourceId || "N/A";
 
     return `You are an autonomous AI developer. Complete this task independently.
 
 ## Task: ${task.title}
-${task.description ? `\n### Description\n${task.description}` : ''}
+${task.description ? `\n### Description\n${task.description}` : ""}
 
 ### Source
-${task.sourceUrl ? `- Issue: ${task.sourceUrl}` : ''}
-${task.repository ? `- Repository: ${task.repository}` : ''}
-${task.labels.length > 0 ? `- Labels: ${task.labels.join(', ')}` : ''}
+${task.sourceUrl ? `- Issue: ${task.sourceUrl}` : ""}
+${task.repository ? `- Repository: ${task.repository}` : ""}
+${task.labels.length > 0 ? `- Labels: ${task.labels.join(", ")}` : ""}
 
 ### Instructions
 ${task.prompt}
@@ -215,7 +219,7 @@ ${task.prompt}
    git add -A
    git commit -m "feat: <short description>
 
-   ${task.sourceId ? `Closes #${task.sourceId}` : ''}
+   ${task.sourceId ? `Closes #${task.sourceId}` : ""}
 
    Co-Authored-By: Glinr <bot@glincker.com>"
    \`\`\`
@@ -263,7 +267,7 @@ Guidelines:
    */
   private getHeaders(): Record<string, string> {
     return {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${this.token}`,
     };
   }
@@ -290,18 +294,18 @@ export function extractArtifacts(result: OpenClawResponse): TaskArtifact[] {
   // Parse the response text for commits
   COMMIT_PATTERN.lastIndex = 0;
   let match;
-  while ((match = COMMIT_PATTERN.exec(result.message || '')) !== null) {
+  while ((match = COMMIT_PATTERN.exec(result.message || "")) !== null) {
     artifacts.push({
-      type: 'commit',
+      type: "commit",
       sha: match[1],
     });
   }
 
   // Parse for PR URLs
   PR_PATTERN.lastIndex = 0;
-  while ((match = PR_PATTERN.exec(result.message || '')) !== null) {
+  while ((match = PR_PATTERN.exec(result.message || "")) !== null) {
     artifacts.push({
-      type: 'pull_request',
+      type: "pull_request",
       url: match[0],
       metadata: {
         owner: match[1],
@@ -313,9 +317,9 @@ export function extractArtifacts(result: OpenClawResponse): TaskArtifact[] {
 
   // Parse for file paths (simple heuristic)
   FILE_PATTERN.lastIndex = 0;
-  while ((match = FILE_PATTERN.exec(result.message || '')) !== null) {
+  while ((match = FILE_PATTERN.exec(result.message || "")) !== null) {
     artifacts.push({
-      type: 'file',
+      type: "file",
       path: match[1],
     });
   }

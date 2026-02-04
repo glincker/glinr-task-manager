@@ -6,60 +6,60 @@
 
 ---
 
-## Design System: Liquid Glass
-
-We follow the **macOS Sequoia Liquid Glass** aesthetic - floating elements with multi-layer glass effects, organic curves, and vibrant colors.
-
-### Core Principles
-
-1. **Floating Elements** - Nothing touches viewport edges, everything has margins
-2. **Multi-layer Glass** - backdrop-blur + saturation + inner glow borders
-3. **Organic Curves** - 12-20px radius on all containers
-4. **Depth via Shadows** - 4-layer shadow stacks for floating effect
-5. **Vibrant Colors** - OKLCH color space with saturation
-6. **Mesh Gradients** - Subtle gradient backgrounds
-
-### Glass Utility Classes
-
-```css
-/* Standard glass panel */
-.glass {
-  background: var(--card);
-  backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid var(--border);
-}
-
-/* Heavy blur for modals/overlays */
-.glass-heavy {
-  backdrop-filter: blur(40px) saturate(200%);
-}
-
-/* Floating sidebar */
-.sidebar-glass {
-  backdrop-filter: blur(32px) saturate(180%);
-  box-shadow: var(--shadow-float),
-    inset 0 0 0 1px oklch(1 0 0 / 0.05),
-    inset 0 1px 1px 0 oklch(1 0 0 / 0.1);
-}
-
-/* Header toolbar */
-.header-glass {
-  backdrop-filter: blur(40px) saturate(180%);
-}
-
-/* Active navigation item */
-.nav-item-active-glass {
-  background: var(--primary);
-  box-shadow: 0 4px 12px -2px oklch(from var(--primary) l c h / 0.4);
-}
-
-/* Floating shadow */
-.shadow-float {
-  box-shadow:
-    0 4px 8px -2px oklch(0 0 0 / 0.08),
-    0 12px 24px -4px oklch(0 0 0 / 0.12),
-    0 24px 48px -8px oklch(0 0 0 / 0.16);
-}
+## Design System: Liquid Glass (Blue/Zinc)
+ 
+ We follow a refined **macOS Sequoia Liquid Glass** aesthetic - floating elements with multi-layer glass effects, organic curves, and a clean Blue/Zinc palette.
+ 
+ ### Core Principles
+ 
+ 1. **Floating Elements** - Nothing touches viewport edges, everything has margins
+ 2. **Multi-layer Glass** - backdrop-blur + saturation + inner glow borders
+ 3. **Organic Curves** - 12-20px radius on all containers
+ 4. **Depth via Shadows** - 4-layer shadow stacks for floating effect
+ 5. **Clean Palette** - Zinc/Slate neutrals with Vibrant Blue accents
+ 6. **Mesh Gradients** - Subtle blue/zinc gradient backgrounds
+ 
+ ### Glass Utility Classes
+ 
+ ```css
+ /* Standard glass panel */
+ .glass {
+   background: var(--card);
+   backdrop-filter: blur(20px) saturate(180%);
+   border: 1px solid var(--border);
+ }
+ 
+ /* Heavy blur for modals/overlays */
+ .glass-heavy {
+   backdrop-filter: blur(40px) saturate(200%);
+ }
+ 
+ /* Floating sidebar */
+ .sidebar-glass {
+   backdrop-filter: blur(32px) saturate(180%);
+   box-shadow: var(--shadow-float),
+     inset 0 0 0 1px hsl(0 0% 100% / 0.05),
+     inset 0 1px 1px 0 hsl(0 0% 100% / 0.1);
+ }
+ 
+ /* Header toolbar */
+ .header-glass {
+   backdrop-filter: blur(40px) saturate(180%);
+ }
+ 
+ /* Active navigation item */
+ .nav-item-active-glass {
+   background: var(--primary);
+   box-shadow: 0 4px 12px -2px rgba(59, 130, 246, 0.4);
+ }
+ 
+ /* Floating shadow */
+ .shadow-float {
+   box-shadow:
+     0 4px 8px -2px rgba(0, 0, 0, 0.08),
+     0 12px 24px -4px rgba(0, 0, 0, 0.12),
+     0 24px 48px -8px rgba(0, 0, 0, 0.16);
+ }
 
 /* Lift on hover */
 .hover-lift:hover {

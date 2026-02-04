@@ -86,6 +86,8 @@ import {
   NotificationsSection,
   AIProvidersSection,
   LabelsSection,
+  DevicesSection,
+  MemorySection,
 } from "../sections";
 import { SyncStatus } from "@/features/sync/components/SyncStatus";
 import { SETTINGS_SECTIONS, API_BASE, type SectionId } from "../constants";
@@ -335,6 +337,10 @@ export function Settings() {
         return <AIProvidersSection />;
       case "labels":
         return <LabelsSection />;
+      case "devices":
+        return <DevicesSection />;
+      case "memory":
+        return <MemorySection />;
       case "integrations":
         return <IntegrationsSection settings={settings} />;
       case "security":
@@ -385,6 +391,7 @@ export function Settings() {
               <input
                 type="text"
                 placeholder="Search settings..."
+                aria-label="Search settings"
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
                 className="w-full pl-9 pr-8 py-2 bg-muted/50 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -2118,7 +2125,7 @@ function SecuritySection() {
                     className={cn(
                       "h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold",
                       entry.type === "command"
-                        ? "bg-purple-500/10 text-purple-500"
+                        ? "bg-indigo-500/10 text-indigo-500"
                         : entry.type === "path"
                           ? "bg-blue-500/10 text-blue-500"
                           : "bg-green-500/10 text-green-500",
@@ -2233,19 +2240,19 @@ function SecuritySection() {
             className={cn(
               "p-4 rounded-xl border",
               rateLimit?.enabled
-                ? "bg-purple-500/5 border-purple-500/20"
+                ? "bg-indigo-500/5 border-indigo-500/20"
                 : "bg-muted/30 border-border",
             )}
           >
             <div className="flex items-center gap-2 mb-2">
-              <Timer className="h-4 w-4 text-purple-500" />
+              <Timer className="h-4 w-4 text-indigo-500" />
               <span className="text-xs font-medium">Rate Limit</span>
             </div>
             <p
               className={cn(
                 "text-2xl font-bold",
                 rateLimit?.enabled
-                  ? "text-purple-500"
+                  ? "text-indigo-500"
                   : "text-muted-foreground",
               )}
             >

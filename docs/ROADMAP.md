@@ -1,6 +1,6 @@
 # GLINR Task Manager - Roadmap
 
-> **Last Updated:** 2026-02-03
+> **Last Updated:** 2026-02-04 (Ticket relations/watchers/mentions/attachments/reactions + bulk ops; tool error messaging clarity; chat UI polish)
 > **For AI Agents:** Pick any unchecked item, validate, implement, and PR.
 
 ---
@@ -51,7 +51,8 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 | 13. Tool Execution Engine | In Progress | 90% |
 | 14. UI Dashboard & Polish | Complete | 98% |
 | 15. CLI & Unified Control | Partial | 70% |
-| 16. DevOps | Not Started | 0% |
+| 16. DevOps | In Progress | 50% |
+| 17. Data Architecture Optimization | Not Started | 0% |
 
 ---
 
@@ -70,7 +71,7 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 - [x] GitHub webhook handler with signature verification
 - [x] Jira webhook handler with OAuth
 - [x] Linear webhook handler with OAuth
-- [ ] Slack slash commands
+- [x] Slack slash commands
 - [ ] Discord bot commands
 
 ### Agent Adapters
@@ -105,6 +106,9 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 - [x] Summary extraction from agent outputs
 - [x] Full-text search on summaries
 - [x] Auto-generate PR descriptions, changelogs, release notes
+- [x] Task type inference (bug_fix, feature, refactor, docs, test, perf, security, chore)
+- [x] Component inference from file paths (ui, api, database, auth, etc.)
+- [x] Smart title generation based on task type and files changed
 
 ### AI-Native Tickets (Phase 9)
 - [x] Universal ticket schema with sequence IDs (GLINR-123)
@@ -114,6 +118,14 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 - [x] Unified comments from all platforms
 - [x] Ticket REST API with full CRUD
 - [x] Ticket history/audit trail
+- [x] Issue relations (blocks/blocked-by/duplicates/relates-to)
+- [x] Multi-assignee support
+- [x] Watchers/followers on tickets
+- [x] Mentions extraction + API
+- [x] Attachments API (files/links)
+- [x] Reactions (emoji) on tickets
+- [x] Start date tracking
+- [x] Bulk update and bulk delete
 
 ### Multi-Model AI Chat (Phase 10)
 - [x] Vercel AI SDK v6 integration
@@ -123,6 +135,8 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 - [x] Voice input (Web Audio API)
 - [x] Image upload with preview
 - [x] Provider status badges (stable/beta/experimental)
+- [x] OpenClaw-style provider failover (auto-switch on errors)
+- [x] Azure tool schema normalization (fixes `type: "None"` error)
 
 ### Projects & Scrum (Phase 11)
 - [x] Projects with custom prefixes (MOBILE-xxx)
@@ -148,14 +162,16 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 ### Tool Execution Engine (Phase 13)
 - [x] Tool registry with Zod validation
 - [x] 5 security modes (deny/sandbox/allowlist/ask/full)
-- [x] 18 built-in tools (exec, files, git, system, web)
+- [x] 51 built-in tools (exec, files, git, system, web, memory, sessions, agents, cron, browser, GLINR ops)
+- [x] Session spawn/send tools for cross-session orchestration
 - [x] Sandbox execution with Docker
 - [x] Process pool with concurrent limits
 - [x] Audit logging with filters
 - [x] Rate limiting per user/conversation
 - [x] Chat integration with native tool calling
 - [x] Output streaming (SSE) - `/tools/execute/stream` and `/tools/sessions/:id/stream`
-- [ ] Secrets detection in output
+- [x] Secrets detection in output
+- [x] Clear missing-parameter error messaging
 - [ ] Interactive PTY support
 
 ### UI Dashboard (Phase 14)
@@ -176,6 +192,14 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 - [x] Recovery codes with download (TXT/JSON/CSV)
 - [x] Frosted glass dropdowns and badges
 - [x] Legal pages (Privacy, Terms)
+- [x] Chat sidebar with collapsible design and conversation groups
+- [x] Agent mode toggle (tools auto-enable in agentic mode)
+- [x] Compact chat input with inline mode toggle
+- [x] Focused view mode for maximized chat space
+- [x] Lifted shadow effect on chat container
+- [x] Floating chat polish (sky palette, simplified surfaces, reduced shadowing)
+- [x] Memory UI in Settings (stats, search, files, sync controls)
+- [x] Device Management UI (pairing, revoke, identity)
 
 ### CLI & Unified Control (Phase 15)
 - [x] Server route modularization (split 1689-line server.ts)
@@ -193,12 +217,11 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 ### Tool Execution Gaps
 - [ ] PTY support for interactive commands
 - [x] Output streaming via SSE (complete)
-- [ ] Secrets detection in output
+- [x] Secrets detection in output
 - [ ] Security UI for mode/allowlist management
 - [x] Tool approval dialog in chat (component exists)
 
 ### Remaining Integrations
-- [ ] Slack slash commands
 - [ ] Discord bot
 - [ ] Copilot proxy for $0 AI inference
 - [ ] Gemini Flash cheap fallback
@@ -211,13 +234,84 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 
 ---
 
+## Next: OpenClaw Parity Features
+
+Features from OpenClaw that would enhance GLINR:
+
+### High Priority (User Experience)
+| Feature | OpenClaw | GLINR Status | Effort |
+|---------|----------|--------------|--------|
+| Device Identity (ED25519) | `infra/device-identity.ts` | **Complete** | Medium |
+| Pairing Codes | `pairing/pairing-store.ts` | **Complete** | Medium |
+| Device Management UI | Settings UI | **Complete** | Medium |
+| Node/Session Pairing | `infra/node-pairing.ts` | Via Device API | Medium |
+| Browser Automation | `browser/` (Playwright) | **Complete** (Playwright) | Low |
+| Session Spawn/Send | `sessions_spawn`, `sessions_send` | **Complete** | Medium |
+
+### Medium Priority (Agent Enhancement)
+| Feature | OpenClaw | GLINR Status | Effort |
+|---------|----------|--------------|--------|
+| Context Pruning | `pi-extensions/context-pruning/` | **Complete** (Enhanced) | Medium |
+| Skills System | `agents/skills/` | Not started | High |
+| Agent Auth Profiles | `agents/auth-profiles/` | Not started | Medium |
+| Canvas/Visual | `canvas-host/` | Not started | High |
+
+### Low Priority (Messaging Channels)
+| Feature | OpenClaw | GLINR Status | Effort |
+|---------|----------|--------------|--------|
+| Discord Integration | `discord/` | Not started | Medium |
+| Telegram Bot | `telegram/` | Not started | Medium |
+| iMessage Bridge | `imessage/` | Not started | High |
+| Matrix Support | `channels/` | Not started | Medium |
+
+### Already Better in GLINR
+| Feature | GLINR | OpenClaw |
+|---------|-------|----------|
+| Total Tools | **51** | 15 |
+| Ticket System | Full CRUD + sync | None |
+| Project Management | Projects + Sprints + Kanban | None |
+| Git Operations | 7 git tools | None |
+| File Operations | 4 file tools | None built-in |
+| Cron System | 6 tools + REST API + Templates | Basic croner |
+| Cost Tracking | Per-message with budget alerts | Per-session only |
+| Web UI | Full React dashboard | Basic TUI |
+
+---
+
 ## Not Started
 
 ### DevOps (Phase 16)
-- [ ] Dockerfile for production
-- [ ] docker-compose with Redis
+- [x] Dockerfile for production (multi-stage, health checks, Chromium)
+- [x] docker-compose with Redis (health checks, volumes, monitoring profiles)
+- [x] Prometheus + Grafana config (provisioning, dashboards)
 - [ ] GitHub Actions CI/CD
-- [ ] Prometheus metrics + Grafana dashboard
+
+| 17. Data Architecture Optimization | In Progress | 60% |
+
+---
+
+## Completed Features
+...
+### Data Architecture Optimization (Phase 17)
+
+**High Priority:**
+- [x] Move `rawOutput` from summaries table to separate blob storage (fetch on-demand)
+- [x] Implement sparse fieldsets for list APIs (return only id, key, title, status)
+- [x] Add pagination to all list endpoints with cursor-based navigation
+- [ ] Lazy-load ticket descriptions and comments on detail view
+
+**Medium Priority:**
+- [ ] Remove redundant stored counts (`successfulRuns`, `failedRuns` in scheduledJobs)
+- [x] Compute counts at query time with indexes (optimized getSummaryStats)
+- [ ] Add `ticketId` column to tasks table for task→ticket relationship
+- [ ] Index foreign keys for JOIN performance (projectId, sprintId, etc.)
+- [ ] Add `lastActivityAt` computed column for sorting
+
+**Low Priority:**
+- [ ] Add FTS5 full-text search index on tickets/tasks
+- [ ] Implement search highlighting with snippets
+- [x] Add database vacuum/optimize scheduled job
+- [ ] Create materialized view for dashboard stats (refresh on write)
 
 ### Agent Feedback Loop
 - [ ] Command protocol (run, pause, cancel, clarify)

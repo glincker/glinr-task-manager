@@ -103,12 +103,12 @@ Created: ${new Date(summary.createdAt).toLocaleString()}
 
       {/* Main Header Card */}
       <Card className="glass rounded-[32px] overflow-hidden border-white/5 relative">
-        <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[100px] opacity-10 bg-purple-500" />
+        <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full blur-[100px] opacity-10 bg-indigo-500" />
         <CardContent className="p-8">
           <div className="flex items-start justify-between mb-6">
             <div className="space-y-2">
               <div className="flex items-center gap-3 mb-2">
-                <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">
+                <Badge className="bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
                   <Bot className="h-3 w-3 mr-1" />
                   {summary.agent}
                 </Badge>

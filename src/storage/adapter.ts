@@ -68,6 +68,9 @@ export interface TaskFilterOptions {
   offset?: number;
   sortBy?: 'createdAt' | 'updatedAt' | 'priority' | 'completedAt';
   sortOrder?: 'asc' | 'desc';
+  // Cursor-based pagination (Phase 17)
+  cursorCreatedAt?: Date;
+  cursorId?: string;
 }
 
 /**
@@ -87,11 +90,12 @@ export interface StorageAdapter {
 
   // Summaries
   createSummary(input: CreateSummaryInput): Promise<Summary>;
-  getSummary(id: string): Promise<Summary | null>;
+  getSummary(id: string, includeRawOutput?: boolean): Promise<Summary | null>;
   getTaskSummaries(taskId: string): Promise<Summary[]>;
   querySummaries(query: Partial<SummaryQuery>): Promise<{ summaries: Summary[]; total: number }>;
   deleteSummary(id: string): Promise<boolean>;
   getSummaryStats(): Promise<SummaryStats>;
+  getSummaryRawOutput(summaryId: string): Promise<string | null>; // Phase 17: lazy load
 
   // Vector Search (Optional implementation)
   storeEmbedding?(id: string, entityType: 'task' | 'summary', entityId: string, embedding: number[], model: string): Promise<void>;

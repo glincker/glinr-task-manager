@@ -6,6 +6,8 @@ export { GeneralSection } from './GeneralSection';
 export { NotificationsSection } from './NotificationsSection';
 export { AIProvidersSection } from './AIProvidersSection';
 export { LabelsSection } from './LabelsSection';
+export { DevicesSection } from './DevicesSection';
+export { MemorySection } from './MemorySection';
 // Note: Additional sections can be extracted as needed
 // export { AccountSection } from './AccountSection';
 // export { IntegrationsSection } from './IntegrationsSection';

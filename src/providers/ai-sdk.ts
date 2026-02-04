@@ -7,15 +7,17 @@
  * @see https://sdk.vercel.ai/docs
  */
 
-import { generateText, streamText, tool as createTool, type LanguageModel } from 'ai';
+import { generateText, streamText, tool as createTool, type LanguageModel, jsonSchema } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAzure } from '@ai-sdk/azure';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOllama } from 'ai-sdk-ollama';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { logger } from '../utils/logger.js';
+import { normalizeToolSchema } from './schema-utils.js';
 
 // Pre-compiled regex patterns for performance (avoid recompilation on each call)
 const TOOL_CALL_REGEX = /```tool\s*\n?([\s\S]*?)\n?```/g;
@@ -130,13 +132,13 @@ export interface ChatResponse {
 
 export const MODEL_ALIASES: Record<string, { provider: ProviderType; model: string }> = {
   // Anthropic
-  opus: { provider: 'anthropic', model: 'claude-opus-4-5-20251101' },
-  sonnet: { provider: 'anthropic', model: 'claude-sonnet-4-5-20251014' },
+  opus: { provider: 'anthropic', model: 'claude-3-opus-20240229' },
+  sonnet: { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022' },
   haiku: { provider: 'anthropic', model: 'claude-3-5-haiku-20241022' },
 
   // OpenAI
-  gpt: { provider: 'openai', model: 'gpt-4.1' },
-  'gpt-mini': { provider: 'openai', model: 'gpt-4.1-mini' },
+  gpt: { provider: 'openai', model: 'gpt-4o' },
+  'gpt-mini': { provider: 'openai', model: 'gpt-4o-mini' },
   o1: { provider: 'openai', model: 'o1' },
   'o1-mini': { provider: 'openai', model: 'o1-mini' },
   'o3-mini': { provider: 'openai', model: 'o3-mini' },
@@ -146,9 +148,9 @@ export const MODEL_ALIASES: Record<string, { provider: ProviderType; model: stri
   'azure-gpt': { provider: 'azure', model: 'gpt-4' },
 
   // Google
-  gemini: { provider: 'google', model: 'gemini-2.5-pro-preview-05-06' },
-  'gemini-flash': { provider: 'google', model: 'gemini-2.5-flash-preview-05-20' },
-  'gemini-thinking': { provider: 'google', model: 'gemini-2.5-flash-thinking-exp-01-21' },
+  gemini: { provider: 'google', model: 'gemini-1.5-pro' },
+  'gemini-flash': { provider: 'google', model: 'gemini-1.5-flash' },
+  'gemini-thinking': { provider: 'google', model: 'gemini-2.0-flash-thinking-exp' },
 
   // Groq (fast inference)
   groq: { provider: 'groq', model: 'llama-3.3-70b-versatile' },
@@ -159,7 +161,7 @@ export const MODEL_ALIASES: Record<string, { provider: ProviderType; model: stri
   local: { provider: 'ollama', model: 'llama3.2' },
   llama: { provider: 'ollama', model: 'llama3.2' },
   'deepseek-local': { provider: 'ollama', model: 'deepseek-r1:7b' },
-  qwen: { provider: 'ollama', model: 'qwen3:14b' },
+  qwen: { provider: 'ollama', model: 'qwen2.5:14b' },
   'mistral-local': { provider: 'ollama', model: 'mistral:7b' },
 
   // xAI (Grok)
@@ -204,8 +206,8 @@ export const MODEL_ALIASES: Record<string, { provider: ProviderType; model: stri
 export const MODEL_CATALOG: ModelInfo[] = [
   // Anthropic - All support native function calling
   {
-    id: 'claude-opus-4-5-20251101',
-    name: 'Claude Opus 4.5',
+    id: 'claude-3-opus-20240229',
+    name: 'Claude 3 Opus',
     provider: 'anthropic',
     contextWindow: 200000,
     maxOutput: 32000,
@@ -216,8 +218,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 75,
   },
   {
-    id: 'claude-sonnet-4-5-20251014',
-    name: 'Claude Sonnet 4.5',
+    id: 'claude-3-5-sonnet-20241022',
+    name: 'Claude 3.5 Sonnet',
     provider: 'anthropic',
     contextWindow: 200000,
     maxOutput: 16000,
@@ -242,8 +244,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
 
   // OpenAI - GPT-4+ supports function calling
   {
-    id: 'gpt-4.5-turbo',
-    name: 'GPT-4.5 Turbo',
+    id: 'gpt-4o',
+    name: 'GPT-4o',
     provider: 'openai',
     contextWindow: 128000,
     maxOutput: 16384,
@@ -254,8 +256,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 10,
   },
   {
-    id: 'gpt-4.5-mini',
-    name: 'GPT-4.5 Mini',
+    id: 'gpt-4o-mini',
+    name: 'GPT-4o Mini',
     provider: 'openai',
     contextWindow: 128000,
     maxOutput: 16384,
@@ -280,8 +282,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
 
   // Google - Gemini supports function calling
   {
-    id: 'gemini-2.5-pro-preview-05-06',
-    name: 'Gemini 2.5 Pro',
+    id: 'gemini-1.5-pro',
+    name: 'Gemini 1.5 Pro',
     provider: 'google',
     contextWindow: 2000000,
     maxOutput: 65536,
@@ -292,8 +294,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 5,
   },
   {
-    id: 'gemini-2.5-flash-preview-05-20',
-    name: 'Gemini 2.5 Flash',
+    id: 'gemini-1.5-flash',
+    name: 'Gemini 1.5 Flash',
     provider: 'google',
     contextWindow: 1000000,
     maxOutput: 8192,
@@ -414,7 +416,7 @@ export const MODEL_CATALOG: ModelInfo[] = [
     maxOutput: 8192,
     supportsVision: false,
     supportsStreaming: true,
-    supportsTools: false, // Local models don't reliably support native function calling
+    supportsTools: false, // Reverted: Native tool calling flaky for local models
     costPer1MInput: 0,
     costPer1MOutput: 0,
   },
@@ -431,14 +433,14 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 0,
   },
   {
-    id: 'qwen3:14b',
-    name: 'Qwen 3 14B (Local)',
+    id: 'qwen2.5:14b',
+    name: 'Qwen 2.5 14B (Local)',
     provider: 'ollama',
     contextWindow: 32768,
     maxOutput: 8192,
     supportsVision: false,
     supportsStreaming: true,
-    supportsTools: false,
+    supportsTools: false, // Reverted: Native tool calling flaky for local models
     costPer1MInput: 0,
     costPer1MOutput: 0,
   },
@@ -1270,12 +1272,32 @@ class AIProviderManager {
 
     const model = this.getModel(modelRef.provider, modelRef.model);
 
-    // Build tool instructions for the system prompt
+    // Check if model supports native tools
+    const toolSupport = this.modelSupportsTools(modelRef.model || modelRef.provider + '/' + modelRef.model);
+    const useNativeTools = toolSupport.supported && request.tools && request.tools.length > 0;
+
+    // Build system prompt (skip manual tool instructions if using native tools)
     let systemPrompt = request.systemPrompt || '';
     const toolResults: ChatWithToolsResponse['toolResults'] = [];
     const detectedToolCalls: ToolCall[] = [];
 
-    if (request.tools && request.tools.length > 0) {
+    // Convert tools for native AI SDK usage
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const aiSdkTools: Record<string, any> = {};
+    
+    if (useNativeTools && request.tools) {
+      // Add a reinforcement prompt for local models to ensure they provide arguments
+      const toolReminders = request.tools.map(t => `- ${t.name}`).join(', ');
+      systemPrompt += `\n\nYou have access to these tools: ${toolReminders}. When using them, YOU MUST PROVIDE ALL REQUIRED ARGUMENTS (like 'url' for web_fetch, 'query' for web_search). Do not call tools with empty arguments.`;
+
+      request.tools.forEach((t) => {
+        aiSdkTools[t.name] = createTool({
+          description: t.description,
+          parameters: t.parameters as z.ZodSchema<any>,
+        });
+      });
+    } else if (request.tools && request.tools.length > 0) {
+      // Fallback: Manual tool prompting
       const toolDescriptions = request.tools.map((t) => {
         const params = t.parameters;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1287,7 +1309,7 @@ class AIProviderManager {
         return `**${t.name}**: ${t.description}\nParameters:\n${paramList}`;
       }).join('\n\n');
 
-      systemPrompt += `\n\n## Available Tools\n\nYou can call the following tools by responding with a JSON block in this exact format:\n\`\`\`tool\n{"tool": "toolName", "args": {"param1": "value1"}}\n\`\`\`\n\n${toolDescriptions}\n\nWhen you need to use a tool, include the tool call in your response. After the tool executes, continue with your response.`;
+      systemPrompt += `\n\n## Available Tools\n\nYou can call the following tools by responding with a JSON block in this exact format:\n\`\`\`tool\n{"tool": "toolName", "args": {"param1": "value1"}}\n\`\`\`\n\nExample:\n\`\`\`tool\n{"tool": "web_search", "args": {"query": "latest typescript features"}}\n\`\`\`\n\n${toolDescriptions}\n\nWhen you need to use a tool, include the tool call in your response. After the tool executes, continue with your response.`;
     }
 
     // Convert messages to AI SDK format
@@ -1306,40 +1328,68 @@ class AIProviderManager {
         messages,
         temperature: request.temperature ?? 0.7,
         maxOutputTokens: request.maxTokens ?? 4096,
+        tools: useNativeTools ? aiSdkTools : undefined,
       });
 
       let finalContent = result.text;
 
-      // Parse tool calls from the response (using pre-compiled regex)
-      TOOL_CALL_REGEX.lastIndex = 0; // Reset regex state
-      let match;
-
-      while ((match = TOOL_CALL_REGEX.exec(result.text)) !== null) {
-        try {
-          const toolCall = JSON.parse(match[1]);
-          if (toolCall.tool && request.executeTools) {
-            const toolCallId = randomUUID();
+      // Handle native tool calls
+      if (useNativeTools && result.toolCalls && result.toolCalls.length > 0) {
+        for (const toolCall of result.toolCalls) {
+          if (request.executeTools) {
             detectedToolCalls.push({
-              id: toolCallId,
-              name: toolCall.tool,
-              arguments: toolCall.args || {},
+              id: toolCall.toolCallId,
+              name: toolCall.toolName,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              arguments: (toolCall as any).args, 
             });
 
             // Execute the tool
-            const toolResult = await request.executeTools(toolCall.tool, toolCall.args || {});
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const toolResult = await request.executeTools(toolCall.toolName, (toolCall as any).args);
             toolResults.push({
-              toolCallId,
-              toolName: toolCall.tool,
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
               result: toolResult,
             });
-
-            // Replace the tool call block with the result
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const resultMessage = (toolResult as any)?.message || JSON.stringify(toolResult);
-            finalContent = finalContent.replace(match[0], `\n✅ **${toolCall.tool}**: ${resultMessage}\n`);
+            
+            // For native tools, we don't need to replace content text as the tool calls are structured
           }
-        } catch {
-          // Invalid JSON, skip
+        }
+      } 
+      // Handle manual tool calls (fallback path)
+      else if (!useNativeTools) {
+        // Parse tool calls from the response (using pre-compiled regex)
+        TOOL_CALL_REGEX.lastIndex = 0; // Reset regex state
+        let match;
+
+        while ((match = TOOL_CALL_REGEX.exec(result.text)) !== null) {
+          try {
+            const toolCall = JSON.parse(match[1]);
+            if (toolCall.tool && request.executeTools) {
+              const toolCallId = randomUUID();
+              detectedToolCalls.push({
+                id: toolCallId,
+                name: toolCall.tool,
+                arguments: toolCall.args || {},
+              });
+
+              // Execute the tool
+              const toolResult = await request.executeTools(toolCall.tool, toolCall.args || {});
+              toolResults.push({
+                toolCallId,
+                toolName: toolCall.tool,
+                result: toolResult,
+              });
+
+              // Replace the tool call block with the result
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const resultMessage = (toolResult as any)?.message || JSON.stringify(toolResult);
+              finalContent = finalContent.replace(match[0], `\n✅ **${toolCall.tool}**: ${resultMessage}\n`);
+            }
+          } catch {
+            // Invalid JSON, skip
+          }
         }
       }
 
@@ -1472,12 +1522,41 @@ class AIProviderManager {
     // Only build tools if the model supports them
     const tools: Record<string, ReturnType<typeof createTool>> = {};
 
+    // Check if provider is Azure - needs normalized JSON Schema
+    const isAzureProvider = modelRef.provider === 'azure';
+
     if (shouldUseTools) {
       for (const toolDef of request.tools || []) {
+        // For Azure, convert Zod schemas to normalized JSON Schema
+        // Azure has stricter schema validation requirements
+        let inputSchema: unknown = toolDef.parameters;
+
+        if (isAzureProvider && toolDef.parameters) {
+          try {
+            // Convert Zod schema to JSON Schema
+            const rawJsonSchema = zodToJsonSchema(toolDef.parameters as z.ZodType, {
+              $refStrategy: 'none',
+              target: 'openAi',
+            });
+            // Normalize for Azure compatibility (removes unsupported keywords, ensures type: object)
+            const normalizedSchema = normalizeToolSchema(rawJsonSchema);
+            // Wrap in AI SDK's jsonSchema helper for proper typing
+            inputSchema = jsonSchema(normalizedSchema);
+            logger.debug(`[AIProvider] Normalized schema for Azure tool: ${toolDef.name}`, {
+              component: 'AIProvider',
+            });
+          } catch (schemaError) {
+            logger.warn(`[AIProvider] Failed to normalize schema for ${toolDef.name}, using original`, {
+              component: 'AIProvider',
+              error: schemaError instanceof Error ? schemaError.message : String(schemaError),
+            });
+          }
+        }
+
         // AI SDK v5+ uses inputSchema instead of parameters
         (tools as any)[toolDef.name] = createTool({
         description: toolDef.description,
-        inputSchema: toolDef.parameters,
+        inputSchema: inputSchema as any,
         execute: async (args: any) => {
           const toolCallId = randomUUID();
 
@@ -1639,11 +1718,30 @@ class AIProviderManager {
     // Build tools with execute handlers
     const tools: Record<string, ReturnType<typeof createTool>> = {};
 
+    // Check if provider is Azure - needs normalized JSON Schema
+    const isAzureProvider = modelRef.provider === 'azure';
+
     for (const toolDef of request.tools || []) {
+      // For Azure, convert Zod schemas to normalized JSON Schema
+      let inputSchema: unknown = toolDef.parameters;
+
+      if (isAzureProvider && toolDef.parameters) {
+        try {
+          const rawJsonSchema = zodToJsonSchema(toolDef.parameters as z.ZodType, {
+            $refStrategy: 'none',
+            target: 'openAi',
+          });
+          const normalizedSchema = normalizeToolSchema(rawJsonSchema);
+          inputSchema = jsonSchema(normalizedSchema);
+        } catch {
+          // Fall back to original schema
+        }
+      }
+
       // AI SDK v5+ uses inputSchema instead of parameters
       (tools as any)[toolDef.name] = createTool({
         description: toolDef.description,
-        inputSchema: toolDef.parameters,
+        inputSchema: inputSchema as any,
         execute: async (args: any) => {
           const toolCallId = randomUUID();
 

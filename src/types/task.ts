@@ -65,6 +65,8 @@ export interface Task extends CreateTaskInput {
   startedAt?: Date;
   completedAt?: Date;
   assignedAgentId?: string;
+  // Task→Ticket relationship (Phase 17)
+  ticketId?: string;
   result?: TaskResult;
   attempts: number;
   maxAttempts: number;

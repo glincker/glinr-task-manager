@@ -51,15 +51,15 @@ function CodeBlock({
   }
 
   return (
-    <div className="relative group my-3">
+    <div className="relative group my-3 overflow-hidden">
       {language && (
-        <div className="absolute top-0 left-0 px-3 py-1 text-xs text-muted-foreground bg-muted/80 rounded-tl-lg rounded-br-lg font-mono">
+        <div className="absolute top-0 left-0 px-3 py-1 text-xs text-muted-foreground bg-muted/80 rounded-tl-lg rounded-br-lg font-mono z-10">
           {language}
         </div>
       )}
       <button
         onClick={handleCopy}
-        className="absolute top-2 right-2 p-1.5 rounded-lg bg-muted/80 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted"
+        className="absolute top-2 right-2 p-1.5 rounded-lg bg-muted/80 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted z-10"
       >
         {copied ? (
           <Check className="h-3.5 w-3.5 text-green-400" />
@@ -71,11 +71,13 @@ function CodeBlock({
         style={oneDark}
         language={language || 'text'}
         PreTag="div"
+        wrapLongLines={true}
         customStyle={{
           margin: 0,
           borderRadius: '0.75rem',
           fontSize: '0.85em',
           padding: language ? '2rem 1rem 1rem 1rem' : '1rem',
+          overflowX: 'auto',
         }}
         {...props}
       >
@@ -88,12 +90,12 @@ function CodeBlock({
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
   return (
     <ReactMarkdown
-      className={cn('prose prose-invert prose-sm max-w-none', className)}
+      className={cn('prose prose-invert prose-sm max-w-none wrap-anywhere', className)}
       remarkPlugins={[remarkGfm]}
       components={{
         code: CodeBlock as any,
-        // Style other elements
-        p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+        // Style other elements - add word wrapping
+        p: ({ children }) => <p className="mb-3 last:mb-0 wrap-anywhere">{children}</p>,
         ul: ({ children }) => <ul className="list-disc pl-4 mb-3 space-y-1">{children}</ul>,
         ol: ({ children }) => <ol className="list-decimal pl-4 mb-3 space-y-1">{children}</ol>,
         li: ({ children }) => <li className="text-sm">{children}</li>,

@@ -1,6 +1,7 @@
-import { useEffect, useCallback, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { useEffect, useCallback, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { api } from "@/core/api/client";
 
 interface TaskEvent {
   taskId: string;
@@ -23,12 +24,29 @@ interface TaskEvent {
   timestamp: string;
 }
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = "http://localhost:3000";
 
 export function useEventStream() {
   const queryClient = useQueryClient();
   const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const notificationPrefsRef = useRef({ taskComplete: true, taskFailed: true });
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => api.settings.get(),
+    staleTime: 30000,
+  });
+
+  useEffect(() => {
+    const prefs = settingsData?.settings?.notifications;
+    notificationPrefsRef.current = {
+      taskComplete: prefs?.taskComplete ?? true,
+      taskFailed: prefs?.taskFailed ?? true,
+    };
+  }, [settingsData]);
 
   const connect = useCallback(() => {
     // Don't create multiple connections
@@ -39,52 +57,56 @@ export function useEventStream() {
     const eventSource = new EventSource(`${API_BASE}/api/events`);
     eventSourceRef.current = eventSource;
 
-    eventSource.addEventListener('connected', (event) => {
+    eventSource.addEventListener("connected", (event) => {
       const data = JSON.parse(event.data);
-      console.log('[SSE] Connected:', data.message);
+      console.log("[SSE] Connected:", data.message);
     });
 
-    eventSource.addEventListener('ping', () => {
+    eventSource.addEventListener("ping", () => {
       // Keep-alive, no action needed
     });
 
-    eventSource.addEventListener('task:created', (event) => {
+    eventSource.addEventListener("task:created", (event) => {
       const data: TaskEvent = JSON.parse(event.data);
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
       toast.info(`New task: ${data.task.title}`);
     });
 
-    eventSource.addEventListener('task:started', (event) => {
+    eventSource.addEventListener("task:started", (event) => {
       const data: TaskEvent = JSON.parse(event.data);
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['tasks', data.taskId] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", data.taskId] });
     });
 
-    eventSource.addEventListener('task:completed', (event) => {
+    eventSource.addEventListener("task:completed", (event) => {
       const data: TaskEvent = JSON.parse(event.data);
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['tasks', data.taskId] });
-      queryClient.invalidateQueries({ queryKey: ['summaries'] });
-      toast.success(`Task completed: ${data.task.title}`);
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", data.taskId] });
+      queryClient.invalidateQueries({ queryKey: ["summaries"] });
+      if (notificationPrefsRef.current.taskComplete) {
+        toast.success(`Task completed: ${data.task.title}`);
+      }
     });
 
-    eventSource.addEventListener('task:failed', (event) => {
+    eventSource.addEventListener("task:failed", (event) => {
       const data: TaskEvent = JSON.parse(event.data);
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['tasks', data.taskId] });
-      queryClient.invalidateQueries({ queryKey: ['dlq'] });
-      toast.error(`Task failed: ${data.task.title}`, {
-        description: data.result?.error,
-      });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", data.taskId] });
+      queryClient.invalidateQueries({ queryKey: ["dlq"] });
+      if (notificationPrefsRef.current.taskFailed) {
+        toast.error(`Task failed: ${data.task.title}`, {
+          description: data.result?.error,
+        });
+      }
     });
 
-    eventSource.addEventListener('task:progress', (event) => {
+    eventSource.addEventListener("task:progress", (event) => {
       const data: TaskEvent = JSON.parse(event.data);
-      queryClient.invalidateQueries({ queryKey: ['tasks', data.taskId] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", data.taskId] });
     });
 
     eventSource.onerror = () => {
-      console.log('[SSE] Connection error, will reconnect...');
+      console.log("[SSE] Connection error, will reconnect...");
       eventSource.close();
       eventSourceRef.current = null;
 

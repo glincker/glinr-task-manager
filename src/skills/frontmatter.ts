@@ -6,18 +6,23 @@
  */
 
 import type {
-  ParsedSkillFrontmatter,
-  GlinrSkillMetadata,
+  SkillFrontmatter,
+  SkillMetadata,
   SkillInvocationPolicy,
-  Skill,
   SkillEntry,
+  SkillSource,
 } from './types.js';
+
+/**
+ * Raw parsed frontmatter (before type conversion)
+ */
+type ParsedFrontmatter = Record<string, string | undefined>;
 
 /**
  * Parse YAML frontmatter from markdown content
  */
-export function parseFrontmatter(content: string): ParsedSkillFrontmatter {
-  const frontmatter: ParsedSkillFrontmatter = {};
+export function parseFrontmatter(content: string): ParsedFrontmatter {
+  const frontmatter: ParsedFrontmatter = {};
 
   // Match YAML frontmatter block
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -91,14 +96,6 @@ function parseBooleanValue(value: string | undefined): boolean | undefined {
 }
 
 /**
- * Get frontmatter value as string
- */
-function getFrontmatterValue(frontmatter: ParsedSkillFrontmatter, key: string): string | undefined {
-  const raw = frontmatter[key];
-  return typeof raw === 'string' ? raw : undefined;
-}
-
-/**
  * Parse frontmatter boolean with fallback
  */
 function parseFrontmatterBool(value: string | undefined, fallback: boolean): boolean {
@@ -107,55 +104,62 @@ function parseFrontmatterBool(value: string | undefined, fallback: boolean): boo
 }
 
 /**
- * Resolve GLINR-specific metadata from frontmatter
+ * Convert raw frontmatter to typed SkillFrontmatter
  */
-export function resolveGlinrMetadata(
-  frontmatter: ParsedSkillFrontmatter
-): GlinrSkillMetadata | undefined {
-  const raw = getFrontmatterValue(frontmatter, 'metadata');
-  if (!raw) {
+function toSkillFrontmatter(raw: ParsedFrontmatter): SkillFrontmatter {
+  return {
+    name: raw['name'] || '',
+    description: raw['description'] || '',
+    'user-invocable': parseBooleanValue(raw['user-invocable']),
+    'disable-model-invocation': parseBooleanValue(raw['disable-model-invocation']),
+    'command-dispatch': raw['command-dispatch'] as 'tool' | undefined,
+    'command-tool': raw['command-tool'],
+    'command-arg-mode': raw['command-arg-mode'] as 'raw' | 'parsed' | undefined,
+    metadata: raw['metadata'],
+  };
+}
+
+/**
+ * Resolve extended metadata from frontmatter
+ */
+export function resolveMetadata(
+  raw: ParsedFrontmatter
+): SkillMetadata | undefined {
+  const metadataStr = raw['metadata'];
+  if (!metadataStr) {
     return undefined;
   }
 
   try {
-    // Parse JSON5/JSON metadata
-    const parsed = JSON.parse(raw);
+    // Parse JSON metadata
+    const parsed = JSON.parse(metadataStr);
     if (!parsed || typeof parsed !== 'object') {
       return undefined;
     }
 
-    // Look for glinr-specific metadata (support legacy 'openclaw' key too)
-    const metadataRaw = parsed.glinr || parsed.openclaw;
-    if (!metadataRaw || typeof metadataRaw !== 'object') {
-      return undefined;
-    }
+    // Support nested glinr/openclaw key or flat structure
+    const metadataObj = (parsed.glinr || parsed.openclaw || parsed) as Record<string, unknown>;
 
-    const metadataObj = metadataRaw as Record<string, unknown>;
     const requiresRaw = typeof metadataObj.requires === 'object' && metadataObj.requires !== null
       ? (metadataObj.requires as Record<string, unknown>)
       : undefined;
 
     const osRaw = normalizeStringList(metadataObj.os);
-    const toolsRaw = normalizeStringList(metadataObj.tools);
 
     return {
       always: typeof metadataObj.always === 'boolean' ? metadataObj.always : undefined,
-      emoji: typeof metadataObj.emoji === 'string' ? metadataObj.emoji : undefined,
-      homepage: typeof metadataObj.homepage === 'string' ? metadataObj.homepage : undefined,
       skillKey: typeof metadataObj.skillKey === 'string' ? metadataObj.skillKey : undefined,
       primaryEnv: typeof metadataObj.primaryEnv === 'string' ? metadataObj.primaryEnv : undefined,
-      category: typeof metadataObj.category === 'string' ? metadataObj.category : undefined,
-      priority: typeof metadataObj.priority === 'number' ? metadataObj.priority : undefined,
-      mcpServer: typeof metadataObj.mcpServer === 'string' ? metadataObj.mcpServer : undefined,
-      os: osRaw.length > 0 ? osRaw : undefined,
-      tools: toolsRaw.length > 0 ? toolsRaw : undefined,
+      emoji: typeof metadataObj.emoji === 'string' ? metadataObj.emoji : undefined,
+      homepage: typeof metadataObj.homepage === 'string' ? metadataObj.homepage : undefined,
+      os: osRaw.length > 0 ? osRaw as ('darwin' | 'linux' | 'win32')[] : undefined,
       requires: requiresRaw ? {
         bins: normalizeStringList(requiresRaw.bins),
         anyBins: normalizeStringList(requiresRaw.anyBins),
         env: normalizeStringList(requiresRaw.env),
         config: normalizeStringList(requiresRaw.config),
-        mcp: normalizeStringList(requiresRaw.mcp),
       } : undefined,
+      toolCategories: normalizeStringList(metadataObj.tools || metadataObj.toolCategories),
     };
   } catch {
     return undefined;
@@ -166,25 +170,12 @@ export function resolveGlinrMetadata(
  * Resolve skill invocation policy from frontmatter
  */
 export function resolveSkillInvocationPolicy(
-  frontmatter: ParsedSkillFrontmatter
+  raw: ParsedFrontmatter
 ): SkillInvocationPolicy {
   return {
-    userInvocable: parseFrontmatterBool(
-      getFrontmatterValue(frontmatter, 'user-invocable'),
-      true
-    ),
-    disableModelInvocation: parseFrontmatterBool(
-      getFrontmatterValue(frontmatter, 'disable-model-invocation'),
-      false
-    ),
+    userInvocable: parseFrontmatterBool(raw['user-invocable'], true),
+    modelInvocable: !parseFrontmatterBool(raw['disable-model-invocation'], false),
   };
-}
-
-/**
- * Resolve skill key for config lookup
- */
-export function resolveSkillKey(skill: Skill, entry?: SkillEntry): string {
-  return entry?.metadata?.skillKey ?? skill.name;
 }
 
 /**
@@ -194,31 +185,33 @@ export function parseSkillFile(
   content: string,
   filePath: string,
   baseDir: string,
-  source: Skill['source']
+  source: SkillSource
 ): SkillEntry | null {
-  const frontmatter = parseFrontmatter(content);
+  const raw = parseFrontmatter(content);
 
-  // Name and description are required
-  const name = getFrontmatterValue(frontmatter, 'name');
-  const description = getFrontmatterValue(frontmatter, 'description');
-
+  // Name is required
+  const name = raw['name'];
   if (!name) {
     return null;
   }
 
-  const skill: Skill = {
-    name,
-    description: description || name,
-    content: getMarkdownContent(content),
-    filePath,
-    baseDir,
-    source,
-  };
+  const frontmatter = toSkillFrontmatter(raw);
+  const metadata = resolveMetadata(raw);
+  const invocation = resolveSkillInvocationPolicy(raw);
+  const instructions = getMarkdownContent(content);
 
   return {
-    skill,
+    name,
+    description: frontmatter.description || name,
+    source,
+    dirPath: baseDir,
+    skillMdPath: filePath,
     frontmatter,
-    metadata: resolveGlinrMetadata(frontmatter),
-    invocation: resolveSkillInvocationPolicy(frontmatter),
+    metadata,
+    instructions,
+    invocation,
+    eligible: true, // Will be computed by loader
+    eligibilityErrors: [],
+    enabled: true, // Will be computed by config
   };
 }

@@ -11,7 +11,7 @@ interface ThemeProviderProps {
  * Supports three themes:
  * - light: Light mode (plum accents)
  * - dark: Dark Blue mode (blue tints, hue 250)
- * - midnight: Midnight Black mode (plum/purple tints, hue 320)
+ * - midnight: Midnight Black mode (neutral/dark tints)
  *
  * Each theme maps directly to a CSS class on the :root element.
  */
@@ -21,7 +21,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       attribute="class"
       defaultTheme="system"
       enableSystem
-      themes={['light', 'dark', 'midnight']}
+      themes={['light', 'dark']}
       disableTransitionOnChange
     >
       {children}

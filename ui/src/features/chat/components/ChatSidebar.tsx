@@ -18,7 +18,6 @@ import {
   X,
   Trash2,
   ChevronDown,
-  ChevronRight,
   Plus,
   FolderOpen,
   Folder,
@@ -212,19 +211,19 @@ export function ChatSidebar({
       icon={<History className="h-4 w-4" />}
       width={width}
       headerActions={
-        <div className="flex items-center gap-1">
+        <div className="flex items-center">
           {projects.length > 0 && (
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setGroupBy(groupBy === 'time' ? 'project' : 'time')}
-              className="h-7 w-7 rounded-lg hover:bg-primary/10"
-              title={groupBy === 'time' ? 'Group by project' : 'Group by time'}
+              className="h-6 w-6 rounded hover:bg-muted/60"
+              aria-label={groupBy === 'time' ? 'Group by project' : 'Group by time'}
             >
               {groupBy === 'time' ? (
-                <FolderOpen className="h-3.5 w-3.5" />
+                <FolderOpen className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
               ) : (
-                <History className="h-3.5 w-3.5" />
+                <History className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
               )}
             </Button>
           )}
@@ -232,62 +231,65 @@ export function ChatSidebar({
             variant="ghost"
             size="icon"
             onClick={onNewChat}
-            className="h-7 w-7 rounded-lg hover:bg-primary/10"
-            title="New conversation"
+            className="h-6 w-6 rounded hover:bg-muted/60"
+            aria-label="New chat"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
           </Button>
         </div>
       }
       footer={
         <Button
-          variant="default"
+          variant="outline"
           size="sm"
-          className="w-full text-xs shadow-sm"
+          className="w-full text-xs border-dashed border-border/50 hover:border-primary/30 hover:bg-primary/5"
           onClick={onNewChat}
+          aria-label="Start new chat"
         >
-          <MessageSquarePlus className="h-3.5 w-3.5 mr-1.5" />
-          New Conversation
+          <Plus className="h-3 w-3 mr-1.5" aria-hidden="true" />
+          New Chat
         </Button>
       }
     >
       {/* Search */}
-      <div className="p-3 border-b border-border/30">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/70" />
+      <div className="px-3 py-3 border-b border-white/[0.03]">
+        <div className="relative group/search">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30 group-focus-within/search:text-primary transition-colors" aria-hidden="true" />
           <Input
-            placeholder="Search chats..."
+            placeholder="Search conversations..."
+            aria-label="Search chat history"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-9 pl-9 pr-9 text-xs bg-muted/30 border border-border/40 rounded-xl focus:bg-background focus:border-primary/30 transition-colors"
+            className="h-10 pl-10 pr-10 text-sm bg-white/[0.03] dark:bg-white/[0.05] border-white/10 rounded-xl focus:bg-white/[0.05] focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/30 shadow-inner"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted/80 transition-colors"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+              aria-label="Clear search"
             >
-              <X className="h-3 w-3 text-muted-foreground" />
+              <X className="h-3.5 w-3.5 text-muted-foreground/40" aria-hidden="true" />
             </button>
           )}
         </div>
       </div>
 
       {/* Conversation List */}
-      <div className="flex-1 px-2">
+      <div className="flex-1 px-2 pb-2">
         {filteredConversations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-center px-4">
-            <div className="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-3">
-              <MessageSquarePlus className="h-7 w-7 text-muted-foreground/40" />
+          <div className="flex flex-col items-center justify-center h-60 text-center px-6">
+            <div className="w-16 h-16 rounded-[1.25rem] bg-gradient-to-br from-muted/20 to-muted/5 flex items-center justify-center mb-4 shadow-inner border border-white/5">
+              <MessageSquarePlus className="h-8 w-8 text-muted-foreground/20" />
             </div>
-            <p className="text-sm font-medium text-muted-foreground">
-              {searchQuery ? 'No matching chats' : 'No chats yet'}
+            <p className="text-sm font-semibold text-muted-foreground/90 tracking-tight">
+              {searchQuery ? 'No results found' : 'Empty history'}
             </p>
-            <p className="text-xs text-muted-foreground/60 mt-1 max-w-45">
-              {searchQuery ? 'Try a different search term' : 'Start a new conversation to see it here'}
+            <p className="text-xs text-muted-foreground/60 mt-1.5 leading-relaxed">
+              {searchQuery ? `We couldn't find any chats matching "${searchQuery}"` : 'Start your first conversation to see it here.'}
             </p>
           </div>
         ) : groupBy === 'time' ? (
-          <div className="py-2 space-y-1">
+          <div className="py-1 space-y-0.5">
             {timeGroups.map((group) => {
               const groupConvs = groupedByTime[group];
               if (groupConvs.length === 0) return null;
@@ -299,22 +301,26 @@ export function ChatSidebar({
                   {/* Group Header */}
                   <button
                     onClick={() => toggleGroup(group)}
-                    className="w-full flex items-center gap-2 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 hover:text-muted-foreground rounded-lg hover:bg-muted/40 transition-colors"
+                    aria-expanded={!isCollapsed}
+                    aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${TIME_GROUP_LABELS[group]} group`}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/60 hover:text-muted-foreground/90 transition-colors"
                   >
-                    {isCollapsed ? (
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    )}
+                    <div className={cn(
+                      "transition-transform duration-300",
+                      isCollapsed ? "-rotate-90" : "rotate-0"
+                    )}>
+                      <ChevronDown className="h-3 w-3" aria-hidden="true" />
+                    </div>
                     <span>{TIME_GROUP_LABELS[group]}</span>
-                    <span className="ml-auto text-[10px] font-medium bg-muted/60 px-1.5 py-0.5 rounded-full">
+                    <div className="flex-1 h-px bg-white/[0.03] mx-2" />
+                    <span className="text-[10px] tabular-nums opacity-60">
                       {groupConvs.length}
                     </span>
                   </button>
 
                   {/* Group Items */}
                   {!isCollapsed && (
-                    <div className="mt-1 space-y-1">
+                    <div className="space-y-0.5">
                       {groupConvs.map((conv) => (
                         <ConversationItem
                           key={conv.id}
@@ -331,7 +337,7 @@ export function ChatSidebar({
             })}
           </div>
         ) : (
-          <div className="py-2 space-y-1">
+          <div className="py-1 space-y-0.5">
             {projectGroups.map((projectId) => {
               const groupConvs = groupedByProject[projectId] || [];
               if (groupConvs.length === 0) return null;
@@ -345,22 +351,24 @@ export function ChatSidebar({
                   {/* Group Header */}
                   <button
                     onClick={() => toggleGroup(projectId)}
-                    className="w-full flex items-center gap-2 px-2 py-2 text-[11px] font-semibold text-muted-foreground/70 hover:text-muted-foreground rounded-lg hover:bg-muted/40 transition-colors"
+                    aria-expanded={!isCollapsed}
+                    aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${projectName} group`}
+                    className="w-full flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium text-muted-foreground/50 hover:text-muted-foreground/70 rounded-md hover:bg-muted/30 transition-colors"
                   >
                     {isCollapsed ? (
-                      <Folder className="h-3.5 w-3.5" />
+                      <Folder className="h-3 w-3" />
                     ) : (
-                      <FolderOpen className="h-3.5 w-3.5" />
+                      <FolderOpen className="h-3 w-3" />
                     )}
                     <span className="truncate">{projectName}</span>
-                    <span className="ml-auto text-[10px] font-medium bg-muted/60 px-1.5 py-0.5 rounded-full shrink-0">
+                    <span className="ml-auto text-xs text-muted-foreground/40">
                       {groupConvs.length}
                     </span>
                   </button>
 
                   {/* Group Items */}
                   {!isCollapsed && (
-                    <div className="mt-1 space-y-1">
+                    <div className="space-y-0.5">
                       {groupConvs.map((conv) => (
                         <ConversationItem
                           key={conv.id}
@@ -404,38 +412,33 @@ function ConversationItem({
   return (
     <div
       className={cn(
-        'group relative flex items-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 cursor-pointer',
-        'border border-transparent',
+        'group relative flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-300 cursor-pointer mx-1',
         isActive
-          ? 'bg-primary/8 border-primary/20 text-foreground shadow-sm'
-          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground hover:border-border/50'
+          ? 'nav-item-active shadow-md'
+          : 'text-muted-foreground hover:nav-item-hover'
       )}
       onClick={onSelect}
     >
       <div className={cn(
-        'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors',
-        isActive ? 'bg-primary/15' : 'bg-muted/50 group-hover:bg-muted'
+        'w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm border transition-all duration-300',
+        isActive 
+          ? 'bg-blue-600 border-blue-500 shadow-md text-white' 
+          : 'bg-white/[0.03] border-white/5'
       )}>
         <MessageSquarePlus className={cn(
-          'h-4 w-4',
-          isActive ? 'text-primary' : 'text-muted-foreground/70'
+          'h-4 w-4 transition-transform duration-500',
+          isActive ? 'text-white scale-110' : 'text-muted-foreground/40 group-hover:scale-110'
         )} />
       </div>
-      <div className="flex-1 min-w-0 py-0.5">
+      <div className="flex-1 min-w-0">
         <p className={cn(
-          'text-[13px] font-medium truncate leading-tight',
-          isActive && 'text-foreground'
+          'text-[13px] font-semibold truncate leading-tight tracking-tight',
+          isActive ? 'text-blue-600 dark:text-blue-400' : 'text-foreground/80'
         )}>{conversation.title}</p>
-        <p className="text-[11px] text-muted-foreground/70 truncate mt-1 leading-tight">
-          {conversation.preview || 'No messages yet'}
-        </p>
-        <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground/50">
-          <span className="flex items-center gap-1">
-            <span className="font-medium">{conversation.messageCount}</span>
-            <span>msgs</span>
-          </span>
-          <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-          <span>{relativeTime}</span>
+        <div className="flex items-center gap-2 mt-1 text-[10px] font-medium tracking-wide">
+          <span className={cn(isActive ? "text-blue-600/70 dark:text-blue-400/70" : "text-muted-foreground/40")}>{conversation.messageCount} messages</span>
+          <span className="h-0.5 w-0.5 rounded-full bg-current opacity-20" />
+          <span className={cn(isActive ? "text-blue-600/70 dark:text-blue-400/70" : "text-muted-foreground/40")}>{relativeTime}</span>
         </div>
       </div>
 
@@ -445,14 +448,15 @@ function ConversationItem({
           <AlertDialogTrigger asChild>
             <button
               className={cn(
-                'absolute right-2 top-2 p-1.5 rounded-lg transition-all',
+                'absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded transition-all',
                 'opacity-0 group-hover:opacity-100',
-                'hover:bg-destructive/10 hover:text-destructive',
-                'focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-destructive/20'
+                'hover:bg-destructive/15 hover:text-destructive',
+                'focus:opacity-100 focus:outline-none'
               )}
               onClick={(e) => e.stopPropagation()}
+              aria-label={`Delete conversation ${conversation.title}`}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Trash2 className="h-3 w-3" aria-hidden="true" />
             </button>
           </AlertDialogTrigger>
           <AlertDialogContent onClick={(e) => e.stopPropagation()}>

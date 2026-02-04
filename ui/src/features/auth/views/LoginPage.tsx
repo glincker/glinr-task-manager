@@ -118,7 +118,7 @@ export function LoginPage() {
           {/* Logo */}
           <div className="flex justify-center mb-4">
             <div className="p-3 rounded-2xl bg-[var(--primary)]/10 shadow-[0_0_30px_var(--primary-glow)]">
-              <Logo className="h-10 w-10 text-[var(--primary)]" />
+              <Logo className="h-10 w-10 text-[var(--primary)]" aria-label="GLINR Logo" />
             </div>
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">Welcome back</CardTitle>
@@ -181,6 +181,7 @@ export function LoginPage() {
                 }}
                 className="absolute -top-2 -right-2 p-1.5 rounded-full bg-[var(--muted)] hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors shadow-sm"
                 title="Dismiss"
+                aria-label="Dismiss last user"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -209,6 +210,7 @@ export function LoginPage() {
               <button
                 onClick={() => navigate('/setup')}
                 className="w-full text-xs text-center text-[var(--muted-foreground)] flex items-center justify-center gap-1.5 py-1.5 hover:text-[var(--primary)] transition-colors group"
+                aria-label="GitHub OAuth not configured. Click to configure now."
               >
                 <Settings className="h-3 w-3 group-hover:animate-spin" />
                 <span>GitHub OAuth not configured.</span>
@@ -283,7 +285,7 @@ export function LoginPage() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />

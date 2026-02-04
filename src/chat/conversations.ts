@@ -21,6 +21,15 @@ export interface Conversation {
   projectId?: string;
 }
 
+export interface ToolCallRecord {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  result?: unknown;
+  status?: 'pending' | 'running' | 'success' | 'error';
+  duration?: number;
+}
+
 export interface ConversationMessage {
   id: string;
   conversationId: string;
@@ -34,6 +43,7 @@ export interface ConversationMessage {
     total: number;
   };
   cost?: number;
+  toolCalls?: ToolCallRecord[];
   createdAt: string;
 }
 
@@ -67,10 +77,18 @@ export async function initConversationTables(): Promise<void> {
       completion_tokens INTEGER,
       total_tokens INTEGER,
       cost REAL,
+      tool_calls TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     )
   `);
+
+  // Migration: Add tool_calls column if it doesn't exist (for existing tables)
+  try {
+    await client.execute(`ALTER TABLE conversation_messages ADD COLUMN tool_calls TEXT`);
+  } catch {
+    // Column already exists, ignore
+  }
 
   // Index for fast conversation message lookup
   await client.execute(`
@@ -220,17 +238,23 @@ export async function addMessage(params: {
   provider?: string;
   tokenUsage?: { prompt: number; completion: number; total: number };
   cost?: number;
+  toolCalls?: ToolCallRecord[];
 }): Promise<ConversationMessage> {
   const client = getClient();
   const id = randomUUID();
   const now = new Date().toISOString();
 
+  // Serialize toolCalls to JSON if present
+  const toolCallsJson = params.toolCalls && params.toolCalls.length > 0
+    ? JSON.stringify(params.toolCalls)
+    : null;
+
   await client.execute({
     sql: `INSERT INTO conversation_messages (
             id, conversation_id, role, content, model, provider,
-            prompt_tokens, completion_tokens, total_tokens, cost, created_at
+            prompt_tokens, completion_tokens, total_tokens, cost, tool_calls, created_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       params.conversationId,
@@ -242,6 +266,7 @@ export async function addMessage(params: {
       params.tokenUsage?.completion || null,
       params.tokenUsage?.total || null,
       params.cost || null,
+      toolCallsJson,
       now,
     ],
   });
@@ -274,6 +299,7 @@ export async function addMessage(params: {
     provider: params.provider,
     tokenUsage: params.tokenUsage,
     cost: params.cost,
+    toolCalls: params.toolCalls,
     createdAt: now,
   };
 }
@@ -282,31 +308,44 @@ export async function getConversationMessages(conversationId: string): Promise<C
   const client = getClient();
   const result = await client.execute({
     sql: `SELECT id, conversation_id, role, content, model, provider,
-                 prompt_tokens, completion_tokens, total_tokens, cost, created_at
+                 prompt_tokens, completion_tokens, total_tokens, cost, tool_calls, created_at
           FROM conversation_messages
           WHERE conversation_id = ?
           ORDER BY created_at ASC`,
     args: [conversationId],
   });
 
-  return result.rows.map((row: Record<string, unknown>) => ({
-    id: row.id as string,
-    conversationId: row.conversation_id as string,
-    role: row.role as 'user' | 'assistant' | 'system',
-    content: row.content as string,
-    model: row.model as string | undefined,
-    provider: row.provider as string | undefined,
-    tokenUsage:
-      row.total_tokens != null
-        ? {
-            prompt: row.prompt_tokens as number,
-            completion: row.completion_tokens as number,
-            total: row.total_tokens as number,
-          }
-        : undefined,
-    cost: row.cost as number | undefined,
-    createdAt: row.created_at as string,
-  }));
+  return result.rows.map((row: Record<string, unknown>) => {
+    // Parse toolCalls from JSON if present
+    let toolCalls: ToolCallRecord[] | undefined;
+    if (row.tool_calls) {
+      try {
+        toolCalls = JSON.parse(row.tool_calls as string) as ToolCallRecord[];
+      } catch {
+        // Invalid JSON, ignore
+      }
+    }
+
+    return {
+      id: row.id as string,
+      conversationId: row.conversation_id as string,
+      role: row.role as 'user' | 'assistant' | 'system',
+      content: row.content as string,
+      model: row.model as string | undefined,
+      provider: row.provider as string | undefined,
+      tokenUsage:
+        row.total_tokens != null
+          ? {
+              prompt: row.prompt_tokens as number,
+              completion: row.completion_tokens as number,
+              total: row.total_tokens as number,
+            }
+          : undefined,
+      cost: row.cost as number | undefined,
+      toolCalls,
+      createdAt: row.created_at as string,
+    };
+  });
 }
 
 export async function getRecentConversationsWithPreview(

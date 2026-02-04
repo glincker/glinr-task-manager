@@ -44,6 +44,11 @@ export {
   summarizeMessages,
   compactMessages,
   getMemoryStats,
+  // Advanced context pruning
+  truncateToolResult,
+  processToolCallsForCompaction,
+  scoreMessageImportance,
+  selectMessagesForRetention,
   type MemoryConfig,
   type CompactionResult,
   type MemoryStats,
@@ -101,3 +106,13 @@ export {
   setSessionModel,
   clearSessionModel,
 } from './execution/tools/session-status.js';
+
+// Agentic executor (multi-step autonomous execution)
+export {
+  executeAgenticChat,
+  streamAgenticChat,
+  type AgenticChatRequest,
+  type AgenticChatResponse,
+  type AgenticStreamEvent,
+  type StreamAgenticChatRequest,
+} from './agentic-executor.js';

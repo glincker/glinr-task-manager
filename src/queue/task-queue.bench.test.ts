@@ -10,15 +10,17 @@ const mockWorkerClose = vi.fn();
 const mockWorkerOn = vi.fn();
 
 vi.mock('bullmq', () => {
+  class MockQueue {
+    add = mockQueueAdd;
+    close = mockQueueClose;
+  }
+  class MockWorker {
+    on = mockWorkerOn;
+    close = mockWorkerClose;
+  }
   return {
-    Queue: vi.fn().mockImplementation(() => ({
-      add: mockQueueAdd,
-      close: mockQueueClose,
-    })),
-    Worker: vi.fn().mockImplementation(() => ({
-      on: mockWorkerOn,
-      close: mockWorkerClose,
-    })),
+    Queue: MockQueue,
+    Worker: MockWorker,
     Job: vi.fn(),
   };
 });
@@ -45,6 +47,18 @@ vi.mock('./notifications.js', () => ({
   postResultToSource: async () => {
     await new Promise(resolve => setTimeout(resolve, 500)); // 500ms notification
   },
+}));
+
+// Mock Storage for DLQ initialization
+vi.mock('../storage/index.js', () => ({
+  getStorage: () => ({
+    execute: vi.fn().mockResolvedValue(undefined),
+    query: vi.fn().mockResolvedValue([]),
+    getTask: vi.fn().mockResolvedValue(null),
+    createTask: vi.fn().mockResolvedValue(undefined),
+    updateTask: vi.fn().mockResolvedValue(undefined),
+    getTasks: vi.fn().mockResolvedValue({ tasks: [], total: 0 }),
+  }),
 }));
 
 describe('Task Queue Performance Benchmark', () => {

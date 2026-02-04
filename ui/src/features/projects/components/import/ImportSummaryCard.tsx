@@ -112,8 +112,8 @@ export function ImportSummaryCard({
           {/* Labels */}
           <div className="bg-card rounded-lg border border-border p-4">
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Tag className="h-4 w-4 text-purple-500" />
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                <Tag className="h-4 w-4 text-indigo-500" />
               </div>
               <span className="text-2xl font-bold">
                 {summary.unmappedValues.status.length +

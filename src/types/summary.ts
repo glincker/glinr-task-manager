@@ -111,7 +111,10 @@ export const SummarySchema = z.object({
   branch: z.string().optional(),
 
   // Raw content (for search)
-  rawOutput: z.string().optional(), // Full agent output
+  rawOutput: z.string().optional(), // Full agent output - lazy loaded from summary_blobs
+
+  // Blob storage flag (Phase 17)
+  hasBlobOutput: z.boolean().optional(), // True if rawOutput is in summary_blobs table
 
   // Metadata
   metadata: z.record(z.unknown()).optional(),
@@ -162,6 +165,10 @@ export const SummaryQuerySchema = z.object({
   // Pagination
   limit: z.number().min(1).max(100).default(50),
   offset: z.number().min(0).default(0),
+
+  // Cursor-based pagination (Phase 17)
+  cursorCreatedAt: z.date().optional(),
+  cursorId: z.string().optional(),
 
   // Sorting
   sortBy: z.enum(['createdAt', 'durationMs', 'cost']).default('createdAt'),

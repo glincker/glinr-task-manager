@@ -239,8 +239,8 @@ const WEB_SEARCH_PROVIDERS = {
     name: 'Tavily',
     description: 'AI-optimized search API',
     icon: FlaskConical,
-    color: 'text-purple-500',
-    bgColor: 'bg-purple-500/10',
+    color: 'text-indigo-500',
+    bgColor: 'bg-indigo-500/10',
     helpUrl: 'https://tavily.com/',
     fields: ['apiKey'],
   },
@@ -677,8 +677,8 @@ export function IntegrationsSection({ settings, onUpdate }: IntegrationsSectionP
           {/* Linear */}
           <div className="p-4 rounded-xl border border-dashed border-border bg-muted/30">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <span className="text-lg font-bold text-purple-500">L</span>
+              <div className="h-10 w-10 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                <span className="text-lg font-bold text-indigo-500">L</span>
               </div>
               <div>
                 <p className="font-medium text-sm">Linear</p>

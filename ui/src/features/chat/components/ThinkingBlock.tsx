@@ -48,88 +48,98 @@ export function ThinkingBlock({
 
   return (
     <div className={cn('mb-3', className)}>
-      {/* Trigger Button - Like Claude's thinking disclosure */}
+      {/* Trigger Button - Clean, neutral design */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center gap-2 w-full px-3 py-2 rounded-xl',
-          // Light mode: darker purple background, Dark mode: lighter purple background
-          'bg-purple-100 dark:bg-purple-500/15',
-          'hover:bg-purple-200 dark:hover:bg-purple-500/25',
-          'border border-purple-300 dark:border-purple-500/30',
-          'transition-all duration-200 group text-left',
-          isStreaming && 'animate-pulse border-purple-400 dark:border-purple-500/50'
+          'flex items-center gap-3 w-full px-4 py-3 rounded-2xl transition-all duration-300 group text-left',
+          'bg-zinc-50 dark:bg-zinc-900',
+          'hover:bg-zinc-100 dark:hover:bg-zinc-800',
+          'border border-zinc-200 dark:border-zinc-800',
+          'shadow-sm hover:shadow-md hover:-translate-y-0.5',
+          isStreaming && 'ring-1 ring-blue-500/20 border-blue-500/30 bg-blue-50/50 dark:bg-blue-900/10'
         )}
         aria-expanded={isOpen}
         aria-label={isOpen ? 'Collapse thinking' : 'Expand thinking'}
       >
         {/* Brain Icon with streaming indicator */}
-        <div className="relative">
+        <div className={cn(
+          "relative flex items-center justify-center h-8 w-8 rounded-xl shadow-inner transition-colors",
+          isStreaming 
+            ? "bg-blue-100 dark:bg-blue-500/20" 
+            : "bg-zinc-100 dark:bg-zinc-800"
+        )}>
           <Brain
             className={cn(
-              'h-4 w-4 text-purple-600 dark:text-purple-400 transition-transform duration-200',
-              isOpen && 'scale-110',
-              isStreaming && 'animate-pulse'
+              'h-4 w-4 transition-all duration-500',
+              isStreaming 
+                ? "text-blue-600 dark:text-blue-400 animate-pulse" 
+                : "text-zinc-500 dark:text-zinc-400",
+              isOpen && !isStreaming ? 'text-zinc-700 dark:text-zinc-300' : '',
+              isOpen ? 'scale-110 rotate-[15deg]' : 'scale-100'
             )}
           />
           {isStreaming && (
-            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-purple-500 dark:bg-purple-400 animate-ping" />
+            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-blue-500 dark:bg-blue-400 animate-ping shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
           )}
         </div>
 
         {/* Label */}
-        <span className="text-xs font-medium text-purple-700 dark:text-purple-300 flex-1">
-          {isStreaming ? (
-            <span className="flex items-center gap-1.5">
-              Thinking
-              <span className="inline-flex gap-0.5">
-                <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
-                <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
-                <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
+        <div className="flex-1 flex flex-col">
+          <span className={cn(
+            "text-[13px] font-semibold tracking-tight transition-colors",
+            isStreaming 
+              ? "text-blue-700 dark:text-blue-300" 
+              : "text-zinc-700 dark:text-zinc-300"
+          )}>
+            {isStreaming ? (
+              <span className="flex items-center gap-1.5">
+                Thinking
+                <span className="inline-flex gap-0.5">
+                  <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
+                  <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
+                  <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
+                </span>
               </span>
-            </span>
-          ) : isOpen ? (
-            'Thinking'
-          ) : (
-            'View thinking'
-          )}
-        </span>
-
-        {/* Stats */}
-        {!isStreaming && (
-          <span className="text-[10px] text-purple-500 dark:text-purple-400/70 mr-1 tabular-nums">
-            {wordCount} words
+            ) : isOpen ? (
+              'Thinking'
+            ) : (
+              'View reasoning'
+            )}
           </span>
-        )}
+          {!isStreaming && (
+            <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-400 dark:text-zinc-500">
+              {wordCount} words analyzed
+            </span>
+          )}
+        </div>
 
         {/* Chevron */}
         <div
           className={cn(
-            'transition-transform duration-200',
-            isOpen && 'rotate-90'
+            'h-6 w-6 flex items-center justify-center rounded-lg transition-all duration-300',
+            isOpen ? 'rotate-90 bg-zinc-100 dark:bg-zinc-800' : 'bg-transparent'
           )}
         >
-          <ChevronRight className="h-3 w-3 text-purple-500 dark:text-purple-400" />
+          <ChevronRight className={cn("h-3.5 w-3.5", isOpen ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-400")} />
         </div>
       </button>
 
       {/* Collapsible Content */}
       <div
         className={cn(
-          'grid transition-all duration-300 ease-out',
+          'grid transition-all duration-500 cubic-bezier(0.4, 0, 0.2, 1)',
           isOpen ? 'grid-rows-[1fr] opacity-100 mt-2' : 'grid-rows-[0fr] opacity-0'
         )}
       >
         <div className="overflow-hidden">
           <div
             className={cn(
-              'px-3 py-2 rounded-xl',
-              'bg-purple-50 dark:bg-purple-500/10',
-              'border border-purple-200 dark:border-purple-500/20',
-              'max-h-100 overflow-y-auto scrollbar-glass'
+              'px-5 py-4 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-900/30',
+              'max-h-[32rem] overflow-y-auto scrollbar-thin'
             )}
           >
-            <pre className="whitespace-pre-wrap font-mono text-[11px] text-purple-800 dark:text-purple-200/80 leading-relaxed">
+            <pre className="whitespace-pre-wrap font-mono text-[13px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
               {thinking}
             </pre>
           </div>
@@ -159,12 +169,14 @@ export function FilteredJsonBlock({ jsonBlocks, className }: FilteredJsonBlockPr
     <div className={cn('mb-3', className)}>
       <button
         onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        aria-label={isOpen ? 'Collapse raw output' : 'Expand raw output'}
         className={cn(
           'flex items-center gap-2 px-3 py-1.5 rounded-lg',
           'bg-amber-100 dark:bg-amber-500/15',
           'hover:bg-amber-200 dark:hover:bg-amber-500/25',
           'border border-amber-300 dark:border-amber-500/30',
-          'transition-colors text-left text-[10px]'
+          'transition-colors text-left text-xs'
         )}
       >
         <span className="text-amber-700 dark:text-amber-400">
@@ -187,7 +199,7 @@ export function FilteredJsonBlock({ jsonBlocks, className }: FilteredJsonBlockPr
         <div className="overflow-hidden">
           <div className="px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20">
             {jsonBlocks.map((json, i) => (
-              <pre key={i} className="text-[10px] text-amber-800 dark:text-amber-300/80 font-mono whitespace-pre-wrap">
+              <pre key={i} className="text-xs text-amber-800 dark:text-amber-300/80 font-mono whitespace-pre-wrap">
                 {json}
               </pre>
             ))}

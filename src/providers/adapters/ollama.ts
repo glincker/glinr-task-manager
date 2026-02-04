@@ -101,8 +101,8 @@ export class OllamaProvider extends BaseProvider {
         isDefault: false,
       },
       {
-        id: 'qwen3:14b',
-        name: 'Qwen 3 14B',
+        id: 'qwen2.5:14b',
+        name: 'Qwen 2.5 14B',
         provider: 'ollama',
         capabilities: ['text', 'code'],
         contextWindow: 128000,

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, useSearchParams } from 'react-router-dom';
-import { Loader2, Search, Filter, X, ListTodo, Clock, CheckCircle2, AlertCircle, Play } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Loader2, Search, Filter, X, ListTodo, Clock, CheckCircle2, AlertCircle, Play, MoreHorizontal } from 'lucide-react';
 import { api, type Task } from '@/core/api/client';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { CreateTaskModal } from '../components/CreateTaskModal';
 
 const STATUS_OPTIONS = [
@@ -28,6 +42,7 @@ const AGENT_OPTIONS = ['all', 'openclaw', 'claude-code', 'auto'];
 
 export function TaskList() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // Get filters from URL params for shareability
   const statusFilter = searchParams.get('status') || 'all';
@@ -90,13 +105,14 @@ export function TaskList() {
       failed: { variant: 'destructive', icon: AlertCircle },
       running: { variant: 'info', icon: Play },
       pending: { variant: 'secondary', icon: Clock },
+      in_progress: { variant: 'info', icon: Play },
     };
     const statusConfig = config[status] || { variant: 'secondary' as const, icon: Clock };
     const { variant, icon: Icon } = statusConfig;
     return (
-      <Badge variant={variant} className="gap-1">
+      <Badge variant={variant} className="gap-1.5 px-2 py-0.5 font-medium">
         <Icon className="h-3 w-3" />
-        {status}
+        <span className="capitalize">{status.replace('_', ' ')}</span>
       </Badge>
     );
   };
@@ -131,7 +147,7 @@ export function TaskList() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search tasks by title or description..."
+              placeholder="Search tasks..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -209,7 +225,7 @@ export function TaskList() {
               </span>
             )}
             {sourceFilter !== 'all' && (
-              <span className="px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-400 text-xs font-medium capitalize">
+              <span className="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-400 text-xs font-medium capitalize">
                 Source: {sourceFilter}
               </span>
             )}
@@ -227,68 +243,104 @@ export function TaskList() {
         )}
       </div>
 
-      {/* Task List */}
-      {isLoading ? (
-        <div className="glass rounded-[28px] p-12 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : filteredTasks.length === 0 ? (
-        <div className="glass rounded-[28px] p-12 text-center">
-          <ListTodo className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
-          <p className="text-lg font-bold text-muted-foreground">No tasks found</p>
-          <p className="text-sm text-muted-foreground/60 mt-1">
-            {hasActiveFilters ? 'Try adjusting your filters' : 'Create a task to get started'}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filteredTasks.map((task) => (
-            <Link
-              key={task.id}
-              to={`/tasks/${task.id}`}
-              className="block glass rounded-[16px] p-4 hover-lift transition-liquid group"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="font-semibold truncate group-hover:text-primary transition-colors">
-                      {task.title}
-                    </h3>
+      {/* Task Table */}
+      <div className="glass-heavy rounded-[24px] overflow-hidden border border-white/10 shadow-float">
+        {isLoading ? (
+          <div className="flex items-center justify-center p-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : filteredTasks.length === 0 ? (
+          <div className="p-12 text-center">
+            <ListTodo className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
+            <p className="text-lg font-bold text-muted-foreground">No tasks found</p>
+            <p className="text-sm text-muted-foreground/60 mt-1">
+              {hasActiveFilters ? 'Try adjusting your filters' : 'Create a task to get started'}
+            </p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader className="bg-muted/30">
+              <TableRow className="hover:bg-transparent border-white/5">
+                <TableHead className="w-[400px]">Task</TableHead>
+                <TableHead className="w-[140px]">Status</TableHead>
+                <TableHead>Agent</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead className="text-right">Created</TableHead>
+                <TableHead className="w-[50px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredTasks.map((task) => (
+                <TableRow 
+                  key={task.id} 
+                  className="group cursor-pointer hover:bg-white/5 border-white/5"
+                  onClick={() => navigate(`/tasks/${task.id}`)}
+                >
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                        <ListTodo className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-foreground group-hover:text-primary transition-colors">
+                          {task.title}
+                        </div>
+                        {task.description && (
+                          <div className="text-xs text-muted-foreground truncate max-w-[300px]">
+                            {task.description}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
                     {getStatusBadge(task.status)}
-                  </div>
-                  {task.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-1 mb-2">
-                      {task.description}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 px-2 py-0.5 rounded-md bg-white/5">
-                      {task.source}
-                    </span>
-                    {task.assignedAgent && (
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-primary/80 px-2 py-0.5 rounded-md bg-primary/10">
-                        {task.assignedAgent}
-                      </span>
+                  </TableCell>
+                  <TableCell>
+                    {task.assignedAgent ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] uppercase text-white font-bold">
+                          {task.assignedAgent[0]}
+                        </div>
+                        <span className="text-sm capitalize">{task.assignedAgent}</span>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground italic">Unassigned</span>
                     )}
-                    {task.labels.slice(0, 3).map((label) => (
-                      <Badge key={label} variant="outline" className="text-[10px] px-1.5 py-0">
-                        {label}
-                      </Badge>
-                    ))}
-                    <span className="text-[10px] text-muted-foreground/50 ml-auto">
-                      {new Date(task.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="capitalize bg-muted/50">
+                      {task.source}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground text-sm font-mono">
+                    {new Date(task.createdAt).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => navigate(`/tasks/${task.id}`)}>
+                          View Details
+                        </DropdownMenuItem>
+                        {/* Add more actions here */}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
 
       {/* Pagination */}
       {filteredTasks.length > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between border-t border-white/10 pt-4">
           <p className="text-sm text-muted-foreground">
             Page {page + 1} • Showing {Math.min(filteredTasks.length, limit)} of {total}
           </p>

@@ -1,7 +1,7 @@
 # OpenClaw vs GLINR Feature Comparison
 
 > Research document for building solid memory, tools, and session management features.
-> Last updated: February 2026
+> Last updated: 2026-02-04 (Azure schema fix, provider failover)
 
 ---
 
@@ -9,7 +9,7 @@
 
 | Category | OpenClaw | GLINR | Winner |
 |----------|----------|-------|--------|
-| **Total Core Tools** | 15 | **38** | **GLINR** |
+| **Total Core Tools** | 15 | **47** | **GLINR** |
 | **Memory System** | ✅ Full semantic search | ✅ Hybrid search (vector + FTS5) | **Tie** |
 | **Session Management** | ✅ Multi-session, cross-session | ✅ sessions_list + session_status | **Tie** |
 | **Web Tools** | web_fetch, web_search | web_fetch, web_search (multi-provider) | **Tie** |
@@ -622,7 +622,51 @@ const MEMORY_DEFAULTS = {
 | External Sync | ✅ GitHub/Linear/Jira | ⚠️ Limited |
 | Git Operations | ✅ 7 git tools | ❌ None |
 | File Operations | ✅ 4 file tools | ❌ None built-in |
-| Total Tools | ✅ **38** | 15 |
+| Total Tools | ✅ **47** | 15 |
+
+---
+
+## Provider Failover System (✅ Implemented)
+
+Based on OpenClaw's battle-tested provider failover patterns, GLINR now has:
+
+### Features Implemented (2026-02-04)
+- **Auto-failover** - If primary provider fails, automatically tries configured fallbacks
+- **Cooldown tracking** - Failed providers are put in cooldown (exponential backoff)
+- **Schema normalization** - Tool schemas normalized for Azure compatibility
+- **Error classification** - Distinguishes retryable vs fatal errors
+- **Streaming support** - Failover works with both regular and streaming requests
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `src/chat/failover/index.ts` | Failover orchestration and error handling |
+| `src/chat/agentic-executor.ts` | Uses failover for agentic chat |
+| `src/providers/schema-utils.ts` | Tool schema normalization for Azure |
+
+### Azure Schema Fix
+Fixed `type: "None"` error by:
+1. Removing `target: 'openAi'` from zodToJsonSchema (produces problematic `$ref` schemas)
+2. Adding `not`, `if`, `then`, `else` to UNSUPPORTED_SCHEMA_KEYWORDS
+3. Using default jsonSchema7 target which produces cleaner schemas
+
+### Usage
+```typescript
+import { runWithModelFallback } from './failover/index.js';
+
+const result = await runWithModelFallback({
+  primaryProvider: 'azure',
+  primaryModel: 'gpt4o',
+  configuredProviders: ['azure', 'anthropic', 'openai'],
+  modelResolver: createModelResolver(),
+  run: async (provider, model) => {
+    // Your API call here
+  },
+  onError: (attempt) => {
+    logger.warn('Provider failed, trying fallback', attempt);
+  },
+});
+```
 
 ---
 

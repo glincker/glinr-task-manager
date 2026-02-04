@@ -15,7 +15,7 @@ import { getTasks } from '../queue/task-queue.js';
 import { getAgentRegistry } from '../adapters/registry.js';
 import { circuitBreakers } from '../utils/circuit-breaker.js';
 import { getMetricsSummary, metrics } from '../utils/metrics.js';
-import { getDeadLetterQueue } from '../queue/failure-handler.js';
+import { getDeadLetterQueueStats } from '../queue/failure-handler.js';
 
 /**
  * Health status enum
@@ -87,7 +87,7 @@ export async function handleDetailedHealthCheck(c: Context): Promise<Response> {
       queue: await checkQueueHealth(),
       adapters: await checkAdaptersHealth(),
       circuitBreakers: checkCircuitBreakersHealth(),
-      deadLetterQueue: checkDLQHealth(),
+      deadLetterQueue: await checkDLQHealth(),
     },
     metrics: getMetricsSummary(),
     system: getSystemInfo(),
@@ -291,29 +291,33 @@ function checkCircuitBreakersHealth(): ComponentHealth & { breakers?: any[] } {
 /**
  * Check dead letter queue health
  */
-function checkDLQHealth(): ComponentHealth {
+async function checkDLQHealth(): Promise<ComponentHealth> {
   try {
-    const dlqTasks = getDeadLetterQueue();
+    const stats = await getDeadLetterQueueStats();
+    const pendingCount = stats.pending;
 
     let status = HealthStatus.HEALTHY;
     let message = 'DLQ empty';
 
-    if (dlqTasks.length > 0 && dlqTasks.length < 10) {
+    if (pendingCount > 0 && pendingCount < 10) {
       status = HealthStatus.HEALTHY;
-      message = `${dlqTasks.length} task(s) in DLQ`;
-    } else if (dlqTasks.length >= 10 && dlqTasks.length < 50) {
+      message = `${pendingCount} task(s) in DLQ`;
+    } else if (pendingCount >= 10 && pendingCount < 50) {
       status = HealthStatus.DEGRADED;
-      message = `${dlqTasks.length} tasks in DLQ - review recommended`;
-    } else if (dlqTasks.length >= 50) {
+      message = `${pendingCount} tasks in DLQ - review recommended`;
+    } else if (pendingCount >= 50) {
       status = HealthStatus.UNHEALTHY;
-      message = `${dlqTasks.length} tasks in DLQ - immediate attention required`;
+      message = `${pendingCount} tasks in DLQ - immediate attention required`;
     }
 
     return {
       status,
       message,
       details: {
-        count: dlqTasks.length,
+        pending: stats.pending,
+        resolved: stats.resolved,
+        discarded: stats.discarded,
+        total: stats.total,
       },
       lastChecked: new Date().toISOString(),
     };

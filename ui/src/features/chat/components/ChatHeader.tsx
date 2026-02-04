@@ -19,6 +19,8 @@ import {
   BarChart2,
   PenTool,
   Plug,
+  Maximize2,
+  Minimize2,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -70,6 +72,7 @@ interface ChatHeaderProps {
   memoryStats?: MemoryStats;
   conversationId: string | null;
   enabledPlugins?: number;
+  focusedView?: boolean;
   // Actions
   onPresetChange: (preset: string) => void;
   onModelChange: (model: string) => void;
@@ -77,6 +80,7 @@ interface ChatHeaderProps {
   onOpenHistory: () => void;
   onOpenProviderSetup: () => void;
   onClearChat: () => void;
+  onToggleFocusedView?: () => void;
 }
 
 export function ChatHeader({
@@ -90,26 +94,28 @@ export function ChatHeader({
   memoryStats,
   conversationId,
   enabledPlugins = 0,
+  focusedView = false,
   onPresetChange,
   onModelChange,
   onNewChat,
   onOpenHistory,
   onOpenProviderSetup,
   onClearChat,
+  onToggleFocusedView,
 }: ChatHeaderProps) {
   const usagePercentage = memoryStats?.stats.usagePercentage ?? 0;
 
   return (
-    <div className="glass rounded-2xl px-4 py-3 mb-4">
-      <div className="flex items-center justify-between gap-4">
+    <div className="px-3 py-2">
+      <div className="flex items-center justify-between gap-3">
         {/* Left: Icon & Title */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
             <Sparkles className="h-4 w-4 text-primary" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-base font-semibold truncate">Chat</h1>
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <h1 className="text-sm font-semibold truncate">Chat</h1>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {healthyProviders.length > 0 ? (
                 <>
                   <span className="h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
@@ -128,9 +134,12 @@ export function ChatHeader({
                   <span className="text-muted-foreground/40">·</span>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button className="flex items-center gap-1 hover:text-foreground transition-colors">
-                        <Brain className="h-3 w-3 shrink-0" />
-                        <div className="w-8 h-1 bg-muted rounded-full overflow-hidden">
+                      <button 
+                        className="flex items-center gap-1 hover:text-foreground transition-colors"
+                        aria-label={`Context usage: ${Math.round(usagePercentage)}%`}
+                      >
+                        <Brain className="h-3 w-3 shrink-0" aria-hidden="true" />
+                        <div className="w-8 h-1 bg-muted rounded-full overflow-hidden" aria-hidden="true">
                           <div
                             className={cn(
                               "h-full rounded-full transition-all duration-300",
@@ -168,8 +177,11 @@ export function ChatHeader({
           {/* Model & Preset Selector */}
           <div className="hidden sm:flex items-center bg-muted/40 rounded-xl p-0.5">
             <Select value={selectedPreset} onValueChange={onPresetChange}>
-              <SelectTrigger className="h-7 w-auto border-0 bg-transparent shadow-none text-xs gap-1 px-2 hover:bg-muted/60 rounded-lg">
-                <PresetIcon icon={currentPreset?.icon || 'bot'} className="h-3.5 w-3.5 shrink-0" />
+              <SelectTrigger 
+                className="h-7 w-auto border-0 bg-transparent shadow-none text-xs gap-1 px-2 hover:bg-muted/60 rounded-lg"
+                aria-label="Select chat preset"
+              >
+                <PresetIcon icon={currentPreset?.icon || 'bot'} className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 <span className="hidden md:inline max-w-[80px] truncate">
                   <SelectValue />
                 </span>
@@ -189,23 +201,11 @@ export function ChatHeader({
             <div className="w-px h-4 bg-border/50" />
 
             <Select value={selectedModel} onValueChange={onModelChange}>
-              <SelectTrigger className="h-7 w-auto border-0 bg-transparent shadow-none text-xs gap-1.5 px-2 hover:bg-muted/60 rounded-lg">
-                {(() => {
-                  const currentAlias = aliases.find((a) => a.alias === selectedModel);
-                  const currentProvider = currentAlias ? providers.find((p) => p.type === currentAlias.provider) : null;
-                  const isHealthy = currentProvider?.healthy;
-                  return (
-                    <>
-                      <span className={cn(
-                        "h-1.5 w-1.5 rounded-full shrink-0",
-                        isHealthy ? "bg-green-500" : "bg-amber-400"
-                      )} />
-                      <span className="max-w-20 truncate capitalize">
-                        <SelectValue />
-                      </span>
-                    </>
-                  );
-                })()}
+              <SelectTrigger 
+                className="h-7 w-auto border-0 bg-transparent shadow-none text-xs gap-1.5 px-2 hover:bg-muted/60 rounded-lg"
+                aria-label="Select AI model"
+              >
+                <SelectValue />
               </SelectTrigger>
               <SelectContent className="glass-dropdown min-w-45">
                 {/* Only show configured providers */}
@@ -238,16 +238,14 @@ export function ChatHeader({
                     const isHealthy = provider?.healthy;
                     const isLocal = providerType === 'ollama';
                     return (
-                      <SelectItem key={alias.alias} value={alias.alias}>
-                        <div className="flex items-center justify-between w-full gap-3">
-                          <div className="flex items-center gap-2">
-                            <span className={cn(
-                              "h-1.5 w-1.5 rounded-full shrink-0",
-                              isHealthy ? 'bg-green-500' : 'bg-amber-400'
-                            )} />
-                            <span className="capitalize font-medium">{alias.alias}</span>
-                          </div>
-                          <span className="text-[10px] text-muted-foreground">
+                      <SelectItem key={alias.alias} value={alias.alias} className="py-2">
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "h-1.5 w-1.5 rounded-full shrink-0",
+                            isHealthy ? 'bg-green-500' : 'bg-amber-400'
+                          )} />
+                          <span className="capitalize font-medium">{alias.alias}</span>
+                          <span className="text-xs text-muted-foreground ml-1">
                             {isLocal ? 'Local' : alias.provider}
                           </span>
                         </div>
@@ -276,10 +274,34 @@ export function ChatHeader({
           </div>
 
           {/* Action Buttons */}
+          {onToggleFocusedView && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onToggleFocusedView}
+                  className={cn("h-8 w-8 shrink-0", focusedView && "bg-primary/10 text-primary")}
+                  aria-label={focusedView ? 'Exit focused view' : 'Enter focused view'}
+                  aria-pressed={focusedView}
+                >
+                  {focusedView ? <Minimize2 className="h-4 w-4" aria-hidden="true" /> : <Maximize2 className="h-4 w-4" aria-hidden="true" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{focusedView ? 'Exit focused view' : 'Focused view'}</TooltipContent>
+            </Tooltip>
+          )}
+
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={onNewChat} className="h-8 w-8 shrink-0">
-                <MessageSquarePlus className="h-4 w-4" />
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={onNewChat} 
+                className="h-8 w-8 shrink-0"
+                aria-label="New chat"
+              >
+                <MessageSquarePlus className="h-4 w-4" aria-hidden="true" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>New chat</TooltipContent>
@@ -287,8 +309,14 @@ export function ChatHeader({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={onOpenHistory} className="h-8 w-8 shrink-0">
-                <History className="h-4 w-4" />
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={onOpenHistory} 
+                className="h-8 w-8 shrink-0"
+                aria-label="View history"
+              >
+                <History className="h-4 w-4" aria-hidden="true" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>History</TooltipContent>
@@ -296,8 +324,14 @@ export function ChatHeader({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={onOpenProviderSetup} className="h-8 w-8 shrink-0">
-                <Key className="h-4 w-4" />
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={onOpenProviderSetup} 
+                className="h-8 w-8 shrink-0"
+                aria-label="Manage API keys"
+              >
+                <Key className="h-4 w-4" aria-hidden="true" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>API Keys</TooltipContent>
@@ -306,11 +340,11 @@ export function ChatHeader({
           {/* Plugins Button */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 relative" asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 relative" asChild aria-label={`Plugins and Tools (${enabledPlugins} enabled)`}>
                 <Link to="/settings/plugins">
-                  <Plug className="h-4 w-4" />
+                  <Plug className="h-4 w-4" aria-hidden="true" />
                   {enabledPlugins > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-primary text-[9px] font-medium text-primary-foreground flex items-center justify-center">
+                    <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-primary text-[9px] font-medium text-primary-foreground flex items-center justify-center" aria-hidden="true">
                       {enabledPlugins}
                     </span>
                   )}
@@ -323,8 +357,8 @@ export function ChatHeader({
           {/* Settings Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                <Settings2 className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Chat settings">
+                <Settings2 className="h-4 w-4" aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44 glass-dropdown">

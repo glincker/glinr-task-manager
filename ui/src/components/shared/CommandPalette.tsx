@@ -23,25 +23,33 @@ export function CommandPalette() {
   const { resetTour, startTour } = useOnboardingTour()
 
   React.useEffect(() => {
-    // Listen for keyboard shortcut
-    const down = (e: KeyboardEvent) => {
+    // Listen for keyboard shortcut - use capture phase to ensure it fires first
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+K or Ctrl+K to toggle command palette
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
-        setOpen((open) => !open)
+        e.stopPropagation()
+        setOpen((prev) => !prev)
+      }
+      // Escape to close when open
+      if (e.key === "Escape" && open) {
+        e.preventDefault()
+        setOpen(false)
       }
     }
 
     // Listen for custom event to open programmatically
     const handleOpenEvent = () => setOpen(true)
 
-    document.addEventListener("keydown", down)
+    // Use window with capture to catch before other handlers
+    window.addEventListener("keydown", handleKeyDown, true)
     window.addEventListener(OPEN_COMMAND_PALETTE_EVENT, handleOpenEvent)
 
     return () => {
-      document.removeEventListener("keydown", down)
+      window.removeEventListener("keydown", handleKeyDown, true)
       window.removeEventListener(OPEN_COMMAND_PALETTE_EVENT, handleOpenEvent)
     }
-  }, [])
+  }, [open])
 
   const runCommand = React.useCallback((command: () => void) => {
     setOpen(false)
@@ -51,9 +59,10 @@ export function CommandPalette() {
   if (!open) return null
 
   return (
-    <div 
-      className="fixed inset-0 z-[100] flex items-start justify-center pt-[10vh] sm:pt-[15vh] px-4 backdrop-blur-md bg-black/20 dark:bg-black/60 animate-in fade-in duration-300"
+    <button 
+      className="fixed inset-0 z-[100] flex items-start justify-center pt-[10vh] sm:pt-[15vh] px-4 backdrop-blur-md bg-black/20 dark:bg-black/60 animate-in fade-in duration-300 w-full h-full border-none cursor-default"
       onClick={() => setOpen(false)}
+      aria-label="Close command palette"
     >
       <div 
         className="w-full max-w-2xl overflow-hidden glass-heavy rounded-[32px] shadow-[0_32px_128px_-16px_rgba(0,0,0,0.5)] border border-white/10 animate-in zoom-in-95 duration-300"
@@ -157,7 +166,7 @@ export function CommandPalette() {
           </footer>
         </Command>
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -165,10 +174,10 @@ function CommandItem({ children, icon: Icon, onSelect }: { children: React.React
   return (
     <Command.Item
       onSelect={onSelect}
-      className="flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-default select-none aria-selected:bg-white/10 aria-selected:text-white transition-all duration-200 group"
+      className="flex items-center gap-3 px-4 py-3.5 rounded-2xl cursor-default select-none aria-selected:bg-primary/10 dark:aria-selected:bg-white/10 aria-selected:text-foreground transition-all duration-200 group"
     >
-      <div className="h-9 w-9 rounded-[12px] glass-heavy flex items-center justify-center border-white/5 group-aria-selected:border-white/20 group-aria-selected:scale-110 transition-transform">
-        <Icon className="h-[18px] w-[18px] text-muted-foreground group-aria-selected:text-blue-400 group-aria-selected:drop-shadow-[0_0_8px_rgba(96,165,250,0.5)] transition-all" />
+      <div className="h-9 w-9 rounded-[12px] glass-heavy flex items-center justify-center border-white/5 group-aria-selected:border-primary/30 dark:group-aria-selected:border-white/20 group-aria-selected:scale-110 transition-transform">
+        <Icon className="h-[18px] w-[18px] text-muted-foreground group-aria-selected:text-primary dark:group-aria-selected:text-blue-400 group-aria-selected:drop-shadow-[0_0_8px_rgba(96,165,250,0.5)] transition-all" />
       </div>
       <span className="text-[14px] font-medium tracking-tight">{children}</span>
     </Command.Item>

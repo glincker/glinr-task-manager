@@ -593,10 +593,10 @@ export function AIProvidersSection() {
             </code>
           </div>
         </div>
-        <div className="mt-3 flex items-start gap-3 p-3 rounded-xl bg-purple-500/5 border border-purple-500/20">
-          <Github className="h-4 w-4 text-purple-500 mt-0.5 shrink-0" />
+        <div className="mt-3 flex items-start gap-3 p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
+          <Github className="h-4 w-4 text-indigo-500 mt-0.5 shrink-0" />
           <div className="text-xs text-muted-foreground">
-            <p className="font-medium mb-1 text-purple-600 dark:text-purple-400">
+            <p className="font-medium mb-1 text-indigo-600 dark:text-indigo-400">
               GitHub Copilot Proxy Setup (Experimental)
             </p>
             <p className="mb-2">
@@ -620,7 +620,7 @@ export function AIProvidersSection() {
               href="https://github.com/ericc-ch/copilot-api"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 mt-2 text-purple-500 hover:underline"
+              className="inline-flex items-center gap-1 mt-2 text-indigo-500 hover:underline"
             >
               View full setup guide
               <ExternalLink className="h-3 w-3" />

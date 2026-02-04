@@ -41,6 +41,8 @@ export interface ToolCall {
   name: string;
   arguments: Record<string, unknown>;
   result?: unknown;
+  status?: 'pending' | 'running' | 'success' | 'error';
+  duration?: number;
 }
 
 export interface PendingApproval {
@@ -350,4 +352,166 @@ export const chatApi = {
         count: number;
       }>('/chat/tools'),
   },
+
+  // Agentic mode with SSE streaming
+  agentic: {
+    /**
+     * Send a message in agentic mode with SSE streaming.
+     * Returns an async generator that yields events.
+     */
+    sendMessage: async function* (
+      conversationId: string,
+      data: {
+        content: string;
+        model?: string;
+        temperature?: number;
+        showThinking?: boolean;
+        maxSteps?: number;
+        maxBudget?: number;
+      }
+    ): AsyncGenerator<AgenticStreamEvent> {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+      const url = `${baseUrl}/chat/conversations/${conversationId}/messages/agentic`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(error.error || 'Agentic chat request failed');
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE events from buffer
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const jsonStr = line.slice(6).trim();
+              if (jsonStr) {
+                try {
+                  const event = JSON.parse(jsonStr) as AgenticStreamEvent;
+                  yield event;
+                } catch {
+                  console.warn('Failed to parse SSE event:', jsonStr);
+                }
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    },
+
+    /**
+     * Convenience method to collect all events and return final result.
+     */
+    sendMessageAndWait: async (
+      conversationId: string,
+      data: {
+        content: string;
+        model?: string;
+        temperature?: number;
+        showThinking?: boolean;
+        maxSteps?: number;
+        maxBudget?: number;
+      },
+      onEvent?: (event: AgenticStreamEvent) => void
+    ): Promise<AgenticChatResult> => {
+      const events: AgenticStreamEvent[] = [];
+      let summary = '';
+      let error: string | null = null;
+      const toolCalls: ToolCall[] = [];
+      let totalSteps = 0;
+      let totalTokens = 0;
+
+      for await (const event of chatApi.agentic.sendMessage(conversationId, data)) {
+        events.push(event);
+        onEvent?.(event);
+
+        if (event.type === 'summary') {
+          const summaryData = event.data as { summary: string };
+          summary = summaryData.summary;
+        }
+        if (event.type === 'complete') {
+          const completeData = event.data as {
+            totalSteps: number;
+            totalTokens: number;
+            toolCalls: ToolCall[];
+          };
+          totalSteps = completeData.totalSteps;
+          totalTokens = completeData.totalTokens;
+          toolCalls.push(...(completeData.toolCalls || []));
+        }
+        if (event.type === 'error') {
+          const errorData = event.data as { message: string };
+          error = errorData.message;
+        }
+      }
+
+      return {
+        events,
+        summary,
+        error,
+        toolCalls,
+        totalSteps,
+        totalTokens,
+      };
+    },
+  },
 };
+
+// Agentic streaming event type (matches backend)
+export interface AgenticStreamEvent {
+  type:
+    | 'session:start'
+    | 'thinking:start'
+    | 'thinking:update'
+    | 'thinking:end'
+    | 'step:start'
+    | 'step:complete'
+    | 'tool:call'
+    | 'tool:result'
+    | 'content'
+    | 'summary'
+    | 'complete'
+    | 'error'
+    | 'user_message'
+    | 'message_saved';
+  data: Record<string, unknown>;
+  timestamp: number;
+}
+
+export interface AgenticChatResult {
+  events: AgenticStreamEvent[];
+  summary: string;
+  error: string | null;
+  toolCalls: ToolCall[];
+  totalSteps: number;
+  totalTokens: number;
+}

@@ -33,8 +33,10 @@ describe('GitHub Integration', () => {
     return {
       req: {
         header: (key: string) => {
-          if (key === 'x-hub-signature-256') return signature;
-          if (key === 'x-github-event') return eventType;
+          const lowerKey = key.toLowerCase();
+          if (lowerKey === 'x-hub-signature-256') return signature;
+          if (lowerKey === 'x-github-event') return eventType;
+          if (lowerKey === 'x-github-delivery') return 'test-delivery-id';
           return undefined;
         },
         text: async () => payload,
@@ -219,7 +221,7 @@ describe('GitHub Integration', () => {
       const result = await handleGitHubWebhook(c);
 
       expect(result).not.toBeNull();
-      expect(result?.title).toBe('Need help here');
+      expect(result?.title).toBe('AI Task: Need help here');
       expect(result?.prompt).toContain('Fix the memory leak in the cache module');
     });
 
@@ -280,10 +282,10 @@ describe('GitHub Integration', () => {
       const result = await handleGitHubWebhook(c);
 
       expect(result).not.toBeNull();
-      expect(result?.title).toContain('Review PR #555');
+      expect(result?.title).toBe('Review PR: Add new feature');
       expect(result?.source).toBe('github_pr');
       expect(result?.branch).toBe('feature/auth');
-      expect(result?.prompt).toContain('Review this pull request');
+      expect(result?.prompt).toContain('Please review Pull Request #555');
     });
 
     it('should ignore PR without ai-review label', async () => {

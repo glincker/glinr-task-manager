@@ -186,7 +186,7 @@ export function TicketList() {
     const config: Record<TicketType, { icon: typeof Bug; color: string }> = {
       task: { icon: CheckCircle2, color: 'text-blue-500' },
       bug: { icon: Bug, color: 'text-red-500' },
-      feature: { icon: Sparkles, color: 'text-purple-500' },
+      feature: { icon: Sparkles, color: 'text-cyan-500' },
       enhancement: { icon: Sparkles, color: 'text-indigo-500' },
       documentation: { icon: BookOpen, color: 'text-cyan-500' },
       epic: { icon: Layers, color: 'text-orange-500' },
@@ -441,7 +441,7 @@ export function TicketList() {
               </span>
             )}
             {typeFilter !== 'all' && (
-              <span className="px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-400 text-xs font-medium capitalize">
+              <span className="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-400 text-xs font-medium capitalize">
                 Type: {typeFilter}
               </span>
             )}
@@ -531,7 +531,7 @@ export function TicketList() {
                         </span>
                       )}
                       {ticket.createdBy === 'ai' && (
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 px-2 py-0.5 rounded-md bg-purple-500/10">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400 px-2 py-0.5 rounded-md bg-blue-500/10">
                           AI Created
                         </span>
                       )}

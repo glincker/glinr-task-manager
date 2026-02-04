@@ -46,6 +46,41 @@ const SUMMARY_SECTION_PATTERN = /##?\s*(?:summary|what changed|changes)[:\s]*\n(
 const WHY_SECTION_PATTERN = /##?\s*(?:why|motivation|reason)[:\s]*\n([\s\S]*?)(?=\n##|$)/i;
 const HOW_SECTION_PATTERN = /##?\s*(?:how|approach|implementation)[:\s]*\n([\s\S]*?)(?=\n##|$)/i;
 
+// Task type inference - keywords mapped to task types
+const TASK_TYPE_KEYWORDS: Record<string, string[]> = {
+  bug_fix: ['fix', 'bug', 'issue', 'error', 'crash', 'broken', 'repair', 'patch', 'resolve'],
+  feature: ['add', 'new', 'implement', 'create', 'feature', 'introduce', 'enable'],
+  refactor: ['refactor', 'restructure', 'reorganize', 'clean', 'improve', 'simplify', 'extract'],
+  documentation: ['docs', 'documentation', 'readme', 'comment', 'jsdoc', 'typedoc', 'explain'],
+  test: ['test', 'spec', 'coverage', 'mock', 'stub', 'jest', 'vitest', 'testing'],
+  performance: ['performance', 'perf', 'speed', 'optimize', 'cache', 'lazy', 'faster', 'memory'],
+  security: ['security', 'auth', 'permission', 'vulnerability', 'xss', 'csrf', 'token', 'encrypt'],
+  chore: ['chore', 'upgrade', 'dependency', 'package', 'version', 'config', 'lint'],
+};
+
+// Component inference - path patterns to component names
+const COMPONENT_PATTERNS: Array<{ pattern: RegExp; component: string }> = [
+  { pattern: /\/(components?|ui)\//i, component: 'ui' },
+  { pattern: /\/(views?|pages?|screens?)\//i, component: 'views' },
+  { pattern: /\/(api|routes?|endpoints?)\//i, component: 'api' },
+  { pattern: /\/(utils?|helpers?|lib)\//i, component: 'utils' },
+  { pattern: /\/(hooks?)\//i, component: 'hooks' },
+  { pattern: /\/(store|state|redux|context)\//i, component: 'state' },
+  { pattern: /\/(types?|interfaces?)\//i, component: 'types' },
+  { pattern: /\/(tests?|specs?|__tests__)\//i, component: 'tests' },
+  { pattern: /\/(styles?|css|scss)\//i, component: 'styles' },
+  { pattern: /\/(auth|authentication|login)\//i, component: 'auth' },
+  { pattern: /\/(database|db|storage|models?)\//i, component: 'database' },
+  { pattern: /\/(config|settings)\//i, component: 'config' },
+  { pattern: /\/(queue|jobs?|workers?)\//i, component: 'queue' },
+  { pattern: /\/(integrations?|sync|adapters?)\//i, component: 'integrations' },
+  { pattern: /\/(features?)\//i, component: 'features' },
+  { pattern: /\/(core)\//i, component: 'core' },
+  { pattern: /\/(layouts?)\//i, component: 'layouts' },
+  { pattern: /\/(middleware)\//i, component: 'middleware' },
+  { pattern: /\/(services?)\//i, component: 'services' },
+];
+
 // ============================================================================
 // Main Extraction Functions
 // ============================================================================
@@ -99,8 +134,12 @@ export async function extractFromTaskResult(
   const whyChanged = extractSection(output, WHY_SECTION_PATTERN);
   const howChanged = extractSection(output, HOW_SECTION_PATTERN);
 
-  // Generate title
-  const title = generateTitle(whatChanged, filesChanged, artifacts);
+  // Infer task type and component
+  const taskType = inferTaskType(output, filesChanged);
+  const component = inferComponent(filesChanged);
+
+  // Generate smarter title
+  const title = generateSmartTitle(whatChanged, filesChanged, artifacts, taskType);
 
   return {
     taskId: context?.taskId,
@@ -117,6 +156,8 @@ export async function extractFromTaskResult(
     decisions,
     blockers,
     artifacts,
+    taskType,
+    component,
     tokensUsed: result.tokensUsed ? {
       input: result.tokensUsed.input,
       output: result.tokensUsed.output,
@@ -191,13 +232,17 @@ export function extractFromRawOutput(
   const artifacts = extractArtifacts(output);
 
   // Extract sections
-  const whatChanged = extractSection(output, SUMMARY_SECTION_PATTERN) || 
+  const whatChanged = extractSection(output, SUMMARY_SECTION_PATTERN) ||
     generateWhatChanged(filesChanged, artifacts);
   const whyChanged = extractSection(output, WHY_SECTION_PATTERN);
   const howChanged = extractSection(output, HOW_SECTION_PATTERN);
 
-  // Generate title
-  const title = generateTitle(whatChanged, filesChanged, artifacts);
+  // Infer task type and component
+  const taskType = inferTaskType(output, filesChanged);
+  const component = inferComponent(filesChanged);
+
+  // Generate smarter title
+  const title = generateSmartTitle(whatChanged, filesChanged, artifacts, taskType);
 
   return {
     taskId: context?.taskId,
@@ -212,6 +257,8 @@ export function extractFromRawOutput(
     decisions,
     blockers,
     artifacts,
+    taskType,
+    component,
     rawOutput: output,
   };
 }
@@ -423,34 +470,6 @@ function generateWhatChanged(
   return parts.join('. ') || 'No changes detected';
 }
 
-/**
- * Generate a title from summary content
- */
-function generateTitle(
-  whatChanged: string,
-  files: FileChange[],
-  artifacts: ArtifactReference[]
-): string {
-  // Use first file if available
-  if (files.length > 0) {
-    const firstFile = files[0];
-    const action = firstFile.action === 'created' ? 'Add' :
-      firstFile.action === 'deleted' ? 'Remove' : 'Update';
-    const fileName = firstFile.path.split('/').pop() || firstFile.path;
-    return `${action} ${fileName}${files.length > 1 ? ` (+${files.length - 1} more)` : ''}`;
-  }
-
-  // Use artifact if available
-  if (artifacts.length > 0) {
-    const pr = artifacts.find(a => a.type === 'pull_request');
-    if (pr) {
-      return `Create PR #${pr.identifier}`;
-    }
-  }
-
-  // Fall back to what changed
-  return whatChanged.slice(0, 100);
-}
 
 /**
  * Check if a string looks like a valid file path
@@ -462,4 +481,164 @@ function isValidFilePath(path: string): boolean {
   const isValidChars = /^[a-zA-Z0-9_./-]+$/.test(path);
 
   return isValidChars && (hasExtension || isConfig) && path.length < 200;
+}
+
+// ============================================================================
+// Task Type and Component Inference
+// ============================================================================
+
+/**
+ * Infer the task type from output text and file changes
+ */
+export function inferTaskType(
+  output: string,
+  files: FileChange[],
+  title?: string
+): string {
+  const textToAnalyze = `${title || ''} ${output}`.toLowerCase();
+
+  // Score each task type based on keyword matches
+  const scores: Record<string, number> = {};
+
+  for (const [taskType, keywords] of Object.entries(TASK_TYPE_KEYWORDS)) {
+    scores[taskType] = 0;
+    for (const keyword of keywords) {
+      const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+      const matches = textToAnalyze.match(regex);
+      if (matches) {
+        scores[taskType] += matches.length;
+      }
+    }
+  }
+
+  // Check file patterns for additional hints
+  for (const file of files) {
+    const path = file.path.toLowerCase();
+    if (/\.test\.|\.spec\.|__tests__/i.test(path)) {
+      scores.test = (scores.test || 0) + 2;
+    }
+    if (/\.md$|readme|docs?\//i.test(path)) {
+      scores.documentation = (scores.documentation || 0) + 2;
+    }
+  }
+
+  // Find the highest scoring type
+  let maxScore = 0;
+  let inferredType = 'feature'; // default
+
+  for (const [taskType, score] of Object.entries(scores)) {
+    if (score > maxScore) {
+      maxScore = score;
+      inferredType = taskType;
+    }
+  }
+
+  return maxScore > 0 ? inferredType : 'feature';
+}
+
+/**
+ * Infer the component/scope from file changes
+ */
+export function inferComponent(files: FileChange[]): string | undefined {
+  if (files.length === 0) return undefined;
+
+  // Count occurrences of each component
+  const componentCounts: Record<string, number> = {};
+
+  for (const file of files) {
+    for (const { pattern, component } of COMPONENT_PATTERNS) {
+      if (pattern.test(file.path)) {
+        componentCounts[component] = (componentCounts[component] || 0) + 1;
+        break; // Only count first match per file
+      }
+    }
+  }
+
+  // Find the most common component
+  let maxCount = 0;
+  let primaryComponent: string | undefined;
+
+  for (const [component, count] of Object.entries(componentCounts)) {
+    if (count > maxCount) {
+      maxCount = count;
+      primaryComponent = component;
+    }
+  }
+
+  return primaryComponent;
+}
+
+/**
+ * Generate a smarter title based on task type and content
+ */
+function generateSmartTitle(
+  whatChanged: string,
+  files: FileChange[],
+  artifacts: ArtifactReference[],
+  taskType: string
+): string {
+  // Get action prefix based on task type
+  const typePrefix: Record<string, string> = {
+    bug_fix: 'Fix',
+    feature: 'Add',
+    refactor: 'Refactor',
+    documentation: 'Document',
+    test: 'Test',
+    performance: 'Optimize',
+    security: 'Secure',
+    chore: 'Update',
+  };
+  const prefix = typePrefix[taskType] || 'Update';
+
+  // Use first file if available
+  if (files.length > 0) {
+    const firstFile = files[0];
+    const fileName = firstFile.path.split('/').pop() || firstFile.path;
+
+    // Clean up filename for display
+    const cleanName = fileName.replace(/\.[^/.]+$/, ''); // Remove extension
+
+    if (files.length === 1) {
+      return `${prefix} ${cleanName}`;
+    }
+
+    // Try to find common directory
+    const dirs = files.map((f) => f.path.split('/').slice(0, -1).join('/'));
+    const commonDir = findCommonPrefix(dirs);
+    if (commonDir) {
+      const dirName = commonDir.split('/').pop() || commonDir;
+      return `${prefix} ${dirName} (${files.length} files)`;
+    }
+
+    return `${prefix} ${cleanName} (+${files.length - 1} more)`;
+  }
+
+  // Use artifact if available
+  if (artifacts.length > 0) {
+    const pr = artifacts.find((a) => a.type === 'pull_request');
+    if (pr) {
+      return `Create PR #${pr.identifier}`;
+    }
+  }
+
+  // Fall back to what changed
+  const summary = whatChanged.split('\n')[0].slice(0, 80);
+  return summary.endsWith('.') ? summary.slice(0, -1) : summary;
+}
+
+/**
+ * Find common prefix of an array of strings
+ */
+function findCommonPrefix(strings: string[]): string {
+  if (strings.length === 0) return '';
+  if (strings.length === 1) return strings[0];
+
+  let prefix = strings[0];
+  for (let i = 1; i < strings.length; i++) {
+    while (strings[i].indexOf(prefix) !== 0) {
+      prefix = prefix.substring(0, prefix.length - 1);
+      if (prefix === '') return '';
+    }
+  }
+  return prefix;
 }

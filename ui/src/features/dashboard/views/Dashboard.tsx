@@ -162,7 +162,7 @@ function MiniDonut({ completed, running, pending, failed }: { completed: number;
           />
         </PieChart>
       </ResponsiveContainer>
-      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" aria-hidden="true">
         <span className="text-xl font-bold">{total}</span>
       </div>
     </div>
@@ -220,7 +220,7 @@ function EmptyPlaceholder({ icon: Icon, title, action }: {
   return (
     <div className="flex flex-col items-center justify-center py-6 text-center">
       <div className="h-10 w-10 rounded-xl bg-muted/10 flex items-center justify-center mb-2">
-        <Icon className="h-5 w-5 text-muted-foreground/40" />
+        <Icon className="h-5 w-5 text-muted-foreground/40" aria-hidden="true" />
       </div>
       <p className="text-xs text-muted-foreground mb-2">{title}</p>
       {action && (
@@ -398,7 +398,7 @@ export function Dashboard() {
           value={totalTickets}
           icon={Ticket}
           trend={openTickets > 0 ? `${openTickets} open` : undefined}
-          color="from-purple-500 to-purple-600"
+          color="from-indigo-500 to-indigo-600"
           href="/tickets"
         />
         <StatCard
@@ -674,11 +674,11 @@ export function Dashboard() {
                         <div className={cn(
                           "h-2 w-2 rounded-full shrink-0",
                           agent.health?.healthy ? "bg-green-500" : "bg-gray-500"
-                        )} />
+                        )} aria-label={agent.health?.healthy ? "Healthy" : "Offline"} />
                         <span className="text-sm font-medium capitalize flex-1">
                           {agent.name || agent.type.replace(/-/g, ' ')}
                         </span>
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[10px] text-muted-foreground" aria-hidden="true">
                           {agent.health?.healthy ? 'Active' : 'Offline'}
                         </span>
                       </div>

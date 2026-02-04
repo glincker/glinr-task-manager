@@ -20,6 +20,11 @@ const UNSUPPORTED_SCHEMA_KEYWORDS = new Set([
   '$defs',
   'definitions',
   'examples',
+  // Logical composition keywords that can cause issues
+  'not', // Azure interprets { not: {} } as type: "None"
+  'if',
+  'then',
+  'else',
   // Constraint keywords that can cause issues
   'minLength',
   'maxLength',

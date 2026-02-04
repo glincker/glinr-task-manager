@@ -78,7 +78,7 @@ const STATUS_OPTIONS: Array<{ value: TicketStatus; label: string; icon: typeof C
   { value: 'backlog', label: 'Backlog', icon: Archive, color: 'text-gray-400', bgColor: 'bg-gray-400/10' },
   { value: 'todo', label: 'Todo', icon: Circle, color: 'text-blue-400', bgColor: 'bg-blue-400/10' },
   { value: 'in_progress', label: 'In Progress', icon: Play, color: 'text-amber-400', bgColor: 'bg-amber-400/10' },
-  { value: 'in_review', label: 'In Review', icon: Eye, color: 'text-purple-400', bgColor: 'bg-purple-400/10' },
+  { value: 'in_review', label: 'In Review', icon: Eye, color: 'text-indigo-400', bgColor: 'bg-indigo-400/10' },
   { value: 'done', label: 'Done', icon: CheckCircle2, color: 'text-green-400', bgColor: 'bg-green-400/10' },
   { value: 'cancelled', label: 'Cancelled', icon: X, color: 'text-gray-500', bgColor: 'bg-gray-500/10' },
 ];
@@ -86,7 +86,7 @@ const STATUS_OPTIONS: Array<{ value: TicketStatus; label: string; icon: typeof C
 const typeConfig: Record<TicketType, { icon: typeof Bug; color: string; bgColor: string }> = {
   task: { icon: CheckCircle2, color: 'text-blue-500', bgColor: 'bg-blue-500/10' },
   bug: { icon: Bug, color: 'text-red-500', bgColor: 'bg-red-500/10' },
-  feature: { icon: Sparkles, color: 'text-purple-500', bgColor: 'bg-purple-500/10' },
+  feature: { icon: Sparkles, color: 'text-cyan-500', bgColor: 'bg-cyan-500/10' },
   enhancement: { icon: Sparkles, color: 'text-indigo-500', bgColor: 'bg-indigo-500/10' },
   documentation: { icon: BookOpen, color: 'text-cyan-500', bgColor: 'bg-cyan-500/10' },
   epic: { icon: Layers, color: 'text-orange-500', bgColor: 'bg-orange-500/10' },
@@ -618,7 +618,7 @@ export function TicketDetailModal({ ticketId, open, onOpenChange }: TicketDetail
                                      <div className="flex items-center gap-2">
                                        <span className="font-bold text-sm tracking-tight">{comment.author.name}</span>
                                        {comment.author.type === 'ai' && (
-                                         <Badge variant="secondary" className="bg-purple-500/10 text-purple-400 border-none text-[10px] font-bold h-4">AI AGENT</Badge>
+                                         <Badge variant="secondary" className="bg-blue-500/10 text-blue-500 border-none text-[10px] font-bold h-4">AI AGENT</Badge>
                                        )}
                                        <span className="text-[10px] text-muted-foreground/40 font-bold uppercase tracking-widest mt-0.5">• {new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                      </div>
@@ -758,7 +758,7 @@ export function TicketDetailModal({ ticketId, open, onOpenChange }: TicketDetail
                       <DetailRow label="Reporter">
                          <div className="flex items-center gap-2.5">
                             <div className="h-6 w-6 rounded-lg bg-muted flex items-center justify-center">
-                               {ticketData.createdBy === 'ai' ? <Bot className="h-3.5 w-3.5 text-purple-400" /> : <User className="h-3.5 w-3.5 text-blue-400" />}
+                               {ticketData.createdBy === 'ai' ? <Bot className="h-3.5 w-3.5 text-blue-500" /> : <User className="h-3.5 w-3.5 text-blue-400" />}
                             </div>
                             <span className="text-xs font-semibold">{ticketData.createdBy === 'ai' ? 'AI Agent' : 'Human Operator'}</span>
                          </div>

@@ -76,6 +76,43 @@ You CANNOT:
 
 If asked to "run" or "execute" something, explain that you can help write or draft it, but the user needs to execute it themselves through the GLINR UI or API.`;
 
+// === Tool-Enabled Mode Suffix (replaces grounding when tools are available) ===
+
+export const TOOL_ENABLED_SUFFIX = `
+
+## Tool Usage
+You have access to tools that allow you to:
+- **Read files** and search codebases
+- **Fetch web content** from URLs (web_fetch tool)
+- **Browse websites** interactively (browser_navigate, browser_screenshot)
+- **Execute system commands** (with user approval for dangerous ones)
+- **Access GLINR operations** (list tasks, tickets, etc.)
+
+When the user asks you to do something that requires these capabilities:
+1. Use the appropriate tool - don't say you can't do it
+2. If a tool requires approval, explain what you're trying to do and wait for approval
+3. After tool execution, continue the conversation and explain what you found/did
+4. If a tool fails, explain the error and suggest alternatives
+
+**IMPORTANT**: When a tool returns "pending" or "requires approval", tell the user you're waiting for their approval in the UI, then STOP and wait. Do not continue until approval is given.
+
+**After approval**: Once a tool is approved and executed, summarize the results and continue helping the user.`;
+
+// === Agent Mode Suffix (for autonomous operation) ===
+
+export const AGENT_MODE_SUFFIX = `
+
+## Agent Mode
+You are operating in AGENT mode with full tool access. You should:
+1. Proactively use tools to accomplish the user's goals
+2. Chain multiple tool calls when needed
+3. Read files, search code, fetch web content as needed
+4. Execute commands to help the user (with approval for dangerous ones)
+5. Continue working until the task is complete
+
+When a tool requires approval, clearly state what you want to do and why, then wait.
+After approval, continue executing your plan.`;
+
 // === Preset Prompts ===
 
 export interface ChatPreset {
@@ -279,7 +316,7 @@ export interface ChatContext {
 export function buildSystemPrompt(
   presetId: string,
   context?: ChatContext,
-  options?: { includeGrounding?: boolean; includeModelAliases?: boolean }
+  options?: { includeGrounding?: boolean; includeModelAliases?: boolean; enableTools?: boolean; agentMode?: boolean }
 ): string {
   // Find the preset
   const preset = CHAT_PRESETS.find((p) => p.id === presetId) || CHAT_PRESETS[0];
@@ -354,8 +391,15 @@ ${context.user.role ? `- Role: ${context.user.role}` : ''}`);
     prompt += buildModelAliasesSection();
   }
 
-  // Add grounding suffix to prevent hallucinations (default: true)
-  if (options?.includeGrounding !== false) {
+  // Add appropriate suffix based on mode
+  if (options?.agentMode) {
+    // Agent mode: full tool access with autonomous behavior
+    prompt += AGENT_MODE_SUFFIX;
+  } else if (options?.enableTools) {
+    // Tool-enabled chat mode: has tools but more conversational
+    prompt += TOOL_ENABLED_SUFFIX;
+  } else if (options?.includeGrounding !== false) {
+    // Default: grounding suffix to prevent hallucinations
     prompt += GROUNDING_SUFFIX;
   }
 

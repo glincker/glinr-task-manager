@@ -64,9 +64,10 @@ async function generateAndStoreSummaryEmbedding(summary: Summary): Promise<void>
 
 /**
  * Get a summary by ID
+ * @param includeRawOutput - If true, fetches raw output from blob storage (lazy load)
  */
-export async function getSummary(id: string): Promise<Summary | null> {
-  return await getStorage().getSummary(id);
+export async function getSummary(id: string, includeRawOutput = false): Promise<Summary | null> {
+  return await getStorage().getSummary(id, includeRawOutput);
 }
 
 /**

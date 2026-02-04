@@ -5,7 +5,7 @@
  * Following OpenClaw's XML format for compatibility.
  */
 
-import type { Skill, SkillEntry, SkillSnapshot, SkillsConfig, SkillEligibilityContext } from './types.js';
+import type { SkillEntry, SkillSnapshot, SkillsSystemConfig } from './types.js';
 import { loadAllSkills, filterSkills } from './loader.js';
 import { logger } from '../utils/logger.js';
 
@@ -22,19 +22,19 @@ function escapeXml(text: string): string {
 }
 
 /**
- * Format a single skill for prompt injection
+ * Format a single skill entry for prompt injection
  */
-function formatSkillForPrompt(skill: Skill): string {
-  const name = escapeXml(skill.name);
-  const description = escapeXml(skill.description);
-  const location = escapeXml(skill.filePath);
+function formatSkillForPrompt(entry: SkillEntry): string {
+  const name = escapeXml(entry.name);
+  const description = escapeXml(entry.description);
+  const location = escapeXml(entry.skillMdPath);
 
   return `<skill>
 <name>${name}</name>
 <description>${description}</description>
 <location>${location}</location>
 <content>
-${skill.content}
+${entry.instructions}
 </content>
 </skill>`;
 }
@@ -43,12 +43,12 @@ ${skill.content}
  * Format multiple skills for prompt injection
  * Following OpenClaw's XML format
  */
-export function formatSkillsForPrompt(skills: Skill[]): string {
-  if (skills.length === 0) {
+export function formatSkillsForPrompt(entries: SkillEntry[]): string {
+  if (entries.length === 0) {
     return '';
   }
 
-  const formatted = skills.map(formatSkillForPrompt).join('\n\n');
+  const formatted = entries.map(formatSkillForPrompt).join('\n\n');
 
   return `<available_skills>
 The following skills are available. Use them to understand how to accomplish tasks:
@@ -62,12 +62,11 @@ ${formatted}
  */
 export async function buildSkillSnapshot(params: {
   workspaceDir?: string;
-  config?: SkillsConfig;
+  config?: SkillsSystemConfig;
   entries?: SkillEntry[];
-  eligibility?: SkillEligibilityContext;
   version?: number;
 }): Promise<SkillSnapshot> {
-  const { workspaceDir, config, entries: providedEntries, eligibility, version } = params;
+  const { workspaceDir, config, entries: providedEntries, version = 1 } = params;
 
   // Load entries if not provided
   const allEntries = providedEntries ?? await loadAllSkills({
@@ -76,32 +75,29 @@ export async function buildSkillSnapshot(params: {
   });
 
   // Filter to eligible skills
-  const eligible = filterSkills(allEntries, config, eligibility);
+  const eligible = filterSkills(allEntries, config);
 
   // Filter out skills that shouldn't be in the model prompt
   const promptEntries = eligible.filter(
-    (entry) => entry.invocation?.disableModelInvocation !== true
+    (entry) => entry.invocation.modelInvocable
   );
 
-  const resolvedSkills = promptEntries.map((entry) => entry.skill);
+  // Build prompt
+  const prompt = formatSkillsForPrompt(promptEntries);
 
-  // Build remote note if applicable
-  const remoteNote = eligibility?.remote?.note?.trim();
-  const prompt = [remoteNote, formatSkillsForPrompt(resolvedSkills)]
-    .filter(Boolean)
-    .join('\n');
-
-  logger.info(`[Skills] Built snapshot with ${eligible.length} eligible skills (${resolvedSkills.length} for prompt)`);
+  logger.info(`[Skills] Built snapshot with ${eligible.length} eligible skills (${promptEntries.length} for prompt)`);
 
   return {
     prompt,
     skills: eligible.map((entry) => ({
-      name: entry.skill.name,
+      name: entry.name,
+      description: entry.description,
       primaryEnv: entry.metadata?.primaryEnv,
-      category: entry.metadata?.category,
+      source: entry.source,
     })),
-    resolvedSkills,
+    entries: eligible,
     version,
+    builtAt: Date.now(),
   };
 }
 
@@ -110,9 +106,8 @@ export async function buildSkillSnapshot(params: {
  */
 export async function buildSkillsPrompt(params: {
   workspaceDir?: string;
-  config?: SkillsConfig;
+  config?: SkillsSystemConfig;
   entries?: SkillEntry[];
-  eligibility?: SkillEligibilityContext;
 }): Promise<string> {
   const snapshot = await buildSkillSnapshot(params);
   return snapshot.prompt;
@@ -124,7 +119,7 @@ export async function buildSkillsPrompt(params: {
 export async function resolveSkillsPromptForRun(params: {
   skillsSnapshot?: SkillSnapshot;
   entries?: SkillEntry[];
-  config?: SkillsConfig;
+  config?: SkillsSystemConfig;
   workspaceDir?: string;
 }): Promise<string> {
   // Use cached snapshot if available
@@ -147,34 +142,34 @@ export async function resolveSkillsPromptForRun(params: {
 }
 
 /**
- * Get skill by name from snapshot
+ * Get skill entry by name from snapshot
  */
 export function getSkillFromSnapshot(
   snapshot: SkillSnapshot,
   name: string
-): Skill | undefined {
-  return snapshot.resolvedSkills?.find((s) => s.name === name);
+): SkillEntry | undefined {
+  return snapshot.entries?.find((s) => s.name === name);
 }
 
 /**
  * Calculate approximate token cost of skills prompt
  * Based on OpenClaw's formula: ~4 chars per token
  */
-export function estimateSkillsTokenCost(skills: Skill[]): number {
-  if (skills.length === 0) {
+export function estimateSkillsTokenCost(entries: SkillEntry[]): number {
+  if (entries.length === 0) {
     return 0;
   }
 
   // Base overhead: ~195 chars
   let totalChars = 195;
 
-  for (const skill of skills) {
+  for (const entry of entries) {
     // Per skill: ~97 chars + field lengths
     totalChars += 97;
-    totalChars += skill.name.length;
-    totalChars += skill.description.length;
-    totalChars += skill.filePath.length;
-    totalChars += skill.content.length;
+    totalChars += entry.name.length;
+    totalChars += entry.description.length;
+    totalChars += entry.skillMdPath.length;
+    totalChars += entry.instructions.length;
   }
 
   // Rough estimate: ~4 chars per token

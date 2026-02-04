@@ -4,9 +4,9 @@
  * API endpoints for AI tool execution, approvals, and security settings.
  */
 
-import { Hono } from 'hono';
-import { z } from 'zod';
-import { zValidator } from '@hono/zod-validator';
+import { Hono } from "hono";
+import { z } from "zod";
+import { zValidator } from "@hono/zod-validator";
 import {
   getToolExecutor,
   getToolRegistry,
@@ -20,12 +20,17 @@ import {
   type SecurityMode,
   type ApprovalDecision,
   type AuditEventType,
-} from '../chat/execution/index.js';
-import { logger } from '../utils/logger.js';
+} from "../chat/execution/index.js";
+import { logger } from "../utils/logger.js";
+import {
+  hasSecrets,
+  isSecretsDetectionEnabled,
+  redactSecrets,
+} from "../chat/execution/secrets.js";
 
 // Initialize on module load (async)
-initializeToolExecution({ registerBuiltins: true }).catch(err => {
-  logger.error('[ToolRoutes] Failed to initialize tool execution', err);
+initializeToolExecution({ registerBuiltins: true }).catch((err) => {
+  logger.error("[ToolRoutes] Failed to initialize tool execution", err);
 });
 
 const tools = new Hono();
@@ -46,17 +51,17 @@ const ExecuteToolSchema = z.object({
 
 const ApprovalResponseSchema = z.object({
   approvalId: z.string(),
-  decision: z.enum(['allow-once', 'allow-always', 'deny']),
+  decision: z.enum(["allow-once", "allow-always", "deny"]),
 });
 
 const SecurityPolicySchema = z.object({
-  mode: z.enum(['deny', 'sandbox', 'allowlist', 'ask', 'full']),
+  mode: z.enum(["deny", "sandbox", "allowlist", "ask", "full"]),
   askTimeout: z.number().optional(),
 });
 
 const AllowlistEntrySchema = z.object({
   pattern: z.string(),
-  type: z.enum(['command', 'path', 'url']),
+  type: z.enum(["command", "path", "url"]),
   description: z.string().optional(),
 });
 
@@ -67,10 +72,12 @@ const AllowlistEntrySchema = z.object({
 /**
  * Execute a tool call
  */
-tools.post('/execute', zValidator('json', ExecuteToolSchema), async (c) => {
-  const { toolCall, conversationId, workdir } = c.req.valid('json');
+tools.post("/execute", zValidator("json", ExecuteToolSchema), async (c) => {
+  const { toolCall, conversationId, workdir } = c.req.valid("json");
 
-  logger.info(`[ToolRoutes] Execute tool: ${toolCall.name}`, { component: 'ToolRoutes' });
+  logger.info(`[ToolRoutes] Execute tool: ${toolCall.name}`, {
+    component: "ToolRoutes",
+  });
 
   try {
     const executor = getToolExecutor();
@@ -108,11 +115,14 @@ tools.post('/execute', zValidator('json', ExecuteToolSchema), async (c) => {
       toolCallId: result.toolCallId,
     });
   } catch (error) {
-    logger.error(`[ToolRoutes] Execute failed`, error instanceof Error ? error : undefined);
+    logger.error(
+      `[ToolRoutes] Execute failed`,
+      error instanceof Error ? error : undefined,
+    );
     return c.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       },
       500,
     );
@@ -122,56 +132,76 @@ tools.post('/execute', zValidator('json', ExecuteToolSchema), async (c) => {
 /**
  * Handle approval response
  */
-tools.post('/approval', zValidator('json', ApprovalResponseSchema), async (c) => {
-  const { approvalId, decision } = c.req.valid('json');
+tools.post(
+  "/approval",
+  zValidator("json", ApprovalResponseSchema),
+  async (c) => {
+    const { approvalId, decision } = c.req.valid("json");
 
-  logger.info(`[ToolRoutes] Approval response: ${approvalId} -> ${decision}`, { component: 'ToolRoutes' });
-
-  try {
-    const securityManager = getSecurityManager();
-    const executor = getToolExecutor();
-
-    // Find the approval
-    const pendingApprovals = securityManager.getPendingApprovals();
-    const approval = pendingApprovals.find((a) => a.id === approvalId);
-
-    if (!approval) {
-      return c.json({ success: false, error: 'Approval not found or expired' }, 404);
-    }
-
-    // Execute after approval
-    const result = await executor.executeAfterApproval(approvalId, decision as ApprovalDecision, {
-      conversationId: approval.conversationId,
-      workdir: process.cwd(),
-      env: {},
-    });
-
-    if (!result) {
-      return c.json({ success: false, error: 'Failed to execute after approval' }, 500);
-    }
-
-    return c.json({
-      success: result.result.success,
-      result: result.result,
-      toolCallId: result.toolCallId,
-    });
-  } catch (error) {
-    logger.error(`[ToolRoutes] Approval handler failed`, error instanceof Error ? error : undefined);
-    return c.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      },
-      500,
+    logger.info(
+      `[ToolRoutes] Approval response: ${approvalId} -> ${decision}`,
+      { component: "ToolRoutes" },
     );
-  }
-});
+
+    try {
+      const securityManager = getSecurityManager();
+      const executor = getToolExecutor();
+
+      // Find the approval
+      const pendingApprovals = securityManager.getPendingApprovals();
+      const approval = pendingApprovals.find((a) => a.id === approvalId);
+
+      if (!approval) {
+        return c.json(
+          { success: false, error: "Approval not found or expired" },
+          404,
+        );
+      }
+
+      // Execute after approval
+      const result = await executor.executeAfterApproval(
+        approvalId,
+        decision as ApprovalDecision,
+        {
+          conversationId: approval.conversationId,
+          workdir: process.cwd(),
+          env: {},
+        },
+      );
+
+      if (!result) {
+        return c.json(
+          { success: false, error: "Failed to execute after approval" },
+          500,
+        );
+      }
+
+      return c.json({
+        success: result.result.success,
+        result: result.result,
+        toolCallId: result.toolCallId,
+      });
+    } catch (error) {
+      logger.error(
+        `[ToolRoutes] Approval handler failed`,
+        error instanceof Error ? error : undefined,
+      );
+      return c.json(
+        {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+        500,
+      );
+    }
+  },
+);
 
 /**
  * Get pending approvals for a conversation
  */
-tools.get('/approvals/:conversationId', (c) => {
-  const conversationId = c.req.param('conversationId');
+tools.get("/approvals/:conversationId", (c) => {
+  const conversationId = c.req.param("conversationId");
   const executor = getToolExecutor();
   const approvals = executor.getPendingApprovals(conversationId);
 
@@ -195,7 +225,7 @@ tools.get('/approvals/:conversationId', (c) => {
 /**
  * Get current security policy
  */
-tools.get('/security', (c) => {
+tools.get("/security", (c) => {
   const securityManager = getSecurityManager();
   const policy = securityManager.getPolicy();
 
@@ -213,10 +243,12 @@ tools.get('/security', (c) => {
 /**
  * Update security policy
  */
-tools.put('/security', zValidator('json', SecurityPolicySchema), (c) => {
-  const updates = c.req.valid('json');
+tools.put("/security", zValidator("json", SecurityPolicySchema), (c) => {
+  const updates = c.req.valid("json");
 
-  logger.info(`[ToolRoutes] Update security policy: mode=${updates.mode}`, { component: 'ToolRoutes' });
+  logger.info(`[ToolRoutes] Update security policy: mode=${updates.mode}`, {
+    component: "ToolRoutes",
+  });
 
   const securityManager = getSecurityManager();
   securityManager.updatePolicy(updates);
@@ -230,26 +262,30 @@ tools.put('/security', zValidator('json', SecurityPolicySchema), (c) => {
 /**
  * Add to allowlist
  */
-tools.post('/security/allowlist', zValidator('json', AllowlistEntrySchema), (c) => {
-  const entry = c.req.valid('json');
+tools.post(
+  "/security/allowlist",
+  zValidator("json", AllowlistEntrySchema),
+  (c) => {
+    const entry = c.req.valid("json");
 
-  const securityManager = getSecurityManager();
-  securityManager.addToAllowlist({
-    ...entry,
-    addedAt: new Date().toISOString(),
-  });
+    const securityManager = getSecurityManager();
+    securityManager.addToAllowlist({
+      ...entry,
+      addedAt: new Date().toISOString(),
+    });
 
-  return c.json({
-    success: true,
-    allowlist: securityManager.getPolicy().allowlist,
-  });
-});
+    return c.json({
+      success: true,
+      allowlist: securityManager.getPolicy().allowlist,
+    });
+  },
+);
 
 /**
  * Remove from allowlist
  */
-tools.delete('/security/allowlist/:pattern', (c) => {
-  const pattern = decodeURIComponent(c.req.param('pattern'));
+tools.delete("/security/allowlist/:pattern", (c) => {
+  const pattern = decodeURIComponent(c.req.param("pattern"));
 
   const securityManager = getSecurityManager();
   const removed = securityManager.removeFromAllowlist(pattern);
@@ -267,7 +303,7 @@ tools.delete('/security/allowlist/:pattern', (c) => {
 /**
  * List available tools
  */
-tools.get('/list', (c) => {
+tools.get("/list", (c) => {
   const registry = getToolRegistry();
   const toolList = registry.list();
 
@@ -286,7 +322,7 @@ tools.get('/list', (c) => {
 /**
  * Get tools for AI (function calling format)
  */
-tools.get('/ai-schema', (c) => {
+tools.get("/ai-schema", (c) => {
   const registry = getToolRegistry();
   const schemas = registry.getForAI();
 
@@ -296,7 +332,7 @@ tools.get('/ai-schema', (c) => {
 /**
  * Get tool descriptions for system prompt
  */
-tools.get('/descriptions', (c) => {
+tools.get("/descriptions", (c) => {
   const registry = getToolRegistry();
   const descriptions = registry.getDescriptions();
 
@@ -310,8 +346,8 @@ tools.get('/descriptions', (c) => {
 /**
  * List sessions
  */
-tools.get('/sessions', (c) => {
-  const conversationId = c.req.query('conversationId');
+tools.get("/sessions", (c) => {
+  const conversationId = c.req.query("conversationId");
   const sessionManager = getSessionManager();
 
   const sessions = sessionManager.list(
@@ -336,13 +372,13 @@ tools.get('/sessions', (c) => {
 /**
  * Get session output
  */
-tools.get('/sessions/:sessionId', (c) => {
-  const sessionId = c.req.param('sessionId');
+tools.get("/sessions/:sessionId", (c) => {
+  const sessionId = c.req.param("sessionId");
   const sessionManager = getSessionManager();
   const session = sessionManager.get(sessionId);
 
   if (!session) {
-    return c.json({ error: 'Session not found' }, 404);
+    return c.json({ error: "Session not found" }, 404);
   }
 
   return c.json({
@@ -369,8 +405,8 @@ tools.get('/sessions/:sessionId', (c) => {
 /**
  * Kill a session
  */
-tools.post('/sessions/:sessionId/kill', async (c) => {
-  const sessionId = c.req.param('sessionId');
+tools.post("/sessions/:sessionId/kill", async (c) => {
+  const sessionId = c.req.param("sessionId");
   const sessionManager = getSessionManager();
 
   await sessionManager.kill(sessionId);
@@ -385,16 +421,21 @@ tools.post('/sessions/:sessionId/kill', async (c) => {
 /**
  * Query audit logs
  */
-tools.get('/audit', (c) => {
+tools.get("/audit", (c) => {
   const query = c.req.query();
   const auditLogger = getAuditLogger();
 
   const filter = {
-    eventTypes: query.eventTypes?.split(',') as AuditEventType[] | undefined,
+    eventTypes: query.eventTypes?.split(",") as AuditEventType[] | undefined,
     toolName: query.toolName,
     conversationId: query.conversationId,
     userId: query.userId,
-    success: query.success === 'true' ? true : query.success === 'false' ? false : undefined,
+    success:
+      query.success === "true"
+        ? true
+        : query.success === "false"
+          ? false
+          : undefined,
     since: query.since ? parseInt(query.since, 10) : undefined,
     until: query.until ? parseInt(query.until, 10) : undefined,
     limit: query.limit ? parseInt(query.limit, 10) : 100,
@@ -413,7 +454,7 @@ tools.get('/audit', (c) => {
 /**
  * Get audit statistics
  */
-tools.get('/audit/stats', (c) => {
+tools.get("/audit/stats", (c) => {
   const query = c.req.query();
   const auditLogger = getAuditLogger();
 
@@ -428,12 +469,12 @@ tools.get('/audit/stats', (c) => {
 /**
  * Export audit logs as CSV
  */
-tools.get('/audit/export', (c) => {
+tools.get("/audit/export", (c) => {
   const query = c.req.query();
   const auditLogger = getAuditLogger();
 
   const filter = {
-    eventTypes: query.eventTypes?.split(',') as AuditEventType[] | undefined,
+    eventTypes: query.eventTypes?.split(",") as AuditEventType[] | undefined,
     toolName: query.toolName,
     conversationId: query.conversationId,
     since: query.since ? parseInt(query.since, 10) : undefined,
@@ -442,8 +483,11 @@ tools.get('/audit/export', (c) => {
 
   const csv = auditLogger.exportCsv(filter);
 
-  c.header('Content-Type', 'text/csv');
-  c.header('Content-Disposition', `attachment; filename="audit-log-${Date.now()}.csv"`);
+  c.header("Content-Type", "text/csv");
+  c.header(
+    "Content-Disposition",
+    `attachment; filename="audit-log-${Date.now()}.csv"`,
+  );
   return c.body(csv);
 });
 
@@ -454,7 +498,7 @@ tools.get('/audit/export', (c) => {
 /**
  * Get full execution system status
  */
-tools.get('/status', (c) => {
+tools.get("/status", (c) => {
   const executor = getToolExecutor();
   const status = executor.getStatus();
 
@@ -469,7 +513,7 @@ tools.get('/status', (c) => {
 /**
  * Get process pool status
  */
-tools.get('/pool/status', (c) => {
+tools.get("/pool/status", (c) => {
   const pool = getProcessPool();
   return c.json(pool.getStatus());
 });
@@ -477,7 +521,7 @@ tools.get('/pool/status', (c) => {
 /**
  * Get process pool metrics
  */
-tools.get('/pool/metrics', (c) => {
+tools.get("/pool/metrics", (c) => {
   const pool = getProcessPool();
   return c.json(pool.getMetrics());
 });
@@ -485,21 +529,28 @@ tools.get('/pool/metrics', (c) => {
 /**
  * Update process pool configuration
  */
-tools.put('/pool/config', zValidator('json', z.object({
-  maxConcurrent: z.number().min(1).max(100).optional(),
-  maxQueueSize: z.number().min(1).max(1000).optional(),
-  defaultTimeout: z.number().min(1000).max(600000).optional(),
-})), (c) => {
-  const updates = c.req.valid('json');
-  const pool = getProcessPool();
-  pool.updateConfig(updates);
-  return c.json({ success: true, config: pool.getStatus().config });
-});
+tools.put(
+  "/pool/config",
+  zValidator(
+    "json",
+    z.object({
+      maxConcurrent: z.number().min(1).max(100).optional(),
+      maxQueueSize: z.number().min(1).max(1000).optional(),
+      defaultTimeout: z.number().min(1000).max(600000).optional(),
+    }),
+  ),
+  (c) => {
+    const updates = c.req.valid("json");
+    const pool = getProcessPool();
+    pool.updateConfig(updates);
+    return c.json({ success: true, config: pool.getStatus().config });
+  },
+);
 
 /**
  * Clear the execution queue
  */
-tools.post('/pool/clear-queue', (c) => {
+tools.post("/pool/clear-queue", (c) => {
   const pool = getProcessPool();
   const cleared = pool.clearQueue();
   return c.json({ success: true, cleared });
@@ -512,7 +563,7 @@ tools.post('/pool/clear-queue', (c) => {
 /**
  * Get sandbox status
  */
-tools.get('/sandbox/status', (c) => {
+tools.get("/sandbox/status", (c) => {
   const sandbox = getSandboxManager();
   return c.json(sandbox.getStatus());
 });
@@ -520,18 +571,25 @@ tools.get('/sandbox/status', (c) => {
 /**
  * Update sandbox configuration
  */
-tools.put('/sandbox/config', zValidator('json', z.object({
-  image: z.string().optional(),
-  workdir: z.string().optional(),
-  networkMode: z.enum(['none', 'bridge', 'host']).optional(),
-  memoryLimit: z.string().optional(),
-  cpuLimit: z.string().optional(),
-})), (c) => {
-  const updates = c.req.valid('json');
-  const sandbox = getSandboxManager();
-  sandbox.updateConfig(updates);
-  return c.json({ success: true, status: sandbox.getStatus() });
-});
+tools.put(
+  "/sandbox/config",
+  zValidator(
+    "json",
+    z.object({
+      image: z.string().optional(),
+      workdir: z.string().optional(),
+      networkMode: z.enum(["none", "bridge", "host"]).optional(),
+      memoryLimit: z.string().optional(),
+      cpuLimit: z.string().optional(),
+    }),
+  ),
+  (c) => {
+    const updates = c.req.valid("json");
+    const sandbox = getSandboxManager();
+    sandbox.updateConfig(updates);
+    return c.json({ success: true, status: sandbox.getStatus() });
+  },
+);
 
 // =============================================================================
 // Rate Limiting
@@ -540,7 +598,7 @@ tools.put('/sandbox/config', zValidator('json', z.object({
 /**
  * Get rate limit configuration
  */
-tools.get('/ratelimit/config', (c) => {
+tools.get("/ratelimit/config", (c) => {
   const limiter = getRateLimiter();
   return c.json(limiter.getConfig());
 });
@@ -548,32 +606,39 @@ tools.get('/ratelimit/config', (c) => {
 /**
  * Update rate limit configuration
  */
-tools.put('/ratelimit/config', zValidator('json', z.object({
-  enabled: z.boolean().optional(),
-  userLimit: z.number().min(1).optional(),
-  userWindowMs: z.number().min(1000).optional(),
-  conversationLimit: z.number().min(1).optional(),
-  conversationWindowMs: z.number().min(1000).optional(),
-  defaultToolLimit: z.number().min(1).optional(),
-  defaultToolWindowMs: z.number().min(1000).optional(),
-  globalLimit: z.number().min(1).optional(),
-  globalWindowMs: z.number().min(1000).optional(),
-})), (c) => {
-  const updates = c.req.valid('json');
-  const limiter = getRateLimiter();
-  limiter.updateConfig(updates);
-  return c.json({ success: true, config: limiter.getConfig() });
-});
+tools.put(
+  "/ratelimit/config",
+  zValidator(
+    "json",
+    z.object({
+      enabled: z.boolean().optional(),
+      userLimit: z.number().min(1).optional(),
+      userWindowMs: z.number().min(1000).optional(),
+      conversationLimit: z.number().min(1).optional(),
+      conversationWindowMs: z.number().min(1000).optional(),
+      defaultToolLimit: z.number().min(1).optional(),
+      defaultToolWindowMs: z.number().min(1000).optional(),
+      globalLimit: z.number().min(1).optional(),
+      globalWindowMs: z.number().min(1000).optional(),
+    }),
+  ),
+  (c) => {
+    const updates = c.req.valid("json");
+    const limiter = getRateLimiter();
+    limiter.updateConfig(updates);
+    return c.json({ success: true, config: limiter.getConfig() });
+  },
+);
 
 /**
  * Get rate limit status for a context
  */
-tools.get('/ratelimit/status', (c) => {
+tools.get("/ratelimit/status", (c) => {
   const query = c.req.query();
   const limiter = getRateLimiter();
 
   if (!query.conversationId || !query.toolName) {
-    return c.json({ error: 'conversationId and toolName are required' }, 400);
+    return c.json({ error: "conversationId and toolName are required" }, 400);
   }
 
   const status = limiter.getStatus({
@@ -588,23 +653,30 @@ tools.get('/ratelimit/status', (c) => {
 /**
  * Set tool-specific rate limit
  */
-tools.post('/ratelimit/tool/:toolName', zValidator('json', z.object({
-  limit: z.number().min(1),
-  windowMs: z.number().min(1000).optional(),
-})), (c) => {
-  const toolName = c.req.param('toolName');
-  const { limit, windowMs } = c.req.valid('json');
+tools.post(
+  "/ratelimit/tool/:toolName",
+  zValidator(
+    "json",
+    z.object({
+      limit: z.number().min(1),
+      windowMs: z.number().min(1000).optional(),
+    }),
+  ),
+  (c) => {
+    const toolName = c.req.param("toolName");
+    const { limit, windowMs } = c.req.valid("json");
 
-  const limiter = getRateLimiter();
-  limiter.setToolLimit(toolName, limit, windowMs);
+    const limiter = getRateLimiter();
+    limiter.setToolLimit(toolName, limit, windowMs);
 
-  return c.json({ success: true, toolName, limit, windowMs });
-});
+    return c.json({ success: true, toolName, limit, windowMs });
+  },
+);
 
 /**
  * Reset all rate limits (for testing/admin)
  */
-tools.post('/ratelimit/reset', (c) => {
+tools.post("/ratelimit/reset", (c) => {
   const limiter = getRateLimiter();
   limiter.reset();
   return c.json({ success: true });
@@ -615,7 +687,10 @@ tools.post('/ratelimit/reset', (c) => {
 // =============================================================================
 
 // Store SSE connections per session
-const sseConnections = new Map<string, Set<ReadableStreamDefaultController<Uint8Array>>>();
+const sseConnections = new Map<
+  string,
+  Set<ReadableStreamDefaultController<Uint8Array>>
+>();
 
 /**
  * Broadcast event to all SSE connections for a session
@@ -647,17 +722,29 @@ function broadcastToSession(sessionId: string, event: string, data: unknown) {
  * SSE stream for tool execution output
  * Subscribe to real-time output from a running tool session
  */
-tools.get('/sessions/:sessionId/stream', (c) => {
-  const sessionId = c.req.param('sessionId');
+tools.get("/sessions/:sessionId/stream", (c) => {
+  const sessionId = c.req.param("sessionId");
   const sessionManager = getSessionManager();
   const session = sessionManager.get(sessionId);
 
   if (!session) {
-    return c.json({ error: 'Session not found' }, 404);
+    return c.json({ error: "Session not found" }, 404);
   }
 
   const encoder = new TextEncoder();
   let controller: ReadableStreamDefaultController<Uint8Array>;
+  const redactStreamOutput = (text: string): string => {
+    if (!text) {
+      return text;
+    }
+    if (!isSecretsDetectionEnabled()) {
+      return text;
+    }
+    if (!hasSecrets(text)) {
+      return text;
+    }
+    return redactSecrets(text);
+  };
 
   const stream = new ReadableStream<Uint8Array>({
     start(ctrl) {
@@ -682,16 +769,20 @@ tools.get('/sessions/:sessionId/stream', (c) => {
 
       // Send existing output if any
       if (session.stdout) {
-        const outputEvent = `event: stdout\ndata: ${JSON.stringify({ content: session.stdout })}\n\n`;
+        const outputEvent = `event: stdout\ndata: ${JSON.stringify({ content: redactStreamOutput(session.stdout) })}\n\n`;
         controller.enqueue(encoder.encode(outputEvent));
       }
       if (session.stderr) {
-        const stderrEvent = `event: stderr\ndata: ${JSON.stringify({ content: session.stderr })}\n\n`;
+        const stderrEvent = `event: stderr\ndata: ${JSON.stringify({ content: redactStreamOutput(session.stderr) })}\n\n`;
         controller.enqueue(encoder.encode(stderrEvent));
       }
 
       // If already completed, send completion event
-      if (session.status === 'completed' || session.status === 'failed' || session.status === 'killed') {
+      if (
+        session.status === "completed" ||
+        session.status === "failed" ||
+        session.status === "killed"
+      ) {
         const doneEvent = `event: done\ndata: ${JSON.stringify({
           status: session.status,
           exitCode: session.exitCode,
@@ -715,10 +806,10 @@ tools.get('/sessions/:sessionId/stream', (c) => {
 
   return new Response(stream, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 });
@@ -727,121 +818,136 @@ tools.get('/sessions/:sessionId/stream', (c) => {
  * Execute a tool with SSE streaming output
  * Returns a stream of execution events
  */
-tools.post('/execute/stream', zValidator('json', ExecuteToolSchema), async (c) => {
-  const { toolCall, conversationId, workdir } = c.req.valid('json');
+tools.post(
+  "/execute/stream",
+  zValidator("json", ExecuteToolSchema),
+  async (c) => {
+    const { toolCall, conversationId, workdir } = c.req.valid("json");
 
-  logger.info(`[ToolRoutes] Execute tool (streaming): ${toolCall.name}`, { component: 'ToolRoutes' });
+    logger.info(`[ToolRoutes] Execute tool (streaming): ${toolCall.name}`, {
+      component: "ToolRoutes",
+    });
 
-  const encoder = new TextEncoder();
-  let streamController: ReadableStreamDefaultController<Uint8Array>;
-  let sessionId: string | undefined;
+    const encoder = new TextEncoder();
+    let streamController: ReadableStreamDefaultController<Uint8Array>;
+    let sessionId: string | undefined;
 
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      streamController = controller;
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        streamController = controller;
 
-      try {
-        const executor = getToolExecutor();
+        try {
+          const executor = getToolExecutor();
 
-        // Send start event
-        const startEvent = `event: start\ndata: ${JSON.stringify({
-          toolName: toolCall.name,
-          timestamp: Date.now(),
-        })}\n\n`;
-        controller.enqueue(encoder.encode(startEvent));
-
-        // Execute with progress callback
-        const result = await executor.execute(toolCall, {
-          conversationId,
-          workdir: workdir ?? process.cwd(),
-          env: {},
-          onProgress: (update) => {
-            // Stream progress updates
-            const progressEvent = `event: progress\ndata: ${JSON.stringify(update)}\n\n`;
-            try {
-              controller.enqueue(encoder.encode(progressEvent));
-            } catch {
-              // Stream closed
-            }
-          },
-        });
-
-        // Track session ID if available
-        if (result.result.sessionId) {
-          sessionId = result.result.sessionId;
-        }
-
-        // If approval required, send approval event
-        if (result.approvalRequired && result.approvalId) {
-          const pendingApprovals = executor.getPendingApprovals(conversationId);
-          const approval = pendingApprovals.find((a) => a.id === result.approvalId);
-
-          const approvalEvent = `event: approval-required\ndata: ${JSON.stringify({
-            approvalId: result.approvalId,
-            approval: approval ? {
-              id: approval.id,
-              toolName: approval.toolName,
-              command: approval.command,
-              params: approval.params,
-              securityLevel: approval.securityLevel,
-              expiresAt: approval.expiresAt,
-            } : null,
+          // Send start event
+          const startEvent = `event: start\ndata: ${JSON.stringify({
+            toolName: toolCall.name,
+            timestamp: Date.now(),
           })}\n\n`;
-          controller.enqueue(encoder.encode(approvalEvent));
-        } else {
-          // Send result
-          const resultEvent = `event: result\ndata: ${JSON.stringify({
+          controller.enqueue(encoder.encode(startEvent));
+
+          // Execute with progress callback
+          const result = await executor.execute(toolCall, {
+            conversationId,
+            workdir: workdir ?? process.cwd(),
+            env: {},
+            onProgress: (update) => {
+              // Stream progress updates
+              const progressEvent = `event: progress\ndata: ${JSON.stringify(update)}\n\n`;
+              try {
+                controller.enqueue(encoder.encode(progressEvent));
+              } catch {
+                // Stream closed
+              }
+            },
+          });
+
+          // Track session ID if available
+          if (result.result.sessionId) {
+            sessionId = result.result.sessionId;
+          }
+
+          // If approval required, send approval event
+          if (result.approvalRequired && result.approvalId) {
+            const pendingApprovals =
+              executor.getPendingApprovals(conversationId);
+            const approval = pendingApprovals.find(
+              (a) => a.id === result.approvalId,
+            );
+
+            const approvalEvent = `event: approval-required\ndata: ${JSON.stringify(
+              {
+                approvalId: result.approvalId,
+                approval: approval
+                  ? {
+                      id: approval.id,
+                      toolName: approval.toolName,
+                      command: approval.command,
+                      params: approval.params,
+                      securityLevel: approval.securityLevel,
+                      expiresAt: approval.expiresAt,
+                    }
+                  : null,
+              },
+            )}\n\n`;
+            controller.enqueue(encoder.encode(approvalEvent));
+          } else {
+            // Send result
+            const resultEvent = `event: result\ndata: ${JSON.stringify({
+              success: result.result.success,
+              output: result.result.output,
+              data: result.result.data,
+              error: result.result.error,
+              durationMs: result.result.durationMs,
+              sessionId: result.result.sessionId,
+              isBackgrounded: result.result.isBackgrounded,
+            })}\n\n`;
+            controller.enqueue(encoder.encode(resultEvent));
+          }
+
+          // Send done event
+          const doneEvent = `event: done\ndata: ${JSON.stringify({
+            toolCallId: result.toolCallId,
             success: result.result.success,
-            output: result.result.output,
-            data: result.result.data,
-            error: result.result.error,
-            durationMs: result.result.durationMs,
-            sessionId: result.result.sessionId,
-            isBackgrounded: result.result.isBackgrounded,
+            timestamp: Date.now(),
           })}\n\n`;
-          controller.enqueue(encoder.encode(resultEvent));
+          controller.enqueue(encoder.encode(doneEvent));
+        } catch (error) {
+          logger.error(
+            `[ToolRoutes] Stream execute failed`,
+            error instanceof Error ? error : undefined,
+          );
+
+          const errorEvent = `event: error\ndata: ${JSON.stringify({
+            error: error instanceof Error ? error.message : "Unknown error",
+            timestamp: Date.now(),
+          })}\n\n`;
+          controller.enqueue(encoder.encode(errorEvent));
+        } finally {
+          controller.close();
         }
-
-        // Send done event
-        const doneEvent = `event: done\ndata: ${JSON.stringify({
-          toolCallId: result.toolCallId,
-          success: result.result.success,
-          timestamp: Date.now(),
-        })}\n\n`;
-        controller.enqueue(encoder.encode(doneEvent));
-
-      } catch (error) {
-        logger.error(`[ToolRoutes] Stream execute failed`, error instanceof Error ? error : undefined);
-
-        const errorEvent = `event: error\ndata: ${JSON.stringify({
-          error: error instanceof Error ? error.message : 'Unknown error',
-          timestamp: Date.now(),
-        })}\n\n`;
-        controller.enqueue(encoder.encode(errorEvent));
-      } finally {
-        controller.close();
-      }
-    },
-    cancel() {
-      // Cleanup if needed
-      if (sessionId) {
-        const connections = sseConnections.get(sessionId);
-        if (connections) {
-          connections.delete(streamController);
+      },
+      cancel() {
+        // Cleanup if needed
+        if (sessionId) {
+          const connections = sseConnections.get(sessionId);
+          if (connections) {
+            connections.delete(streamController);
+          }
         }
-      }
-    },
-  });
+      },
+    });
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    },
-  });
-});
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  },
+);
 
 // Export the broadcast function for use by session manager
 export { broadcastToSession };

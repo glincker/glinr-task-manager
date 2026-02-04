@@ -10,10 +10,15 @@ import type {
   ToolSession,
   SessionStatus,
   SessionFilter,
-} from './types.js';
-import { logger } from '../../utils/logger.js';
-import { randomUUID } from 'crypto';
-import type { ChildProcess } from 'child_process';
+} from "./types.js";
+import { logger } from "../../utils/logger.js";
+import {
+  hasSecrets,
+  isSecretsDetectionEnabled,
+  redactSecrets,
+} from "./secrets.js";
+import { randomUUID } from "crypto";
+import type { ChildProcess } from "child_process";
 
 // =============================================================================
 // Constants
@@ -25,6 +30,19 @@ const SESSION_CLEANUP_INTERVAL_MS = 60_000;
 const SESSION_MAX_AGE_MS = 3600_000; // 1 hour
 const MAX_SESSIONS = 500;
 
+const redactSessionOutput = (text: string): string => {
+  if (!text) {
+    return text;
+  }
+  if (!isSecretsDetectionEnabled()) {
+    return text;
+  }
+  if (!hasSecrets(text)) {
+    return text;
+  }
+  return redactSecrets(text);
+};
+
 // =============================================================================
 // Session Manager Implementation
 // =============================================================================
@@ -34,13 +52,16 @@ export class ToolSessionManager implements SessionManager {
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor() {
-    this.cleanupTimer = setInterval(() => this.cleanup(), SESSION_CLEANUP_INTERVAL_MS);
+    this.cleanupTimer = setInterval(
+      () => this.cleanup(),
+      SESSION_CLEANUP_INTERVAL_MS,
+    );
   }
 
   /**
    * Create a new session
    */
-  create(data: Omit<ToolSession, 'id' | 'createdAt'>): ToolSession {
+  create(data: Omit<ToolSession, "id" | "createdAt">): ToolSession {
     // Enforce max sessions
     if (this.sessions.size >= MAX_SESSIONS) {
       this.cleanupOldestSessions(50);
@@ -61,7 +82,9 @@ export class ToolSessionManager implements SessionManager {
     };
 
     this.sessions.set(id, managed);
-    logger.debug(`[SessionManager] Created session: ${id}`, { component: 'SessionManager' });
+    logger.debug(`[SessionManager] Created session: ${id}`, {
+      component: "SessionManager",
+    });
 
     return session;
   }
@@ -90,7 +113,9 @@ export class ToolSessionManager implements SessionManager {
     let sessions = Array.from(this.sessions.values()).map((m) => m.session);
 
     if (filter?.conversationId) {
-      sessions = sessions.filter((s) => s.conversationId === filter.conversationId);
+      sessions = sessions.filter(
+        (s) => s.conversationId === filter.conversationId,
+      );
     }
     if (filter?.toolName) {
       sessions = sessions.filter((s) => s.toolName === filter.toolName);
@@ -114,31 +139,36 @@ export class ToolSessionManager implements SessionManager {
 
     const { session, process } = managed;
 
-    if (process && session.status === 'running') {
+    if (process && session.status === "running") {
       try {
         // Try SIGTERM first
-        process.kill('SIGTERM');
+        process.kill("SIGTERM");
 
         // Force kill after 5 seconds
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
             if (!process.killed) {
-              process.kill('SIGKILL');
+              process.kill("SIGKILL");
             }
             resolve();
           }, 5000);
 
-          process.once('exit', () => {
+          process.once("exit", () => {
             clearTimeout(timeout);
             resolve();
           });
         });
 
-        session.status = 'killed';
+        session.status = "killed";
         session.completedAt = Date.now();
-        logger.info(`[SessionManager] Killed session: ${sessionId}`, { component: 'SessionManager' });
+        logger.info(`[SessionManager] Killed session: ${sessionId}`, {
+          component: "SessionManager",
+        });
       } catch (error) {
-        logger.error(`[SessionManager] Failed to kill session: ${sessionId}`, error instanceof Error ? error : undefined);
+        logger.error(
+          `[SessionManager] Failed to kill session: ${sessionId}`,
+          error instanceof Error ? error : undefined,
+        );
       }
     }
   }
@@ -155,14 +185,17 @@ export class ToolSessionManager implements SessionManager {
 
       // Remove completed sessions older than max age
       if (
-        ['completed', 'failed', 'killed', 'timeout'].includes(session.status) &&
+        ["completed", "failed", "killed", "timeout"].includes(session.status) &&
         now - session.createdAt > SESSION_MAX_AGE_MS
       ) {
         toDelete.push(id);
       }
 
       // Remove very old pending sessions
-      if (session.status === 'pending' && now - session.createdAt > SESSION_MAX_AGE_MS * 2) {
+      if (
+        session.status === "pending" &&
+        now - session.createdAt > SESSION_MAX_AGE_MS * 2
+      ) {
         toDelete.push(id);
       }
     }
@@ -172,7 +205,9 @@ export class ToolSessionManager implements SessionManager {
     }
 
     if (toDelete.length > 0) {
-      logger.debug(`[SessionManager] Cleaned up ${toDelete.length} sessions`, { component: 'SessionManager' });
+      logger.debug(`[SessionManager] Cleaned up ${toDelete.length} sessions`, {
+        component: "SessionManager",
+      });
     }
   }
 
@@ -189,25 +224,25 @@ export class ToolSessionManager implements SessionManager {
 
     managed.process = process;
     managed.session.pid = process.pid;
-    managed.session.status = 'running';
+    managed.session.status = "running";
     managed.session.startedAt = Date.now();
 
     // Set up output collection
-    process.stdout?.on('data', (data: Buffer) => {
-      this.appendOutput(sessionId, 'stdout', data.toString());
+    process.stdout?.on("data", (data: Buffer) => {
+      this.appendOutput(sessionId, "stdout", data.toString());
     });
 
-    process.stderr?.on('data', (data: Buffer) => {
-      this.appendOutput(sessionId, 'stderr', data.toString());
+    process.stderr?.on("data", (data: Buffer) => {
+      this.appendOutput(sessionId, "stderr", data.toString());
     });
 
-    process.on('exit', (code, signal) => {
+    process.on("exit", (code, signal) => {
       this.handleProcessExit(sessionId, code, signal);
     });
 
-    process.on('error', (error) => {
+    process.on("error", (error) => {
       logger.error(`[SessionManager] Process error: ${sessionId}`, error);
-      managed.session.status = 'failed';
+      managed.session.status = "failed";
       managed.session.stderr += `\nProcess error: ${error.message}`;
     });
   }
@@ -215,18 +250,23 @@ export class ToolSessionManager implements SessionManager {
   /**
    * Append output to a session
    */
-  appendOutput(sessionId: string, stream: 'stdout' | 'stderr', data: string): void {
+  appendOutput(
+    sessionId: string,
+    stream: "stdout" | "stderr",
+    data: string,
+  ): void {
     const managed = this.sessions.get(sessionId);
     if (!managed) return;
 
     const { session, listeners } = managed;
     const maxChars = session.maxOutputChars || DEFAULT_MAX_OUTPUT_CHARS;
+    const sanitizedData = redactSessionOutput(data);
 
     // Append to appropriate stream
-    if (stream === 'stdout') {
-      session.stdout += data;
+    if (stream === "stdout") {
+      session.stdout += sanitizedData;
     } else {
-      session.stderr += data;
+      session.stderr += sanitizedData;
     }
 
     // Check for truncation
@@ -246,7 +286,7 @@ export class ToolSessionManager implements SessionManager {
     // Notify listeners
     for (const listener of listeners) {
       try {
-        listener({ stream, data, sessionId });
+        listener({ stream, data: sanitizedData, sessionId });
       } catch {
         // Ignore listener errors
       }
@@ -271,12 +311,15 @@ export class ToolSessionManager implements SessionManager {
    */
   getOutput(sessionId: string): string {
     const session = this.get(sessionId);
-    if (!session) return '';
+    if (!session) return "";
 
     // Interleave stdout and stderr for display
     let output = session.stdout;
     if (session.stderr) {
-      output += session.stderr.split('\n').map((line) => `stderr: ${line}`).join('\n');
+      output += session.stderr
+        .split("\n")
+        .map((line) => `stderr: ${line}`)
+        .join("\n");
     }
     return output;
   }
@@ -297,7 +340,9 @@ export class ToolSessionManager implements SessionManager {
     const managed = this.sessions.get(sessionId);
     if (managed) {
       managed.session.backgrounded = true;
-      logger.debug(`[SessionManager] Backgrounded session: ${sessionId}`, { component: 'SessionManager' });
+      logger.debug(`[SessionManager] Backgrounded session: ${sessionId}`, {
+        component: "SessionManager",
+      });
     }
   }
 
@@ -327,9 +372,9 @@ export class ToolSessionManager implements SessionManager {
 
     // Kill all running processes
     for (const managed of this.sessions.values()) {
-      if (managed.process && managed.session.status === 'running') {
+      if (managed.process && managed.session.status === "running") {
         try {
-          managed.process.kill('SIGKILL');
+          managed.process.kill("SIGKILL");
         } catch {
           // Ignore
         }
@@ -348,7 +393,11 @@ export class ToolSessionManager implements SessionManager {
     return randomUUID().slice(0, 8);
   }
 
-  private handleProcessExit(sessionId: string, code: number | null, signal: NodeJS.Signals | null): void {
+  private handleProcessExit(
+    sessionId: string,
+    code: number | null,
+    signal: NodeJS.Signals | null,
+  ): void {
     const managed = this.sessions.get(sessionId);
     if (!managed) return;
 
@@ -358,16 +407,16 @@ export class ToolSessionManager implements SessionManager {
     session.completedAt = Date.now();
 
     if (code === 0 && !signal) {
-      session.status = 'completed';
-    } else if (signal === 'SIGTERM' || signal === 'SIGKILL') {
-      session.status = 'killed';
+      session.status = "completed";
+    } else if (signal === "SIGTERM" || signal === "SIGKILL") {
+      session.status = "killed";
     } else {
-      session.status = 'failed';
+      session.status = "failed";
     }
 
     logger.debug(
       `[SessionManager] Session ${sessionId} exited: code=${code}, signal=${signal}`,
-      { component: 'SessionManager' }
+      { component: "SessionManager" },
     );
 
     // Notify if backgrounded
@@ -378,7 +427,7 @@ export class ToolSessionManager implements SessionManager {
 
   private cleanupOldestSessions(count: number): void {
     const sorted = Array.from(this.sessions.entries())
-      .filter(([_, m]) => m.session.status !== 'running')
+      .filter(([_, m]) => m.session.status !== "running")
       .sort((a, b) => a[1].session.createdAt - b[1].session.createdAt);
 
     for (let i = 0; i < count && i < sorted.length; i++) {
@@ -400,7 +449,7 @@ interface ManagedSession {
 
 export type SessionOutputListener = (event: {
   sessionId: string;
-  stream: 'stdout' | 'stderr';
+  stream: "stdout" | "stderr";
   data: string;
 }) => void;
 

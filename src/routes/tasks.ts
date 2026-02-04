@@ -6,6 +6,63 @@ import type { TaskFilterOptions } from '../storage/adapter.js';
 
 const tasks = new Hono();
 
+// Sparse fieldset: default fields for list view (Phase 17 optimization)
+const TASK_LIST_FIELDS = [
+  'id', 'title', 'status', 'priority', 'source', 'sourceId', 'sourceUrl',
+  'labels', 'assignedAgent', 'createdAt', 'updatedAt', 'startedAt', 'completedAt',
+] as const;
+
+// Helper to pick only specified fields from an object
+function pickTaskFields<T extends Record<string, unknown>>(obj: T, fields: readonly string[]): Partial<T> {
+  const result: Partial<T> = {};
+  for (const field of fields) {
+    if (field in obj) {
+      (result as Record<string, unknown>)[field] = obj[field];
+    }
+  }
+  return result;
+}
+
+// Cursor-based pagination helpers (Phase 17)
+interface CursorData {
+  createdAt: number;
+  id: string;
+}
+
+function encodeCursor(data: CursorData): string {
+  return Buffer.from(JSON.stringify(data)).toString('base64url');
+}
+
+function decodeCursor(cursor: string): CursorData | null {
+  try {
+    const json = Buffer.from(cursor, 'base64url').toString('utf-8');
+    const data = JSON.parse(json);
+    if (typeof data.createdAt === 'number' && typeof data.id === 'string') {
+      return data as CursorData;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function getNextCursor<T extends { id: string; createdAt?: Date | number | string }>(
+  items: T[],
+  limit: number
+): string | null {
+  if (items.length < limit) return null;
+  const lastItem = items[items.length - 1];
+  if (!lastItem?.createdAt) return null;
+
+  const createdAt = lastItem.createdAt instanceof Date
+    ? lastItem.createdAt.getTime()
+    : typeof lastItem.createdAt === 'string'
+    ? new Date(lastItem.createdAt).getTime()
+    : lastItem.createdAt;
+
+  return encodeCursor({ createdAt, id: lastItem.id });
+}
+
 // List tasks - reads from database for consistency with dashboard
 tasks.get('/', async (c) => {
   const storage = getStorage();
@@ -13,12 +70,20 @@ tasks.get('/', async (c) => {
   const limit = parseInt(c.req.query('limit') || '50');
   const offset = parseInt(c.req.query('offset') || '0');
 
+  // Cursor-based pagination (Phase 17) - takes precedence over offset
+  const cursor = c.req.query('cursor');
+  const cursorData = cursor ? decodeCursor(cursor) : null;
+
+  // Sparse fieldset support (Phase 17)
+  const fieldsParam = c.req.query('fields'); // Comma-separated field names
+  const sparseFields = fieldsParam ? fieldsParam.split(',').map(f => f.trim()) : null;
+  const includeFull = c.req.query('full') === 'true'; // Backward compat: return full objects
+
   // Use database query for persistence and consistency
   if (storage.getTasksFiltered) {
     try {
       const options: TaskFilterOptions = {
         limit,
-        offset,
         sortBy: 'createdAt',
         sortOrder: 'desc',
       };
@@ -26,20 +91,39 @@ tasks.get('/', async (c) => {
         options.status = status;
       }
 
+      // Use cursor for pagination if provided, otherwise fall back to offset
+      if (cursorData) {
+        options.cursorCreatedAt = new Date(cursorData.createdAt);
+        options.cursorId = cursorData.id;
+      } else {
+        options.offset = offset;
+      }
+
       const result = await storage.getTasksFiltered(options);
+
+      // Generate next cursor from full results (before sparse filtering)
+      const nextCursor = getNextCursor(result.tasks as any[], limit);
+
+      // Apply sparse fieldset
+      const taskList = !includeFull
+        ? result.tasks.map(t => pickTaskFields(t as unknown as Record<string, unknown>, sparseFields || [...TASK_LIST_FIELDS]))
+        : result.tasks;
+
       return c.json({
-        tasks: result.tasks,
+        tasks: taskList,
         total: result.total,
-        count: result.tasks.length,
+        count: taskList.length,
         limit,
-        offset,
+        nextCursor,
+        offset: cursorData ? undefined : offset,
+        sparse: !includeFull,
       });
     } catch (error) {
       console.error('[API] Error loading tasks from DB, falling back to in-memory:', error);
     }
   }
 
-  // Fallback to in-memory queue
+  // Fallback to in-memory queue (no cursor support for in-memory)
   const taskList = getTasks({
     status: status as any,
     limit,
@@ -49,12 +133,22 @@ tasks.get('/', async (c) => {
   // Get total count (without limit)
   const allTasks = getTasks({ status: status as any });
 
+  // Generate next cursor
+  const nextCursor = getNextCursor(taskList as any[], limit);
+
+  // Apply sparse fieldset
+  const sparseTasks = !includeFull
+    ? taskList.map(t => pickTaskFields(t as unknown as Record<string, unknown>, sparseFields || [...TASK_LIST_FIELDS]))
+    : taskList;
+
   return c.json({
-    tasks: taskList,
+    tasks: sparseTasks,
     total: allTasks.length,
-    count: taskList.length,
+    count: sparseTasks.length,
     limit,
-    offset,
+    nextCursor,
+    offset: cursorData ? undefined : offset,
+    sparse: !includeFull,
   });
 });
 

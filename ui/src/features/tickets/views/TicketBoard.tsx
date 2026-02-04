@@ -41,7 +41,7 @@ const COLUMNS: Array<{
   { status: 'backlog', label: 'Backlog', icon: Inbox, color: 'text-gray-400', bgColor: 'bg-gray-500/10' },
   { status: 'todo', label: 'Todo', icon: Circle, color: 'text-blue-400', bgColor: 'bg-blue-500/10' },
   { status: 'in_progress', label: 'In Progress', icon: Play, color: 'text-amber-400', bgColor: 'bg-amber-500/10' },
-  { status: 'in_review', label: 'In Review', icon: Eye, color: 'text-purple-400', bgColor: 'bg-purple-500/10' },
+  { status: 'in_review', label: 'In Review', icon: Eye, color: 'text-indigo-400', bgColor: 'bg-indigo-500/10' },
   { status: 'done', label: 'Done', icon: CheckCircle2, color: 'text-green-400', bgColor: 'bg-green-500/10' },
 ];
 

@@ -47,7 +47,7 @@ const STATUS_COLORS: Record<TicketStatus, string> = {
   backlog: 'bg-gray-400/10 text-gray-400',
   todo: 'bg-amber-400/10 text-amber-400',
   in_progress: 'bg-blue-500/10 text-blue-500',
-  in_review: 'bg-purple-500/10 text-purple-500',
+  in_review: 'bg-indigo-500/10 text-indigo-500',
   done: 'bg-green-500/10 text-green-500',
   cancelled: 'bg-red-500/10 text-red-500',
 };
@@ -64,7 +64,7 @@ const TYPE_COLORS: Record<TicketType, string> = {
   task: 'bg-blue-500/10 text-blue-500',
   bug: 'bg-red-500/10 text-red-500',
   feature: 'bg-green-500/10 text-green-500',
-  enhancement: 'bg-purple-500/10 text-purple-500',
+  enhancement: 'bg-indigo-500/10 text-indigo-500',
   documentation: 'bg-teal-500/10 text-teal-500',
   epic: 'bg-amber-500/10 text-amber-500',
   story: 'bg-cyan-500/10 text-cyan-500',

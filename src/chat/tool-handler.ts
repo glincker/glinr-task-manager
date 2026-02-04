@@ -353,16 +353,40 @@ export function getChatTools(
 export function getDefaultChatTools(): NativeToolDefinition[] {
   // Default safe tools for chat assistance
   const safeTools = [
+    // File operations (read-only)
     'read_file',
     'search_files',
     'grep',
+    // System info (read-only)
     'system_info',
     'env_vars',
     'which',
+    'path_info',
+    'process_list',
+    // Git operations (read-only)
     'git_status',
     'git_diff',
     'git_log',
+    // Web operations
     'web_fetch',
+    'web_search',
+    // Session/agent info (read-only)
+    'session_status',
+    'sessions_list',
+    'agents_list',
+    // Memory operations (read-only)
+    'memory_search',
+    'memory_get',
+    'memory_stats',
+    // GLINR ops tools (internal ticket/project management)
+    'create_ticket',
+    'create_project',
+    'list_tickets',
+    'list_projects',
+    'update_ticket',
+    'get_ticket',
+    // Task completion
+    'complete_task',
     // Browser tools (safe ones from centralized definition)
     ...SAFE_BROWSER_TOOL_NAMES,
   ];

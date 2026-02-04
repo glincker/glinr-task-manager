@@ -106,6 +106,52 @@ sync:
       projectId: "${PLANE_PROJECT_ID}"
       syncDirection: bidirectional
 
+# =========================================================================
+# SESSION SPAWN CONFIGURATION (Phase 23 - Parallel Agent Sessions)
+# =========================================================================
+# Enables spawning child sessions for parallel work within a conversation.
+# Child sessions can work autonomously on subtasks while parent continues.
+sessionSpawn:
+  # Enable/disable session spawn feature
+  enabled: true
+
+  # Maximum depth of session hierarchy (0 = root only, 3 = up to 3 levels deep)
+  # Environment override: SESSION_SPAWN_MAX_DEPTH
+  maxDepth: ${SESSION_SPAWN_MAX_DEPTH:-3}
+
+  # Maximum children a single session can spawn
+  # Environment override: SESSION_SPAWN_MAX_CHILDREN
+  maxChildrenPerSession: ${SESSION_SPAWN_MAX_CHILDREN:-5}
+
+  # Default token budget for child sessions (root sessions get 5x this)
+  # Environment override: SESSION_SPAWN_DEFAULT_BUDGET
+  defaultBudget: ${SESSION_SPAWN_DEFAULT_BUDGET:-20000}
+
+  # Default max steps (tool calls) for child sessions (root sessions get 5x this)
+  # Environment override: SESSION_SPAWN_DEFAULT_STEPS
+  defaultSteps: ${SESSION_SPAWN_DEFAULT_STEPS:-20}
+
+  # Root session multiplier (root gets N times the child defaults)
+  rootMultiplier: ${SESSION_SPAWN_ROOT_MULTIPLIER:-5}
+
+  # Default message priority (1-10, 10 = highest)
+  defaultMessagePriority: ${SESSION_SPAWN_MESSAGE_PRIORITY:-5}
+
+  # Maximum message priority allowed
+  maxMessagePriority: 10
+
+  # Auto-cleanup settings for old sessions
+  cleanup:
+    # Enable automatic cleanup of old sessions
+    enabled: true
+    # Cleanup interval in milliseconds (default: 1 hour)
+    intervalMs: ${SESSION_SPAWN_CLEANUP_INTERVAL:-3600000}
+    # Delete completed sessions older than this (default: 24 hours)
+    maxAgeMs: ${SESSION_SPAWN_MAX_AGE:-86400000}
+
+# =========================================================================
+# STATUS MAPPING (optional)
+# =========================================================================
 # Status mapping overrides (optional)
 # Use this to customize how GLINR statuses map to external platforms
 statusMapping:

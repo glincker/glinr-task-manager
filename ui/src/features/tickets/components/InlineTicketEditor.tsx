@@ -90,7 +90,7 @@ const STATUS_OPTIONS: Array<{
   { value: 'backlog', label: 'Backlog', icon: Archive, color: 'text-slate-400', bgColor: 'bg-slate-400/10' },
   { value: 'todo', label: 'Todo', icon: Circle, color: 'text-slate-500', bgColor: 'bg-slate-500/10' },
   { value: 'in_progress', label: 'In Progress', icon: Play, color: 'text-amber-500', bgColor: 'bg-amber-500/10' },
-  { value: 'in_review', label: 'In Review', icon: Eye, color: 'text-violet-500', bgColor: 'bg-violet-500/10' },
+  { value: 'in_review', label: 'In Review', icon: Eye, color: 'text-indigo-500', bgColor: 'bg-indigo-500/10' },
   { value: 'done', label: 'Done', icon: CheckCircle2, color: 'text-emerald-500', bgColor: 'bg-emerald-500/10' },
   { value: 'cancelled', label: 'Cancelled', icon: XIcon, color: 'text-slate-400', bgColor: 'bg-slate-400/10' },
 ];
@@ -98,7 +98,7 @@ const STATUS_OPTIONS: Array<{
 const TYPE_OPTIONS: Array<{ value: TicketType; label: string; icon: typeof Bug; color: string }> = [
   { value: 'task', label: 'Task', icon: CheckCircle2, color: 'text-blue-500' },
   { value: 'bug', label: 'Bug', icon: Bug, color: 'text-red-500' },
-  { value: 'feature', label: 'Feature', icon: Sparkles, color: 'text-violet-500' },
+  { value: 'feature', label: 'Feature', icon: Sparkles, color: 'text-cyan-500' },
   { value: 'epic', label: 'Epic', icon: Layers, color: 'text-amber-500' },
   { value: 'story', label: 'Story', icon: BookOpen, color: 'text-cyan-500' },
   { value: 'subtask', label: 'Subtask', icon: Circle, color: 'text-slate-400' },
@@ -657,7 +657,7 @@ export function InlineTicketEditor({ ticketId, onClose, className }: InlineTicke
                 <DetailItem label="Reporter">
                   <div className="flex items-center gap-2">
                     {ticket.createdBy === 'ai' ? (
-                      <Bot className="h-4 w-4 text-violet-500" />
+                      <Bot className="h-4 w-4 text-blue-500" />
                     ) : (
                       <User className="h-4 w-4 text-muted-foreground" />
                     )}

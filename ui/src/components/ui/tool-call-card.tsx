@@ -13,11 +13,7 @@ import {
   Globe,
   Settings,
   Database,
-  CheckCircle2,
   ChevronDown,
-  ChevronRight,
-  AlertTriangle,
-  Clock,
   Copy,
   Check,
 } from 'lucide-react';
@@ -145,94 +141,108 @@ export function ToolCallCard({ tool, className }: ToolCallCardProps) {
   return (
     <div
       className={cn(
-        'my-2 rounded-lg border border-border bg-muted/30 overflow-hidden',
+        'my-3 premium-card overflow-hidden group/card',
+        isError && 'border-red-500/20',
         className
       )}
     >
       {/* Header */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-3 py-2 flex items-center gap-2 hover:bg-muted/50 transition-colors text-left"
+        aria-expanded={expanded}
+        aria-label={`${expanded ? 'Collapse' : 'Expand'} ${label} tool results`}
+        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-foreground/[0.02] transition-colors text-left"
       >
         <div
           className={cn(
-            'p-1.5 rounded-md',
-            isError ? 'bg-red-500/20' : 'bg-primary/20'
+            'h-10 w-10 flex items-center justify-center rounded-xl transition-all duration-300',
+            isError ? 'bg-red-500/10 text-red-500 shadow-[0_0_15px_-3px_rgba(239,68,68,0.3)]' : 'bg-primary/10 text-primary shadow-[0_0_15px_-3px_var(--primary-glow)]'
           )}
         >
-          <Icon
-            className={cn(
-              'h-4 w-4',
-              isError ? 'text-red-500' : 'text-primary'
-            )}
-          />
+          <Icon className="h-5 w-5" aria-hidden="true" />
         </div>
+        
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-sm">{label}</span>
-            {isPending && (
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock className="h-3 w-3 animate-pulse" />
-                Running...
-              </span>
-            )}
-            {isSuccess && (
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-            )}
-            {isError && (
-              <AlertTriangle className="h-4 w-4 text-red-500" />
-            )}
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="font-semibold text-[14px] leading-tight tracking-tight">{label}</span>
+            <div className="flex items-center gap-1.5 ml-auto">
+              {isPending && (
+                <>
+                  <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse status-glow-info" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Running</span>
+                </>
+              )}
+              {isSuccess && (
+                <>
+                  <div className="h-1.5 w-1.5 rounded-full bg-green-500 status-glow-success" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-green-500">Success</span>
+                </>
+              )}
+              {isError && (
+                <>
+                  <div className="h-1.5 w-1.5 rounded-full bg-red-500 status-glow-destructive" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-red-500">Failed</span>
+                </>
+              )}
+            </div>
           </div>
           {argsDisplay && (
-            <div className="text-xs text-muted-foreground font-mono truncate">
+            <div className="text-[11px] text-muted-foreground/80 font-mono truncate opacity-60 group-hover/card:opacity-100 transition-opacity">
               {argsDisplay}
             </div>
           )}
         </div>
-        {hasResult && (
-          expanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-          )
-        )}
-        {tool.duration && (
-          <span className="text-xs text-muted-foreground shrink-0">
-            {tool.duration}ms
-          </span>
-        )}
+
+        <div className="ml-2 flex items-center gap-2">
+          {tool.duration && (
+            <span className="text-[10px] font-mono font-medium text-muted-foreground/40">
+              {tool.duration}ms
+            </span>
+          )}
+          {hasResult && (
+            <div className={cn(
+              "p-1 rounded-md transition-transform duration-200",
+              expanded && "rotate-180"
+            )}>
+              <ChevronDown className="h-4 w-4 text-muted-foreground/50" />
+            </div>
+          )}
+        </div>
       </button>
 
-      {/* Preview (when collapsed and has result) */}
+      {/* Preview Stats / Preview (recessed style) */}
       {!expanded && hasResult && resultPreview && (
-        <div className="px-3 pb-2">
-          <div className="text-xs text-muted-foreground font-mono bg-background/50 rounded px-2 py-1 truncate">
-            {resultPreview}
+        <div className="px-4 pb-3">
+          <div className="recessed-card p-2 rounded-lg">
+            <div className="text-[11px] text-muted-foreground/90 font-mono line-clamp-2 leading-relaxed">
+              {resultPreview}
+            </div>
           </div>
         </div>
       )}
 
       {/* Expanded content */}
       {expanded && hasResult && (
-        <div className="border-t border-border">
-          <div className="px-3 py-2 flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Output</span>
+        <div className="border-t border-border/10">
+          <div className="px-4 py-2.5 flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Output</span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleCopy();
               }}
-              className="p-1 rounded hover:bg-muted transition-colors"
+              className="p-1.5 rounded-lg hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
+              aria-label="Copy tool output"
             >
               {copied ? (
-                <Check className="h-3 w-3 text-green-400" />
+                <Check className="h-3.5 w-3.5 text-green-400" aria-hidden="true" />
               ) : (
-                <Copy className="h-3 w-3 text-muted-foreground" />
+                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
               )}
             </button>
           </div>
-          <div className="px-3 pb-3">
-            <pre className="text-xs font-mono bg-background/50 rounded-lg p-3 overflow-x-auto max-h-60 overflow-y-auto">
+          <div className="px-4 pb-4">
+            <pre className="text-[12px] font-mono bg-black/20 rounded-xl p-4 overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap break-all border border-white/5 scrollbar-glass">
               {typeof tool.result === 'string'
                 ? tool.result
                 : JSON.stringify(tool.result, null, 2)}

@@ -37,7 +37,7 @@ interface BoardCardProps {
 const typeConfig: Record<TicketType, { icon: typeof Bug; color: string }> = {
   task: { icon: CheckCircle2, color: 'text-blue-400' },
   bug: { icon: Bug, color: 'text-red-400' },
-  feature: { icon: Sparkles, color: 'text-purple-400' },
+  feature: { icon: Sparkles, color: 'text-cyan-400' },
   epic: { icon: Layers, color: 'text-orange-400' },
   story: { icon: BookOpen, color: 'text-green-400' },
   subtask: { icon: Circle, color: 'text-gray-400' },
@@ -126,7 +126,7 @@ export function BoardCard({ ticket, isDragging: externalIsDragging }: BoardCardP
             ))}
           </div>
           {ticket.createdBy === 'ai' && (
-            <span className="text-[8px] font-bold uppercase tracking-wider text-purple-400">
+            <span className="text-[8px] font-bold uppercase tracking-wider text-blue-400">
               AI
             </span>
           )}

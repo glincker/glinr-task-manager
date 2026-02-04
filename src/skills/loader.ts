@@ -1,293 +1,540 @@
 /**
  * Skills Loader
  *
- * Loads skills from multiple directories with precedence:
- * workspace > managed > bundled > extra
+ * Parses SKILL.md files with YAML frontmatter and loads skills from
+ * multiple sources with precedence ordering.
  *
- * Following OpenClaw's proven patterns.
+ * Loading precedence (lowest to highest):
+ * 1. Extra dirs (config.load.extraDirs)
+ * 2. Bundled (built-in skills)
+ * 3. Managed (~/.glinr/skills/)
+ * 4. Workspace (<project>/skills/)
+ *
+ * Later sources override earlier ones by skill name.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-import { parseSkillFile } from './frontmatter.js';
-import type { Skill, SkillEntry, SkillEligibilityContext, SkillsConfig } from './types.js';
+import { readFile, readdir, stat } from 'node:fs/promises';
+import { join, basename } from 'node:path';
+import { homedir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { logger } from '../utils/logger.js';
+import type {
+  SkillEntry,
+  SkillFrontmatter,
+  SkillMetadata,
+  SkillSource,
+  SkillsSystemConfig,
+  SkillCommandSpec,
+  SkillConfig,
+  SkillStatus,
+  SkillsStatus,
+} from './types.js';
 
-const fsp = fs.promises;
+const execFileAsync = promisify(execFile);
 
-// Default directories
-const CONFIG_DIR = path.join(os.homedir(), '.glinr');
-const MANAGED_SKILLS_DIR = path.join(CONFIG_DIR, 'skills');
+// =============================================================================
+// SKILL.md Parser
+// =============================================================================
+
+const FRONTMATTER_REGEX = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
 
 /**
- * Check if a binary exists on PATH
+ * Parse a SKILL.md file into frontmatter + instructions
  */
-function hasBinary(bin: string): boolean {
-  const paths = (process.env.PATH || '').split(path.delimiter);
-  const extensions = process.platform === 'win32' ? ['', '.exe', '.cmd', '.bat'] : [''];
+export function parseSkillMd(content: string): {
+  frontmatter: SkillFrontmatter;
+  metadata?: SkillMetadata;
+  instructions: string;
+} {
+  const match = content.match(FRONTMATTER_REGEX);
 
-  for (const dir of paths) {
-    for (const ext of extensions) {
-      const fullPath = path.join(dir, bin + ext);
-      try {
-        fs.accessSync(fullPath, fs.constants.X_OK);
-        return true;
-      } catch {
-        // Continue checking
-      }
+  if (!match) {
+    // No frontmatter - treat entire content as instructions
+    return {
+      frontmatter: { name: 'unknown', description: '' },
+      instructions: content,
+    };
+  }
+
+  const [, yamlStr, instructions] = match;
+
+  // Parse YAML frontmatter (simple key-value parser, no dependency needed)
+  const frontmatter = parseSimpleYaml(yamlStr) as SkillFrontmatter;
+
+  // Parse extended metadata from JSON string
+  let metadata: SkillMetadata | undefined;
+  if (frontmatter.metadata) {
+    try {
+      const parsed = JSON.parse(frontmatter.metadata);
+      // Support both { glinr: {...} } and direct format
+      metadata = parsed.glinr || parsed.openclaw || parsed;
+    } catch {
+      logger.warn(`[Skills] Failed to parse metadata JSON for skill: ${frontmatter.name}`);
     }
   }
-  return false;
+
+  return { frontmatter, metadata, instructions: instructions.trim() };
 }
 
 /**
- * Check if skill should be included based on requirements
+ * Simple YAML parser for frontmatter (handles common cases without js-yaml dep)
  */
-export function shouldIncludeSkill(params: {
-  entry: SkillEntry;
-  config?: SkillsConfig;
-  eligibility?: SkillEligibilityContext;
-}): boolean {
-  const { entry, config, eligibility } = params;
-  const metadata = entry.metadata;
+function parseSimpleYaml(yaml: string): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  let multilineKey = '';
+  let multilineValue = '';
+  let inMultiline = false;
 
-  // Check if explicitly disabled in config
-  const skillKey = metadata?.skillKey ?? entry.skill.name;
-  const skillConfig = config?.entries?.[skillKey];
-  if (skillConfig?.enabled === false) {
-    return false;
-  }
-
-  // If always flag is set, include regardless of other gates
-  if (metadata?.always) {
-    return true;
-  }
-
-  // Check OS requirement
-  if (metadata?.os && metadata.os.length > 0) {
-    const currentPlatform = process.platform;
-    if (!metadata.os.includes(currentPlatform)) {
-      // Check remote platforms if available
-      const remotePlatforms = eligibility?.remote?.platforms || [];
-      const hasMatchingRemote = metadata.os.some((os) => remotePlatforms.includes(os));
-      if (!hasMatchingRemote) {
-        return false;
+  for (const line of yaml.split('\n')) {
+    // Handle multiline values (metadata: |)
+    if (inMultiline) {
+      if (line.startsWith('  ') || line.startsWith('\t') || line.trim() === '') {
+        multilineValue += (multilineValue ? '\n' : '') + line.replace(/^  /, '');
+        continue;
+      } else {
+        // End of multiline
+        result[multilineKey] = multilineValue.trim();
+        inMultiline = false;
       }
+    }
+
+    const colonIndex = line.indexOf(':');
+    if (colonIndex === -1) continue;
+
+    const key = line.slice(0, colonIndex).trim();
+    const rawValue = line.slice(colonIndex + 1).trim();
+
+    if (!key) continue;
+
+    // Check for multiline indicator
+    if (rawValue === '|' || rawValue === '>') {
+      multilineKey = key;
+      multilineValue = '';
+      inMultiline = true;
+      continue;
+    }
+
+    // Parse value
+    if (rawValue === 'true') {
+      result[key] = true;
+    } else if (rawValue === 'false') {
+      result[key] = false;
+    } else if (/^\d+$/.test(rawValue)) {
+      result[key] = parseInt(rawValue, 10);
+    } else if (/^\d+\.\d+$/.test(rawValue)) {
+      result[key] = parseFloat(rawValue);
+    } else {
+      // Strip quotes
+      result[key] = rawValue.replace(/^['"]|['"]$/g, '');
     }
   }
 
-  // Check binary requirements
-  const requires = metadata?.requires;
-  if (requires) {
-    // All bins must exist
-    if (requires.bins && requires.bins.length > 0) {
-      const checkBin = eligibility?.remote?.hasBin || hasBinary;
-      for (const bin of requires.bins) {
-        if (!checkBin(bin)) {
-          return false;
-        }
-      }
-    }
-
-    // At least one bin must exist
-    if (requires.anyBins && requires.anyBins.length > 0) {
-      const checkAnyBin = eligibility?.remote?.hasAnyBin ||
-        ((bins: string[]) => bins.some((b) => hasBinary(b)));
-      if (!checkAnyBin(requires.anyBins)) {
-        return false;
-      }
-    }
-
-    // Environment variables must exist (or be in config)
-    if (requires.env && requires.env.length > 0) {
-      for (const envVar of requires.env) {
-        if (!process.env[envVar] && !skillConfig?.env?.[envVar] && !skillConfig?.apiKey) {
-          return false;
-        }
-      }
-    }
-
-    // MCP servers must be connected
-    if (requires.mcp && requires.mcp.length > 0) {
-      const connectedMcp = eligibility?.connectedMcpServers || [];
-      for (const mcpServer of requires.mcp) {
-        if (!connectedMcp.includes(mcpServer)) {
-          return false;
-        }
-      }
-    }
+  // Handle final multiline value
+  if (inMultiline) {
+    result[multilineKey] = multilineValue.trim();
   }
 
-  return true;
+  return result;
+}
+
+// =============================================================================
+// Skill Loading
+// =============================================================================
+
+/**
+ * Load a single skill from a directory
+ */
+async function loadSkillFromDir(
+  dirPath: string,
+  source: SkillSource,
+  config: SkillsSystemConfig,
+): Promise<SkillEntry | null> {
+  const skillMdPath = join(dirPath, 'SKILL.md');
+
+  try {
+    const content = await readFile(skillMdPath, 'utf-8');
+    const { frontmatter, metadata, instructions } = parseSkillMd(content);
+
+    const skillName = frontmatter.name || basename(dirPath);
+    const skillKey = metadata?.skillKey || skillName;
+    const skillConfig = config.entries[skillKey];
+
+    // Build invocation policy
+    const invocation = {
+      userInvocable: frontmatter['user-invocable'] !== false,
+      modelInvocable: frontmatter['disable-model-invocation'] !== true,
+    };
+
+    // Check eligibility
+    const { eligible, errors } = await checkEligibility(metadata, skillConfig);
+
+    // Build command spec
+    let command: SkillCommandSpec | undefined;
+    if (invocation.userInvocable) {
+      const cmdName = sanitizeCommandName(skillName);
+      command = {
+        name: cmdName,
+        skillName,
+        description: (frontmatter.description || '').slice(0, 100),
+      };
+
+      if (frontmatter['command-dispatch'] === 'tool' && frontmatter['command-tool']) {
+        command.dispatch = {
+          kind: 'tool',
+          toolName: frontmatter['command-tool'],
+          argMode: frontmatter['command-arg-mode'] || 'raw',
+        };
+      }
+    }
+
+    return {
+      name: skillName,
+      description: frontmatter.description || '',
+      source,
+      dirPath,
+      skillMdPath,
+      frontmatter,
+      metadata,
+      instructions,
+      invocation,
+      eligible: metadata?.always || eligible,
+      eligibilityErrors: errors,
+      enabled: skillConfig?.enabled !== false,
+      command,
+    };
+  } catch (error) {
+    // SKILL.md doesn't exist or can't be read - skip silently
+    return null;
+  }
 }
 
 /**
- * Load skills from a single directory
+ * Load skills from a directory containing skill subdirectories
  */
 async function loadSkillsFromDir(
-  dir: string,
-  source: Skill['source']
+  parentDir: string,
+  source: SkillSource,
+  config: SkillsSystemConfig,
 ): Promise<SkillEntry[]> {
-  const entries: SkillEntry[] = [];
+  const skills: SkillEntry[] = [];
 
   try {
-    const stat = await fsp.stat(dir);
-    if (!stat.isDirectory()) {
-      return entries;
-    }
-  } catch {
-    return entries;
-  }
+    const entries = await readdir(parentDir, { withFileTypes: true });
 
-  try {
-    const items = await fsp.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
 
-    for (const item of items) {
-      if (!item.isDirectory()) {
-        continue;
-      }
+      // Skip hidden directories
+      if (entry.name.startsWith('.')) continue;
 
-      const skillDir = path.join(dir, item.name);
-      const skillFile = path.join(skillDir, 'SKILL.md');
+      const skillDir = join(parentDir, entry.name);
+      const skill = await loadSkillFromDir(skillDir, source, config);
 
-      try {
-        const content = await fsp.readFile(skillFile, 'utf-8');
-        const entry = parseSkillFile(content, skillFile, skillDir, source);
-        if (entry) {
-          entries.push(entry);
-        }
-      } catch {
-        // Skill file doesn't exist or is invalid
+      if (skill) {
+        skills.push(skill);
       }
     }
-  } catch (error) {
-    logger.warn(`[Skills] Failed to read directory ${dir}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-
-  return entries;
-}
-
-/**
- * Load all skills from multiple directories with precedence
- */
-export async function loadAllSkills(params: {
-  workspaceDir?: string;
-  managedSkillsDir?: string;
-  bundledSkillsDir?: string;
-  extraDirs?: string[];
-}): Promise<SkillEntry[]> {
-  const {
-    workspaceDir,
-    managedSkillsDir = MANAGED_SKILLS_DIR,
-    bundledSkillsDir,
-    extraDirs = [],
-  } = params;
-
-  // Load from all sources
-  const bundledSkills = bundledSkillsDir
-    ? await loadSkillsFromDir(bundledSkillsDir, 'bundled')
-    : [];
-
-  const extraSkills: SkillEntry[] = [];
-  for (const dir of extraDirs) {
-    const resolved = dir.startsWith('~')
-      ? path.join(os.homedir(), dir.slice(1))
-      : dir;
-    const skills = await loadSkillsFromDir(resolved, 'plugin');
-    extraSkills.push(...skills);
-  }
-
-  const managedSkills = await loadSkillsFromDir(managedSkillsDir, 'managed');
-
-  const workspaceSkills = workspaceDir
-    ? await loadSkillsFromDir(path.join(workspaceDir, 'skills'), 'workspace')
-    : [];
-
-  // Merge with precedence: workspace > managed > bundled > extra
-  const merged = new Map<string, SkillEntry>();
-
-  for (const entry of extraSkills) {
-    merged.set(entry.skill.name, entry);
-  }
-  for (const entry of bundledSkills) {
-    merged.set(entry.skill.name, entry);
-  }
-  for (const entry of managedSkills) {
-    merged.set(entry.skill.name, entry);
-  }
-  for (const entry of workspaceSkills) {
-    merged.set(entry.skill.name, entry);
-  }
-
-  return Array.from(merged.values());
-}
-
-/**
- * Filter skills based on config and eligibility
- */
-export function filterSkills(
-  entries: SkillEntry[],
-  config?: SkillsConfig,
-  eligibility?: SkillEligibilityContext
-): SkillEntry[] {
-  return entries.filter((entry) => shouldIncludeSkill({ entry, config, eligibility }));
-}
-
-/**
- * Ensure managed skills directory exists
- */
-export async function ensureManagedSkillsDir(): Promise<string> {
-  try {
-    await fsp.mkdir(MANAGED_SKILLS_DIR, { recursive: true });
   } catch {
-    // Directory may already exist
+    // Directory doesn't exist - that's fine
   }
-  return MANAGED_SKILLS_DIR;
+
+  return skills;
 }
 
 /**
- * Get the default skills directory for the current project
+ * Load all skills from all sources with precedence ordering
  */
-export function getProjectSkillsDir(projectRoot: string): string {
-  return path.join(projectRoot, 'skills');
+export async function loadAllSkills(
+  workspacePath: string,
+  config: SkillsSystemConfig,
+): Promise<SkillEntry[]> {
+  const skillMap = new Map<string, SkillEntry>();
+
+  // 1. Extra dirs (lowest precedence)
+  for (const dir of config.load.extraDirs) {
+    const skills = await loadSkillsFromDir(dir, 'plugin', config);
+    for (const skill of skills) {
+      skillMap.set(skill.name, skill);
+    }
+  }
+
+  // 2. Bundled skills
+  const bundledDir = join(import.meta.dirname || __dirname, '..', '..', 'skills');
+  const bundledSkills = await loadSkillsFromDir(bundledDir, 'bundled', config);
+  for (const skill of bundledSkills) {
+    // Check allowlist (empty = all allowed)
+    if (config.allowBundled.length === 0 || config.allowBundled.includes(skill.name)) {
+      skillMap.set(skill.name, skill);
+    }
+  }
+
+  // 3. Managed skills (~/.glinr/skills/)
+  const managedDir = join(homedir(), '.glinr', 'skills');
+  const managedSkills = await loadSkillsFromDir(managedDir, 'managed', config);
+  for (const skill of managedSkills) {
+    skillMap.set(skill.name, skill);
+  }
+
+  // 4. Workspace skills (highest precedence)
+  const workspaceDir = join(workspacePath, 'skills');
+  const workspaceSkills = await loadSkillsFromDir(workspaceDir, 'workspace', config);
+  for (const skill of workspaceSkills) {
+    skillMap.set(skill.name, skill);
+  }
+
+  const allSkills = Array.from(skillMap.values());
+  logger.info(
+    `[Skills] Loaded ${allSkills.length} skills ` +
+    `(${bundledSkills.length} bundled, ${managedSkills.length} managed, ` +
+    `${workspaceSkills.length} workspace)`
+  );
+
+  return allSkills;
+}
+
+// =============================================================================
+// Eligibility Checking
+// =============================================================================
+
+/** Cache for binary existence checks */
+const binaryCache = new Map<string, boolean>();
+
+/**
+ * Check if a binary exists in PATH
+ */
+export async function hasBinary(name: string): Promise<boolean> {
+  const cached = binaryCache.get(name);
+  if (cached !== undefined) return cached;
+
+  try {
+    const cmd = process.platform === 'win32' ? 'where' : 'which';
+    await execFileAsync(cmd, [name], { timeout: 3000 });
+    binaryCache.set(name, true);
+    return true;
+  } catch {
+    binaryCache.set(name, false);
+    return false;
+  }
+}
+
+/** Clear binary cache (for testing or after installs) */
+export function clearBinaryCache(): void {
+  binaryCache.clear();
 }
 
 /**
- * Sync skills from one workspace to another (for sandboxing)
+ * Check if a skill's requirements are met
  */
-export async function syncSkills(params: {
-  sourceDir: string;
-  targetDir: string;
-  config?: SkillsConfig;
-}): Promise<void> {
-  const { sourceDir, targetDir, config } = params;
+export async function checkEligibility(
+  metadata?: SkillMetadata,
+  skillConfig?: SkillConfig,
+): Promise<{ eligible: boolean; errors: string[] }> {
+  const errors: string[] = [];
 
-  if (sourceDir === targetDir) {
-    return;
+  if (!metadata?.requires) {
+    return { eligible: true, errors };
   }
 
-  const targetSkillsDir = path.join(targetDir, 'skills');
+  const { requires } = metadata;
 
-  const entries = await loadAllSkills({
-    workspaceDir: sourceDir,
-    extraDirs: config?.load?.extraDirs,
+  // Check OS
+  if (metadata.os && !metadata.os.includes(process.platform as 'darwin' | 'linux' | 'win32')) {
+    errors.push(`Unsupported platform: ${process.platform} (requires: ${metadata.os.join(', ')})`);
+  }
+
+  // Check required binaries (all must exist)
+  if (requires.bins) {
+    for (const bin of requires.bins) {
+      if (!(await hasBinary(bin))) {
+        errors.push(`Missing binary: ${bin}`);
+      }
+    }
+  }
+
+  // Check any binaries (at least one must exist)
+  if (requires.anyBins && requires.anyBins.length > 0) {
+    let hasAny = false;
+    for (const bin of requires.anyBins) {
+      if (await hasBinary(bin)) {
+        hasAny = true;
+        break;
+      }
+    }
+    if (!hasAny) {
+      errors.push(`Missing one of: ${requires.anyBins.join(', ')}`);
+    }
+  }
+
+  // Check environment variables
+  if (requires.env) {
+    for (const envVar of requires.env) {
+      // Check skill config first, then process.env
+      const hasValue = skillConfig?.apiKey && metadata.primaryEnv === envVar
+        ? true
+        : !!process.env[envVar];
+
+      if (!hasValue) {
+        errors.push(`Missing env: ${envVar}`);
+      }
+    }
+  }
+
+  return { eligible: errors.length === 0, errors };
+}
+
+// =============================================================================
+// Skill Snapshot
+// =============================================================================
+
+/**
+ * Build a skills snapshot with prompt for AI model
+ */
+export function buildSkillSnapshot(
+  skills: SkillEntry[],
+  version: number,
+): { prompt: string; snapshot: import('./types.js').SkillSnapshot } {
+  const eligible = skills.filter(s => s.eligible && s.enabled);
+
+  // Build prompt
+  const lines: string[] = [];
+
+  if (eligible.length > 0) {
+    lines.push('## Available Skills\n');
+    lines.push('The following skills extend your capabilities:\n');
+
+    for (const skill of eligible) {
+      const emoji = skill.metadata?.emoji || '';
+      lines.push(`### ${emoji} ${skill.name}`);
+      lines.push(skill.description);
+
+      // Include instructions if not too long (progressive disclosure)
+      if (skill.instructions.length <= 2000) {
+        lines.push('');
+        lines.push(skill.instructions);
+      } else {
+        lines.push(`\n*Full instructions available (${Math.round(skill.instructions.length / 4)} tokens)*`);
+      }
+      lines.push('');
+    }
+  }
+
+  const snapshot: import('./types.js').SkillSnapshot = {
+    prompt: lines.join('\n'),
+    skills: eligible.map(s => ({
+      name: s.name,
+      description: s.description,
+      primaryEnv: s.metadata?.primaryEnv,
+      source: s.source,
+    })),
+    entries: eligible,
+    version,
+    builtAt: Date.now(),
+  };
+
+  return { prompt: lines.join('\n'), snapshot };
+}
+
+// =============================================================================
+// Skill Status
+// =============================================================================
+
+/**
+ * Build detailed status for all skills
+ */
+export function buildSkillsStatus(skills: SkillEntry[], version: number): SkillsStatus {
+  const sources = { bundled: 0, managed: 0, workspace: 0, plugin: 0 };
+
+  const skillStatuses: SkillStatus[] = skills.map(skill => {
+    sources[skill.source]++;
+
+    const missingBins: string[] = [];
+    const missingEnv: string[] = [];
+    const missingConfig: string[] = [];
+
+    // Parse errors to find missing items
+    for (const err of skill.eligibilityErrors) {
+      if (err.startsWith('Missing binary:')) missingBins.push(err.replace('Missing binary: ', ''));
+      if (err.startsWith('Missing env:')) missingEnv.push(err.replace('Missing env: ', ''));
+      if (err.startsWith('Missing config:')) missingConfig.push(err.replace('Missing config: ', ''));
+    }
+
+    return {
+      name: skill.name,
+      source: skill.source,
+      enabled: skill.enabled,
+      eligible: skill.eligible,
+      errors: skill.eligibilityErrors,
+      missing: { bins: missingBins, env: missingEnv, config: missingConfig },
+      installOptions: skill.metadata?.install || [],
+      metadata: skill.metadata,
+    };
   });
 
-  // Clean target and recreate
-  await fsp.rm(targetSkillsDir, { recursive: true, force: true });
-  await fsp.mkdir(targetSkillsDir, { recursive: true });
+  return {
+    totalLoaded: skills.length,
+    totalEligible: skills.filter(s => s.eligible).length,
+    totalEnabled: skills.filter(s => s.enabled && s.eligible).length,
+    skills: skillStatuses,
+    sources,
+    version,
+  };
+}
 
-  // Copy each skill
-  for (const entry of entries) {
-    const dest = path.join(targetSkillsDir, entry.skill.name);
-    try {
-      await fsp.cp(entry.skill.baseDir, dest, {
-        recursive: true,
-        force: true,
-      });
-    } catch (error) {
-      logger.warn(`[Skills] Failed to copy ${entry.skill.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+// =============================================================================
+// Utility
+// =============================================================================
+
+/** Sanitize a skill name for use as a chat command (alphanumeric + underscore, max 32 chars) */
+function sanitizeCommandName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 32);
+}
+
+/**
+ * Apply per-skill environment overrides
+ * Returns a cleanup function to restore original env
+ */
+export function applySkillEnvOverrides(
+  skills: SkillEntry[],
+  config: SkillsSystemConfig,
+): () => void {
+  const original: Record<string, string | undefined> = {};
+
+  for (const skill of skills) {
+    if (!skill.eligible || !skill.enabled) continue;
+
+    const skillKey = skill.metadata?.skillKey || skill.name;
+    const skillConfig = config.entries[skillKey];
+    if (!skillConfig) continue;
+
+    // Apply API key as primary env
+    if (skillConfig.apiKey && skill.metadata?.primaryEnv) {
+      const envVar = skill.metadata.primaryEnv;
+      original[envVar] = process.env[envVar];
+      process.env[envVar] = skillConfig.apiKey;
+    }
+
+    // Apply custom env overrides
+    if (skillConfig.env) {
+      for (const [key, value] of Object.entries(skillConfig.env)) {
+        original[key] = process.env[key];
+        process.env[key] = value;
+      }
     }
   }
+
+  // Return cleanup function
+  return () => {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  };
 }

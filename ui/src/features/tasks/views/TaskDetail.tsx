@@ -174,7 +174,7 @@ export function TaskDetail() {
            {/* Timeline Card */}
            <div className="glass rounded-[28px] p-6">
               <div className="flex items-center gap-3 mb-6">
-                 <History className="h-4 w-4 text-purple-400" />
+                 <History className="h-4 w-4 text-indigo-400" />
                  <h3 className="text-sm font-bold uppercase tracking-widest">Task Timeline</h3>
               </div>
               

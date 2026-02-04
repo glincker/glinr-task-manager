@@ -301,7 +301,7 @@ export function TicketDetail() {
     const config: Record<TicketType, { icon: typeof Bug; color: string }> = {
       task: { icon: CheckCircle2, color: 'text-blue-500' },
       bug: { icon: Bug, color: 'text-red-500' },
-      feature: { icon: Sparkles, color: 'text-purple-500' },
+      feature: { icon: Sparkles, color: 'text-cyan-500' },
       enhancement: { icon: Sparkles, color: 'text-indigo-500' },
       documentation: { icon: BookOpen, color: 'text-cyan-500' },
       epic: { icon: Layers, color: 'text-orange-500' },
@@ -742,9 +742,9 @@ export function TicketDetail() {
                     <div className="space-y-4 pt-4 border-t border-white/5">
                       {ticketData.comments.map((comment: TicketComment) => (
                         <div key={comment.id} className="flex gap-3">
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${comment.author.type === 'ai' ? 'bg-purple-500/20' : 'bg-blue-500/20'}`}>
+                          <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${comment.author.type === 'ai' ? 'bg-blue-500/20' : 'bg-blue-500/20'}`}>
                             {comment.author.type === 'ai' ? (
-                              <Bot className="h-4 w-4 text-purple-400" />
+                              <Bot className="h-4 w-4 text-blue-500" />
                             ) : (
                               <User className="h-4 w-4 text-blue-400" />
                             )}
@@ -921,7 +921,7 @@ export function TicketDetail() {
                 <span className="flex items-center gap-1.5 text-sm">
                   {ticketData.createdBy === 'ai' ? (
                     <>
-                      <Bot className="h-3.5 w-3.5 text-purple-400" />
+                      <Bot className="h-3.5 w-3.5 text-indigo-400" />
                       AI
                     </>
                   ) : (

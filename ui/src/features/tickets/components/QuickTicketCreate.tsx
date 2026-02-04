@@ -50,7 +50,7 @@ interface QuickTicketCreateProps {
 const TYPE_OPTIONS = [
   { value: 'task', label: 'Task', icon: CheckCircle2, color: 'text-blue-400' },
   { value: 'bug', label: 'Bug', icon: Bug, color: 'text-red-400' },
-  { value: 'feature', label: 'Feature', icon: Sparkles, color: 'text-purple-400' },
+  { value: 'feature', label: 'Feature', icon: Sparkles, color: 'text-cyan-400' },
 ] as const;
 
 const PRIORITY_OPTIONS = [

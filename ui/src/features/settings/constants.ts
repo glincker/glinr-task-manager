@@ -13,6 +13,8 @@ import {
   Database,
   Cpu,
   Tag,
+  Smartphone,
+  Brain,
 } from 'lucide-react';
 import {
   AnthropicLogo,
@@ -70,6 +72,18 @@ export const SETTINGS_SECTIONS = [
     label: 'Integrations',
     icon: Key,
     description: 'API keys and services',
+  },
+  {
+    id: 'devices',
+    label: 'Devices',
+    icon: Smartphone,
+    description: 'Manage paired devices',
+  },
+  {
+    id: 'memory',
+    label: 'Memory',
+    icon: Brain,
+    description: 'Semantic memory system',
   },
   {
     id: 'security',

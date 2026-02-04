@@ -91,23 +91,23 @@ export type ModelAlias = z.infer<typeof ModelAliasSchema>;
 // Default model aliases (like OpenClaw)
 export const DEFAULT_MODEL_ALIASES: ModelAlias[] = [
   // Anthropic
-  { alias: 'opus', provider: 'anthropic', model: 'claude-opus-4-5' },
-  { alias: 'sonnet', provider: 'anthropic', model: 'claude-sonnet-4-5' },
-  { alias: 'haiku', provider: 'anthropic', model: 'claude-haiku-3-5' },
+  { alias: 'opus', provider: 'anthropic', model: 'claude-3-opus-20240229' },
+  { alias: 'sonnet', provider: 'anthropic', model: 'claude-3-5-sonnet-20241022' },
+  { alias: 'haiku', provider: 'anthropic', model: 'claude-3-5-haiku-20241022' },
 
   // OpenAI
-  { alias: 'gpt', provider: 'openai', model: 'gpt-4.5' },
-  { alias: 'gpt-mini', provider: 'openai', model: 'gpt-4.5-mini' },
+  { alias: 'gpt', provider: 'openai', model: 'gpt-4o' },
+  { alias: 'gpt-mini', provider: 'openai', model: 'gpt-4o-mini' },
   { alias: 'o1', provider: 'openai', model: 'o1' },
 
   // Google
-  { alias: 'gemini', provider: 'google', model: 'gemini-2.5-pro' },
-  { alias: 'gemini-flash', provider: 'google', model: 'gemini-2.5-flash' },
+  { alias: 'gemini', provider: 'google', model: 'gemini-1.5-pro' },
+  { alias: 'gemini-flash', provider: 'google', model: 'gemini-1.5-flash' },
 
   // Ollama (local)
   { alias: 'local', provider: 'ollama', model: 'llama3.2' },
   { alias: 'deepseek', provider: 'ollama', model: 'deepseek-r1:7b' },
-  { alias: 'qwen', provider: 'ollama', model: 'qwen3:14b' },
+  { alias: 'qwen', provider: 'ollama', model: 'qwen2.5:14b' },
 ];
 
 // === Chat Message Types ===
@@ -241,8 +241,8 @@ export interface AIProvider {
 
 export const ANTHROPIC_MODELS: ModelDefinition[] = [
   {
-    id: 'claude-opus-4-5',
-    name: 'Claude Opus 4.5',
+    id: 'claude-3-opus-20240229',
+    name: 'Claude 3 Opus',
     provider: 'anthropic',
     capabilities: ['text', 'vision', 'code', 'reasoning', 'function_calling', 'streaming'],
     contextWindow: 200000,
@@ -253,8 +253,8 @@ export const ANTHROPIC_MODELS: ModelDefinition[] = [
     isDefault: true,
   },
   {
-    id: 'claude-sonnet-4-5',
-    name: 'Claude Sonnet 4.5',
+    id: 'claude-3-5-sonnet-20241022',
+    name: 'Claude 3.5 Sonnet',
     provider: 'anthropic',
     capabilities: ['text', 'vision', 'code', 'reasoning', 'function_calling', 'streaming'],
     contextWindow: 200000,
@@ -265,8 +265,8 @@ export const ANTHROPIC_MODELS: ModelDefinition[] = [
     isDefault: false,
   },
   {
-    id: 'claude-haiku-3-5',
-    name: 'Claude Haiku 3.5',
+    id: 'claude-3-5-haiku-20241022',
+    name: 'Claude 3.5 Haiku',
     provider: 'anthropic',
     capabilities: ['text', 'vision', 'code', 'function_calling', 'streaming'],
     contextWindow: 200000,
@@ -280,8 +280,8 @@ export const ANTHROPIC_MODELS: ModelDefinition[] = [
 
 export const OPENAI_MODELS: ModelDefinition[] = [
   {
-    id: 'gpt-4.5',
-    name: 'GPT-4.5',
+    id: 'gpt-4o',
+    name: 'GPT-4o',
     provider: 'openai',
     capabilities: ['text', 'vision', 'code', 'function_calling', 'streaming'],
     contextWindow: 128000,
@@ -292,8 +292,8 @@ export const OPENAI_MODELS: ModelDefinition[] = [
     isDefault: true,
   },
   {
-    id: 'gpt-4.5-mini',
-    name: 'GPT-4.5 Mini',
+    id: 'gpt-4o-mini',
+    name: 'GPT-4o Mini',
     provider: 'openai',
     capabilities: ['text', 'vision', 'code', 'function_calling', 'streaming'],
     contextWindow: 128000,
@@ -319,8 +319,8 @@ export const OPENAI_MODELS: ModelDefinition[] = [
 
 export const GOOGLE_MODELS: ModelDefinition[] = [
   {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
+    id: 'gemini-1.5-pro',
+    name: 'Gemini 1.5 Pro',
     provider: 'google',
     capabilities: ['text', 'vision', 'code', 'reasoning', 'function_calling', 'streaming'],
     contextWindow: 2000000,
@@ -331,8 +331,8 @@ export const GOOGLE_MODELS: ModelDefinition[] = [
     isDefault: true,
   },
   {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
+    id: 'gemini-1.5-flash',
+    name: 'Gemini 1.5 Flash',
     provider: 'google',
     capabilities: ['text', 'vision', 'code', 'function_calling', 'streaming'],
     contextWindow: 1000000,

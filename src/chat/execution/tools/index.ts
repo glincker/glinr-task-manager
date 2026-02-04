@@ -31,9 +31,25 @@ import {
   pathInfoTool,
   whichTool,
 } from './system.js';
+import { dbMaintenanceTool } from './maintenance.js';
 
 // Session tools
 import { sessionStatusTool } from './session-status.js';
+import { sessionsListTool } from './sessions-list.js';
+import { sessionsSpawnTool } from './sessions-spawn.js';
+import { sessionsSendTool } from './sessions-send.js';
+
+// Agent tools
+import { agentsListTool } from './agents-list.js';
+
+// Memory tools
+import { memorySearchTool, memoryGetTool, memoryStatsTool } from './memory-tools.js';
+
+// Web search tool
+import { webSearchTool } from './web-search.js';
+
+// Task completion tool
+import { completeTaskTool } from './complete-task.js';
 
 // Cron tools
 import {
@@ -47,6 +63,17 @@ import {
   cronTools,
 } from './cron-tool.js';
 
+// GLINR ops tools (ticket, project management)
+import {
+  createTicketTool,
+  createProjectTool,
+  listTicketsTool,
+  listProjectsTool,
+  updateTicketTool,
+  getTicketTool,
+  glinrTools,
+} from './glinr-ops.js';
+
 // Browser tools
 import {
   browserNavigateTool,
@@ -59,6 +86,15 @@ import {
   browserCloseTool,
   browserTools,
 } from './browser.js';
+
+// Session spawn tools (hierarchical agent sessions)
+import {
+  spawnSessionTool,
+  sendMessageTool,
+  receiveMessagesTool,
+  listSessionsTool,
+  sessionSpawnTools,
+} from './session-spawn.js';
 
 // Export individual tools
 export { execTool } from './exec.js';
@@ -81,6 +117,21 @@ export {
   whichTool,
 } from './system.js';
 export { sessionStatusTool, getSessionModel, setSessionModel, clearSessionModel } from './session-status.js';
+export { sessionsListTool } from './sessions-list.js';
+export { sessionsSpawnTool } from './sessions-spawn.js';
+export { sessionsSendTool } from './sessions-send.js';
+
+// Agent tools exports
+export { agentsListTool } from './agents-list.js';
+
+// Memory tools exports
+export { memorySearchTool, memoryGetTool, memoryStatsTool } from './memory-tools.js';
+
+// Web search tool exports
+export { webSearchTool } from './web-search.js';
+
+// Task completion tool exports
+export { completeTaskTool } from './complete-task.js';
 
 // Cron tools exports
 export {
@@ -93,6 +144,17 @@ export {
   cronHistoryTool,
   cronTools,
 } from './cron-tool.js';
+
+// GLINR ops tools exports
+export {
+  createTicketTool,
+  createProjectTool,
+  listTicketsTool,
+  listProjectsTool,
+  updateTicketTool,
+  getTicketTool,
+  glinrTools,
+} from './glinr-ops.js';
 export type {
   CronCreateParams,
   CronCreateResult,
@@ -123,6 +185,15 @@ export {
   browserTools,
 } from './browser.js';
 
+// Session spawn tools exports (hierarchical agent sessions)
+export {
+  spawnSessionTool,
+  sendMessageTool,
+  receiveMessagesTool,
+  listSessionsTool,
+  sessionSpawnTools,
+} from './session-spawn.js';
+
 // Export types for external use
 export type { ExecResult } from './exec.js';
 export type { WebFetchResult } from './web-fetch.js';
@@ -136,6 +207,8 @@ export type {
   WhichResult,
 } from './system.js';
 export type { SessionStatusResult } from './session-status.js';
+export type { SessionsSpawnParams, SessionsSpawnResult } from './sessions-spawn.js';
+export type { SessionsSendParams, SessionsSendResult } from './sessions-send.js';
 export type {
   BrowserNavigateResult,
   BrowserSnapshotResult,
@@ -170,12 +243,31 @@ export const builtinTools: ToolDefinition<any, any>[] = [
   processListTool,
   pathInfoTool,
   whichTool,
-  // Session tools (1)
+  // Session tools (4)
   sessionStatusTool,
-  // Cron tools (6)
+  sessionsListTool,
+  sessionsSpawnTool,
+  sessionsSendTool,
+  // Agent tools (1)
+  agentsListTool,
+  // Memory tools (3)
+  memorySearchTool,
+  memoryGetTool,
+  memoryStatsTool,
+  // Web search (1)
+  webSearchTool,
+  // Task completion (1)
+  completeTaskTool,
+  // Cron tools (7)
   ...cronTools,
   // Browser tools (8)
   ...browserTools,
+  // GLINR ops tools (6)
+  ...glinrTools,
+  // Session spawn tools (4) - hierarchical agent sessions
+  ...sessionSpawnTools,
+  // Maintenance tools (1)
+  dbMaintenanceTool,
 ];
 
 /**

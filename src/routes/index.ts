@@ -22,3 +22,5 @@ export { default as toolsRoutes } from './tools.js';
 export { setupRoutes } from './setup.js';
 export { labelsRoutes } from './labels.js';
 export { cronRoutes } from './cron.js';
+export { devicesRoutes } from './devices.js';
+export { memoryRoutes } from './memory.js';

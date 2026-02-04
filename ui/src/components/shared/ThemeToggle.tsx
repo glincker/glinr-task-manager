@@ -22,8 +22,8 @@ export function ThemeToggle() {
           className="relative rounded-full hover-lift transition-liquid"
           aria-label="Toggle theme"
         >
-          <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 midnight:-rotate-90 midnight:scale-0" />
-          <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100 midnight:rotate-0 midnight:scale-100" />
+          <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[180px] glass-heavy rounded-2xl p-2">
@@ -54,16 +54,7 @@ export function ThemeToggle() {
           {theme === 'dark' && <Check className="h-4 w-4" />}
         </DropdownMenuItem>
 
-        <DropdownMenuItem
-          onClick={() => setTheme('midnight')}
-          className="flex items-center justify-between rounded-xl px-2 py-2.5 cursor-pointer hover:bg-white/5"
-        >
-          <div className="flex items-center gap-2">
-            <Moon className="h-4 w-4 text-purple-400" />
-            <span className="text-[13px]">Midnight Purple</span>
-          </div>
-          {theme === 'midnight' && <Check className="h-4 w-4" />}
-        </DropdownMenuItem>
+
 
         <DropdownMenuSeparator className="bg-white/5" />
 

@@ -111,7 +111,7 @@ export function SignupPage() {
           {/* Logo */}
           <div className="flex justify-center mb-4">
             <div className="p-3 rounded-2xl bg-[var(--primary)]/10 shadow-[0_0_30px_var(--primary-glow)]">
-              <Logo className="h-10 w-10 text-[var(--primary)]" />
+              <Logo className="h-10 w-10 text-[var(--primary)]" aria-label="GLINR Logo" />
             </div>
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">Create your account</CardTitle>
@@ -150,6 +150,7 @@ export function SignupPage() {
               <button
                 onClick={() => navigate('/setup')}
                 className="w-full text-xs text-center text-[var(--muted-foreground)] flex items-center justify-center gap-1.5 py-1.5 hover:text-[var(--primary)] transition-colors group"
+                aria-label="GitHub OAuth not configured. Click to configure now."
               >
                 <Settings className="h-3 w-3 group-hover:animate-spin" />
                 <span>GitHub OAuth not configured.</span>
@@ -237,7 +238,7 @@ export function SignupPage() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -278,7 +279,7 @@ export function SignupPage() {
                             "h-4 w-4 rounded-full flex items-center justify-center transition-all",
                             passed ? "bg-green-500/20" : "bg-[var(--muted)]"
                           )}>
-                            <Check className={cn('h-2.5 w-2.5', passed ? 'opacity-100' : 'opacity-0')} />
+                            <Check className={cn('h-2.5 w-2.5', passed ? 'opacity-100' : 'opacity-0')} aria-hidden="true" />
                           </div>
                           {req.label}
                         </div>

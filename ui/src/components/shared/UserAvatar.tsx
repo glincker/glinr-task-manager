@@ -59,7 +59,7 @@ const statusSizes: Record<AvatarSize, string> = {
 const variantClasses: Record<AvatarVariant, string> = {
   default: 'bg-muted border border-border text-foreground',
   primary: 'bg-gradient-to-br from-primary to-primary/70 text-primary-foreground border-0',
-  ai: 'bg-purple-500/10 border border-purple-500/30 text-purple-400',
+  ai: 'bg-blue-500/10 border border-blue-500/30 text-blue-500',
   muted: 'bg-muted/50 border border-border/50 text-muted-foreground',
 };
 

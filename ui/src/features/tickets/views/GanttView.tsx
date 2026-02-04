@@ -8,17 +8,13 @@
  * - [ ] Drag-to-resize bars to change due dates
  * - [ ] Drag-to-move bars to reschedule tickets
  * - [ ] Dependencies/relations arrows between tickets
- * - [ ] Quarter view option for long-term planning
  * - [ ] Swimlanes grouping by assignee, project, or sprint
- * - [ ] Zoom controls (day/week/month/quarter)
  * - [ ] Export to PNG/PDF for reporting
  * - [ ] Inline ticket editing (title, assignee)
  * - [ ] Critical path highlighting
- * - [ ] Progress percentage overlay on bars
  * - [ ] Milestone markers (diamond shapes)
  * - [ ] Keyboard navigation (arrow keys to move between tickets)
  * - [ ] Collapsible groups/sections
- * - [ ] Auto-scroll to today on load
  * - [ ] Context menu (right-click) for quick actions
  */
 
@@ -35,7 +31,25 @@ import {
   FolderOpen,
   ChevronDown,
 } from 'lucide-react';
-import { addDays, startOfWeek, endOfWeek, format, differenceInDays, isWithinInterval, addWeeks, subWeeks, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday } from 'date-fns';
+import {
+  addDays,
+  startOfWeek,
+  endOfWeek,
+  format,
+  differenceInDays,
+  isWithinInterval,
+  addWeeks,
+  subWeeks,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  getDay,
+  isToday,
+  startOfQuarter,
+  endOfQuarter,
+  addQuarters,
+  subQuarters,
+} from 'date-fns';
 import { api } from '@/core/api/client';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,7 +62,7 @@ import { cn } from '@/lib/utils';
 import { TicketDetailModal } from '../components/TicketDetailModal';
 
 // TODO: Add 'quarter' and 'day' view modes for more granularity
-type ViewMode = 'week' | 'month';
+type ViewMode = 'week' | 'month' | 'quarter';
 
 const STATUS_COLORS: Record<string, string> = {
   backlog: 'bg-gray-400',
@@ -58,7 +72,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-gray-500',
   todo: 'bg-blue-400',
   in_progress: 'bg-amber-400',
-  in_review: 'bg-purple-400',
+  in_review: 'bg-indigo-400',
   done: 'bg-green-400',
 };
 
@@ -121,20 +135,7 @@ export function GanttView() {
   });
 
   // TODO: Implement drag-to-reschedule with mutation
-  // Add the following when implementing drag handlers with @atlaskit/pragmatic-drag-and-drop:
-  // const queryClient = useQueryClient();
-  // const updateTicketMutation = useMutation({
-  //   mutationFn: ({ id, updates }: { id: string; updates: { dueDate?: string } }) =>
-  //     api.tickets.update(id, updates),
-  //   onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tickets'] }),
-  // });
-  // Drag handlers:
-  // - onDragStart: Store original position
-  // - onDrag: Update bar position visually (optimistic)
-  // - onDrop: Calculate new dates from position, call mutation
-  // - onDragCancel: Revert to original position
-
-  // Filter tickets that have dates
+  // TODO: Add swimlane grouping state (none, assignee, project, sprint)
   const tickets = useMemo(() => {
     if (!ticketsData?.tickets) return [];
     return ticketsData.tickets.filter(
@@ -143,32 +144,46 @@ export function GanttView() {
   }, [ticketsData]);
 
   // Calculate date range based on view mode
+  // Calculate date range based on view mode
   const dateRange = useMemo(() => {
+    let start: Date;
+    let end: Date;
+
     if (viewMode === 'week') {
-      const start = startOfWeek(currentDate, { weekStartsOn: 1 });
-      const end = endOfWeek(currentDate, { weekStartsOn: 1 });
-      return { start, end, days: eachDayOfInterval({ start, end }) };
+      start = startOfWeek(currentDate, { weekStartsOn: 1 });
+      end = endOfWeek(currentDate, { weekStartsOn: 1 });
+    } else if (viewMode === 'month') {
+      start = startOfMonth(currentDate);
+      end = endOfMonth(currentDate);
     } else {
-      const start = startOfMonth(currentDate);
-      const end = endOfMonth(currentDate);
-      return { start, end, days: eachDayOfInterval({ start, end }) };
+      // Quarter
+      start = startOfQuarter(currentDate);
+      end = endOfQuarter(currentDate);
     }
+
+    // specific handling for performance optimization on large ranges
+    const days = eachDayOfInterval({ start, end });
+    return { start, end, days };
   }, [viewMode, currentDate]);
 
   // Navigation
   const navigatePrev = () => {
     if (viewMode === 'week') {
       setCurrentDate(subWeeks(currentDate, 1));
-    } else {
+    } else if (viewMode === 'month') {
       setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+    } else {
+      setCurrentDate(subQuarters(currentDate, 1));
     }
   };
 
   const navigateNext = () => {
     if (viewMode === 'week') {
       setCurrentDate(addWeeks(currentDate, 1));
-    } else {
+    } else if (viewMode === 'month') {
       setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+    } else {
+      setCurrentDate(addQuarters(currentDate, 1));
     }
   };
 
@@ -280,6 +295,13 @@ export function GanttView() {
               onClick={() => setViewMode('month')}
             >
               Month
+            </Button>
+            <Button
+              variant={viewMode === 'quarter' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('quarter')}
+            >
+              Quarter
             </Button>
           </div>
 
@@ -414,8 +436,23 @@ export function GanttView() {
                       onClick={() => setSelectedTicketId(ticket.id)}
                       title={`${ticket.title}\n${format(bar.startDate, 'MMM d')} - ${format(bar.endDate, 'MMM d')}`}
                     >
+                      {/* Progress Overlay */}
+                      <div
+                        className="absolute top-0 bottom-0 left-0 bg-black/10 transition-all"
+                        style={{
+                          width: `${
+                            ticket.status === 'done' || ticket.status === 'completed'
+                              ? 100
+                              : ticket.status === 'in_progress'
+                              ? 50
+                              : ticket.status === 'in_review'
+                              ? 80
+                              : 0
+                          }%`,
+                        }}
+                      />
                       {/* TODO: Add left resize handle: <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize" /> */}
-                      <div className="px-2 py-1 text-xs font-medium text-white truncate">
+                      <div className="relative px-2 py-1 text-xs font-medium text-white truncate z-10">
                         {bar.width > 10 && ticket.title}
                       </div>
                       {/* TODO: Add right resize handle: <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize" /> */}

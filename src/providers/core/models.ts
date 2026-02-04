@@ -12,13 +12,13 @@ import { ProviderType, type ModelInfo } from './types.js';
 
 export const MODEL_ALIASES: Record<string, { provider: ProviderType; model: string }> = {
   // Anthropic
-  opus: { provider: 'anthropic', model: 'claude-opus-4-5-20251101' },
-  sonnet: { provider: 'anthropic', model: 'claude-sonnet-4-5-20251014' },
+  opus: { provider: 'anthropic', model: 'claude-3-opus-20240229' },
+  sonnet: { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022' },
   haiku: { provider: 'anthropic', model: 'claude-3-5-haiku-20241022' },
 
   // OpenAI
-  gpt: { provider: 'openai', model: 'gpt-4.1' },
-  'gpt-mini': { provider: 'openai', model: 'gpt-4.1-mini' },
+  gpt: { provider: 'openai', model: 'gpt-4o' },
+  'gpt-mini': { provider: 'openai', model: 'gpt-4o-mini' },
   o1: { provider: 'openai', model: 'o1' },
   'o1-mini': { provider: 'openai', model: 'o1-mini' },
   'o3-mini': { provider: 'openai', model: 'o3-mini' },
@@ -28,9 +28,9 @@ export const MODEL_ALIASES: Record<string, { provider: ProviderType; model: stri
   'azure-gpt': { provider: 'azure', model: 'gpt-4' },
 
   // Google
-  gemini: { provider: 'google', model: 'gemini-2.5-pro-preview-05-06' },
-  'gemini-flash': { provider: 'google', model: 'gemini-2.5-flash-preview-05-20' },
-  'gemini-thinking': { provider: 'google', model: 'gemini-2.5-flash-thinking-exp-01-21' },
+  gemini: { provider: 'google', model: 'gemini-1.5-pro' },
+  'gemini-flash': { provider: 'google', model: 'gemini-1.5-flash' },
+  'gemini-thinking': { provider: 'google', model: 'gemini-2.0-flash-thinking-exp' },
 
   // Groq (fast inference)
   groq: { provider: 'groq', model: 'llama-3.3-70b-versatile' },
@@ -41,7 +41,7 @@ export const MODEL_ALIASES: Record<string, { provider: ProviderType; model: stri
   local: { provider: 'ollama', model: 'llama3.2' },
   llama: { provider: 'ollama', model: 'llama3.2' },
   'deepseek-local': { provider: 'ollama', model: 'deepseek-r1:7b' },
-  qwen: { provider: 'ollama', model: 'qwen3:14b' },
+  qwen: { provider: 'ollama', model: 'qwen2.5:14b' },
   'mistral-local': { provider: 'ollama', model: 'mistral:7b' },
 
   // xAI (Grok)
@@ -88,8 +88,8 @@ export const MODEL_ALIASES: Record<string, { provider: ProviderType; model: stri
 export const MODEL_CATALOG: ModelInfo[] = [
   // Anthropic - All support native function calling
   {
-    id: 'claude-opus-4-5-20251101',
-    name: 'Claude Opus 4.5',
+    id: 'claude-3-opus-20240229',
+    name: 'Claude 3 Opus',
     provider: 'anthropic',
     contextWindow: 200000,
     maxOutput: 32000,
@@ -100,8 +100,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 75,
   },
   {
-    id: 'claude-sonnet-4-5-20251014',
-    name: 'Claude Sonnet 4.5',
+    id: 'claude-3-5-sonnet-20241022',
+    name: 'Claude 3.5 Sonnet',
     provider: 'anthropic',
     contextWindow: 200000,
     maxOutput: 16000,
@@ -126,8 +126,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
 
   // OpenAI - GPT-4+ supports function calling
   {
-    id: 'gpt-4.5-turbo',
-    name: 'GPT-4.5 Turbo',
+    id: 'gpt-4o',
+    name: 'GPT-4o',
     provider: 'openai',
     contextWindow: 128000,
     maxOutput: 16384,
@@ -138,8 +138,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 10,
   },
   {
-    id: 'gpt-4.5-mini',
-    name: 'GPT-4.5 Mini',
+    id: 'gpt-4o-mini',
+    name: 'GPT-4o Mini',
     provider: 'openai',
     contextWindow: 128000,
     maxOutput: 16384,
@@ -150,8 +150,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 0.6,
   },
   {
-    id: 'gpt-4.1',
-    name: 'GPT-4.1',
+    id: 'gpt-4o',
+    name: 'GPT-4o',
     provider: 'openai',
     contextWindow: 128000,
     maxOutput: 16384,
@@ -162,8 +162,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 8.0,
   },
   {
-    id: 'gpt-4.1-mini',
-    name: 'GPT-4.1 Mini',
+    id: 'gpt-4o-mini',
+    name: 'GPT-4o Mini',
     provider: 'openai',
     contextWindow: 128000,
     maxOutput: 16384,
@@ -212,8 +212,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
 
   // Google - Gemini supports function calling
   {
-    id: 'gemini-2.5-pro-preview-05-06',
-    name: 'Gemini 2.5 Pro',
+    id: 'gemini-1.5-pro',
+    name: 'Gemini 1.5 Pro',
     provider: 'google',
     contextWindow: 2000000,
     maxOutput: 65536,
@@ -224,8 +224,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 5,
   },
   {
-    id: 'gemini-2.5-flash-preview-05-20',
-    name: 'Gemini 2.5 Flash',
+    id: 'gemini-1.5-flash',
+    name: 'Gemini 1.5 Flash',
     provider: 'google',
     contextWindow: 1000000,
     maxOutput: 8192,
@@ -236,8 +236,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 0.3,
   },
   {
-    id: 'gemini-2.5-flash-thinking-exp-01-21',
-    name: 'Gemini 2.5 Flash Thinking',
+    id: 'gemini-2.0-flash-thinking-exp',
+    name: 'Gemini 2.0 Flash Thinking',
     provider: 'google',
     contextWindow: 1000000,
     maxOutput: 8192,
@@ -357,7 +357,7 @@ export const MODEL_CATALOG: ModelInfo[] = [
     maxOutput: 8192,
     supportsVision: false,
     supportsStreaming: true,
-    supportsTools: false,
+    supportsTools: true,
     costPer1MInput: 0,
     costPer1MOutput: 0,
   },
@@ -374,8 +374,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 0,
   },
   {
-    id: 'qwen3:14b',
-    name: 'Qwen 3 14B (Local)',
+    id: 'qwen2.5:14b',
+    name: 'Qwen 2.5 14B (Local)',
     provider: 'ollama',
     contextWindow: 32768,
     maxOutput: 8192,

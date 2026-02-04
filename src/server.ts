@@ -28,6 +28,8 @@ import {
   setupRoutes,
   labelsRoutes,
   cronRoutes,
+  devicesRoutes,
+  memoryRoutes,
 } from './routes/index.js';
 
 // Core imports
@@ -429,6 +431,8 @@ app.route('/api/tools', toolsRoutes);
 app.route('/api/setup', setupRoutes);
 app.route('/api', labelsRoutes); // Labels routes mount at /api for /api/projects/:id/labels and /api/tickets/:id/labels
 app.route('/api/cron', cronRoutes);
+app.route('/api/devices', devicesRoutes);
+app.route('/api/memory', memoryRoutes);
 
 // Alias /api/plugins to /api/settings/plugins for backwards compat
 app.get('/api/plugins/health', async (c) => {

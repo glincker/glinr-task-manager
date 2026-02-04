@@ -93,7 +93,7 @@ export function ProjectLayout() {
       <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5">
         <div className="flex items-center gap-3">
           <div className="relative group shrink-0">
-            <div className="absolute -inset-1 bg-gradient-to-br from-primary/20 to-purple-500/20 rounded-xl blur-sm opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute -inset-1 bg-gradient-to-br from-primary/20 to-indigo-500/20 rounded-xl blur-sm opacity-0 group-hover:opacity-100 transition-opacity" />
             <ProjectIcon icon={project.icon} color={project.color} size="sm" className="relative h-10 w-10 rounded-xl shadow-sm border border-white/10" />
           </div>
           <div>
@@ -138,9 +138,10 @@ export function ProjectLayout() {
         <div className="flex items-center gap-3">
           {/* Global Search integrated in header for compactness */}
           <div className="relative hidden md:block group w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground transition-colors group-focus-within:text-primary" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground transition-colors group-focus-within:text-primary" aria-hidden="true" />
             <Input
               placeholder="Search in project..."
+              aria-label="Search in project"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 h-9 bg-white/5 border-white/5 focus:border-primary/30 focus:ring-primary/10 rounded-xl text-xs transition-all"
@@ -154,9 +155,9 @@ export function ProjectLayout() {
               <Plus className="h-4 w-4" />
               <span className="hidden sm:inline text-xs font-bold uppercase tracking-wider">Issue</span>
             </Button>
-            <Link to={`/projects/${id}/settings`}>
-              <Button variant="glass" size="icon" className="h-9 w-9 rounded-xl border-white/5">
-                <Settings2 className="h-4 w-4" />
+            <Link to={`/projects/${id}/settings`} aria-label="Project settings">
+              <Button variant="glass" size="icon" className="h-9 w-9 rounded-xl border-white/5" aria-label="Project settings">
+                <Settings2 className="h-4 w-4" aria-hidden="true" />
               </Button>
             </Link>
           </div>
@@ -176,6 +177,8 @@ export function ProjectLayout() {
                   searchParams.get('assigneeAgent') === agent.type && "ring-2 ring-primary scale-110 z-20"
                 )}
                 title={agent.name}
+                aria-label={`Filter by ${agent.name}`}
+                aria-pressed={searchParams.get('assigneeAgent') === agent.type}
                 onClick={() => {
                   if (searchParams.get('assigneeAgent') === agent.type) {
                     searchParams.delete('assigneeAgent');
@@ -185,8 +188,8 @@ export function ProjectLayout() {
                   setSearchParams(searchParams);
                 }}
               >
-                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/20 to-purple-500/20 opacity-40" />
-                <Bot className="h-4 w-4 text-primary relative z-10" />
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/20 to-indigo-500/20 opacity-40" aria-hidden="true" />
+                <Bot className="h-4 w-4 text-primary relative z-10" aria-hidden="true" />
               </button>
             ))}
             {agentsData?.count && agentsData.count > 5 && (
@@ -200,6 +203,8 @@ export function ProjectLayout() {
                  "h-9 w-9 rounded-full border-2 border-background bg-primary text-white shadow-soft flex items-center justify-center transition-all hover:scale-110 hover:-translate-y-1 hover:z-20 relative ring-offset-2 ml-2",
                  searchParams.get('assignee') === 'me' && "ring-2 ring-primary scale-110 z-20"
                )}
+               aria-label="Filter by my assignments"
+               aria-pressed={searchParams.get('assignee') === 'me'}
                onClick={() => {
                  if (searchParams.get('assignee') === 'me') {
                    searchParams.delete('assignee');
@@ -209,7 +214,7 @@ export function ProjectLayout() {
                  setSearchParams(searchParams);
                }}
             >
-               <User className="h-4 w-4" />
+               <User className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
           <Button variant="ghost" size="sm" className="h-8 text-[11px] font-bold uppercase tracking-widest text-muted-foreground hover:text-primary">

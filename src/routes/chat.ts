@@ -38,9 +38,12 @@ import {
   getDefaultChatTools,
   getAllChatTools,
   getSessionModel,
+  // Agentic executor
+  streamAgenticChat,
   type ChatContext,
   type RuntimeInfo,
   type ConversationMessage,
+  type AgenticStreamEvent,
 } from '../chat/index.js';
 import { getClient } from '../storage/index.js';
 
@@ -1039,8 +1042,14 @@ chatRoutes.post(
         sessionOverride,
       };
 
-      // Build system prompt with context
-      const systemPrompt = buildSystemPrompt(conversation.presetId, context);
+      // Get available tools (determine before building prompt)
+      const enableTools = body.enableTools ?? true;
+      const tools = enableTools ? getDefaultChatTools() : [];
+
+      // Build system prompt with context and tool mode
+      const systemPrompt = buildSystemPrompt(conversation.presetId, context, {
+        enableTools: enableTools && tools.length > 0,
+      });
 
       // Get existing messages
       const existingMessages = await getConversationMessages(conversationId);
@@ -1098,9 +1107,6 @@ chatRoutes.post(
         securityMode: 'ask',
       });
 
-      // Get available tools
-      const tools = body.enableTools ? getDefaultChatTools() : [];
-
       // Send to AI with native tool support
       const response = await aiProvider.chatWithNativeTools({
         messages: chatMessages,
@@ -1117,7 +1123,16 @@ chatRoutes.post(
       // Get any pending approvals
       const pendingApprovals = toolHandler.getPendingApprovals();
 
-      // Save assistant response
+      // Build toolCalls array for storage
+      const toolCallsForStorage = response.toolCalls?.map((tc: NativeToolCall) => ({
+        id: tc.id,
+        name: tc.name,
+        arguments: tc.arguments,
+        result: response.toolResults?.find((tr: NativeToolResult) => tr.toolCallId === tc.id)?.result,
+        status: 'success' as const,
+      }));
+
+      // Save assistant response with toolCalls
       const assistantMessage = await addMessage({
         conversationId,
         role: 'assistant',
@@ -1132,6 +1147,7 @@ chatRoutes.post(
             }
           : undefined,
         cost: response.usage?.cost,
+        toolCalls: toolCallsForStorage,
       });
 
       return c.json({
@@ -1143,13 +1159,7 @@ chatRoutes.post(
         },
         usage: response.usage,
         compaction: compactionInfo,
-        toolCalls: response.toolCalls?.map((tc: NativeToolCall) => ({
-          id: tc.id,
-          name: tc.name,
-          arguments: tc.arguments,
-          result: response.toolResults?.find((tr: NativeToolResult) => tr.toolCallId === tc.id)?.result,
-          status: 'success',
-        })),
+        toolCalls: toolCallsForStorage,
         pendingApprovals: pendingApprovals.length > 0
           ? pendingApprovals.map((a) => ({
               id: a.id,
@@ -1315,10 +1325,13 @@ chatRoutes.post(
       // Get tools based on user preference
       const tools = body.enableAllTools ? getAllChatTools() : getDefaultChatTools();
 
-      // Build system prompt
+      // Build system prompt with tools enabled (this endpoint always has tools)
       let systemPrompt = body.systemPrompt || '';
       if (body.presetId) {
-        systemPrompt = buildSystemPrompt(body.presetId, {}) + '\n\n' + systemPrompt;
+        systemPrompt = buildSystemPrompt(body.presetId, {}, { enableTools: true }) + '\n\n' + systemPrompt;
+      } else if (!systemPrompt) {
+        // Even without preset, add tool-enabled system prompt
+        systemPrompt = buildSystemPrompt('glinr-assistant', {}, { enableTools: true });
       }
 
       // Convert messages
@@ -1369,6 +1382,288 @@ chatRoutes.post(
       logger.error('[Chat] Chat with tools error:', error instanceof Error ? error : undefined);
       return c.json(
         { error: error instanceof Error ? error.message : 'Chat with tools failed' },
+        500
+      );
+    }
+  }
+);
+
+/**
+ * POST /api/chat/conversations/:id/messages/agentic
+ * Send a message in agentic mode with SSE streaming for real-time updates.
+ *
+ * This endpoint runs the AI in autonomous mode, executing multiple tools
+ * until the task is complete. Events are streamed via SSE including:
+ * - session:start - Agent session started
+ * - thinking:start/update/end - AI reasoning (if enabled)
+ * - step:start/complete - Step progress
+ * - tool:call - Tool being called
+ * - tool:result - Tool execution result
+ * - summary - Final task summary
+ * - complete - Session complete
+ * - error - Error occurred
+ */
+chatRoutes.post(
+  '/conversations/:id/messages/agentic',
+  zValidator(
+    'json',
+    z.object({
+      content: z.string(),
+      model: z.string().optional(),
+      temperature: z.number().min(0).max(2).optional(),
+      showThinking: z.boolean().optional().default(true),
+      maxSteps: z.number().min(1).max(200).optional(),
+      maxBudget: z.number().min(1000).optional(),
+    })
+  ),
+  async (c) => {
+    const conversationId = c.req.param('id');
+    const body = c.req.valid('json');
+
+    try {
+      // Get conversation
+      const conversation = await getConversation(conversationId);
+      if (!conversation) {
+        return c.json({ error: 'Conversation not found' }, 404);
+      }
+
+      // Build context from linked entities
+      const context: ChatContext = {};
+      const client = getClient();
+
+      if (conversation.taskId) {
+        const taskResult = await client.execute({
+          sql: `SELECT id, description, status, assigned_agent as agent FROM tasks WHERE id = ?`,
+          args: [conversation.taskId],
+        });
+        if (taskResult.rows.length > 0) {
+          const t = taskResult.rows[0];
+          context.task = {
+            id: t.id as string,
+            title: ((t.description as string) || '').slice(0, 100),
+            description: t.description as string,
+            status: t.status as string,
+            agent: t.agent as string | undefined,
+          };
+        }
+      }
+
+      if (conversation.ticketId) {
+        const ticketResult = await client.execute({
+          sql: `SELECT id, title, description, status FROM tickets WHERE id = ?`,
+          args: [conversation.ticketId],
+        });
+        if (ticketResult.rows.length > 0) {
+          const t = ticketResult.rows[0];
+          context.ticket = {
+            id: t.id as string,
+            title: t.title as string,
+            description: t.description as string | undefined,
+            status: t.status as string,
+          };
+        }
+      }
+
+      // Add runtime info
+      const sessionOverride = getSessionModel(conversationId);
+      const defaultProvider = aiProvider.getDefaultProvider();
+      const resolvedRef = aiProvider.resolveModel(sessionOverride || body.model || defaultProvider);
+      context.runtime = {
+        model: `${resolvedRef.provider}/${resolvedRef.model}`,
+        provider: resolvedRef.provider,
+        defaultModel: `${defaultProvider}/${resolvedRef.model}`,
+        conversationId,
+        sessionOverride,
+      };
+
+      // Get tools
+      const tools = getDefaultChatTools();
+
+      // Build system prompt with agentic mode enabled
+      const systemPrompt = buildSystemPrompt(conversation.presetId, context, {
+        enableTools: true,
+      }) + `
+
+## AGENTIC MODE
+
+You are running in AGENTIC MODE. This means:
+1. You have access to tools and should use them to accomplish the user's request
+2. You can run multiple tools in sequence to complete complex tasks
+3. After each tool result, decide if you need more information or can proceed
+4. When the task is FULLY COMPLETE, call the \`complete_task\` tool with a summary
+
+Work autonomously towards the goal. Don't ask for confirmation - just do the work.
+`;
+
+      // Get existing messages
+      const existingMessages = await getConversationMessages(conversationId);
+
+      // Save user message first
+      const userMessage = await addMessage({
+        conversationId,
+        role: 'user',
+        content: body.content,
+      });
+
+      // Build all messages for compaction check
+      const allMessages: ConversationMessage[] = [
+        ...existingMessages,
+        {
+          id: userMessage.id,
+          conversationId,
+          role: 'user',
+          content: body.content,
+          createdAt: userMessage.createdAt,
+        },
+      ];
+
+      // Apply context pruning if conversation is getting long
+      let messagesToSend = allMessages;
+      let compactionApplied = false;
+
+      if (needsCompaction(allMessages, body.model)) {
+        logger.info(
+          `[Chat/Agentic] Compacting conversation ${conversationId} (${allMessages.length} messages)`
+        );
+        const compactionResult = await compactMessages(allMessages, body.model);
+
+        if (compactionResult.wasCompacted) {
+          messagesToSend = compactionResult.messages;
+          compactionApplied = true;
+          logger.info(
+            `[Chat/Agentic] Compaction complete: ${compactionResult.originalCount} -> ${compactionResult.compactedCount} messages, ${compactionResult.tokensReduced} tokens saved`
+          );
+        }
+      }
+
+      // Build chat messages from (potentially compacted) messages
+      const chatMessages: ChatMessage[] = messagesToSend.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: m.createdAt,
+      }));
+
+      // Create tool handler
+      const toolHandler = await createChatToolHandler({
+        conversationId,
+        securityMode: 'full', // Full access in agentic mode (tools are pre-approved)
+      });
+
+      // Set up SSE streaming response
+      c.header('Content-Type', 'text/event-stream');
+      c.header('Cache-Control', 'no-cache');
+      c.header('Connection', 'keep-alive');
+      c.header('X-Accel-Buffering', 'no');
+
+      return streamText(c, async (stream) => {
+        // Send initial event with user message and compaction info
+        await stream.write(`data: ${JSON.stringify({
+          type: 'user_message',
+          data: {
+            id: userMessage.id,
+            content: body.content,
+            compactionApplied,
+            messageCount: messagesToSend.length,
+          },
+          timestamp: Date.now(),
+        })}\n\n`);
+
+        let lastAssistantContent = '';
+        let totalTokens = 0;
+        let finalModel = '';
+        let finalProvider = '';
+        let collectedToolCalls: Array<{
+          id: string;
+          name: string;
+          arguments: Record<string, unknown>;
+          result?: unknown;
+          status: 'success' | 'error';
+        }> = [];
+
+        try {
+          // Run the streaming agentic chat
+          for await (const event of streamAgenticChat({
+            conversationId,
+            messages: chatMessages,
+            systemPrompt,
+            model: body.model,
+            temperature: body.temperature,
+            toolHandler,
+            tools: tools.map((t) => ({
+              name: t.name,
+              description: t.description,
+              parameters: t.parameters,
+            })),
+            showThinking: body.showThinking,
+            maxSteps: body.maxSteps,
+            maxBudget: body.maxBudget,
+          })) {
+            // Stream each event to the client
+            await stream.write(`data: ${JSON.stringify(event)}\n\n`);
+
+            // Track data for final message save
+            if (event.type === 'summary') {
+              const summaryData = event.data as { summary: string };
+              lastAssistantContent = summaryData.summary;
+            }
+            if (event.type === 'complete') {
+              const completeData = event.data as {
+                totalTokens: number;
+                model: string;
+                provider: string;
+                toolCalls?: Array<{
+                  id: string;
+                  name: string;
+                  arguments: Record<string, unknown>;
+                  result?: unknown;
+                  status: 'success' | 'error';
+                }>;
+              };
+              totalTokens = completeData.totalTokens;
+              finalModel = completeData.model;
+              finalProvider = completeData.provider;
+              collectedToolCalls = completeData.toolCalls || [];
+            }
+          }
+
+          // Save assistant response after streaming completes
+          if (lastAssistantContent) {
+            const assistantMessage = await addMessage({
+              conversationId,
+              role: 'assistant',
+              content: lastAssistantContent,
+              model: finalModel,
+              provider: finalProvider,
+              tokenUsage: totalTokens > 0 ? {
+                prompt: Math.floor(totalTokens * 0.7),
+                completion: Math.floor(totalTokens * 0.3),
+                total: totalTokens,
+              } : undefined,
+              toolCalls: collectedToolCalls.length > 0 ? collectedToolCalls : undefined,
+            });
+
+            // Send final saved message event
+            await stream.write(`data: ${JSON.stringify({
+              type: 'message_saved',
+              data: { id: assistantMessage.id },
+              timestamp: Date.now(),
+            })}\n\n`);
+          }
+
+        } catch (error) {
+          logger.error('[Chat] Agentic streaming error:', error instanceof Error ? error : undefined);
+          await stream.write(`data: ${JSON.stringify({
+            type: 'error',
+            data: { message: error instanceof Error ? error.message : 'Agentic execution failed' },
+            timestamp: Date.now(),
+          })}\n\n`);
+        }
+      });
+    } catch (error) {
+      logger.error('[Chat] Agentic chat setup error:', error instanceof Error ? error : undefined);
+      return c.json(
+        { error: error instanceof Error ? error.message : 'Failed to start agentic chat' },
         500
       );
     }

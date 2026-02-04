@@ -15,16 +15,26 @@ import type {
   ToolCallResult,
   ApprovalRequest,
   ApprovalDecision,
-} from './types.js';
-import { getToolRegistry } from './registry.js';
-import { getSecurityManager, type SecurityCheckResult } from './security.js';
-import { getSessionManager } from './session-manager.js';
-import { getSandboxManager } from './sandbox.js';
-import { getProcessPool, PoolFullError, TimeoutError, QueueTimeoutError } from './process-pool.js';
-import { getAuditLogger } from './audit.js';
-import { getRateLimiter } from './rate-limiter.js';
-import { logger } from '../../utils/logger.js';
-import { randomUUID } from 'crypto';
+} from "./types.js";
+import { getToolRegistry } from "./registry.js";
+import { getSecurityManager, type SecurityCheckResult } from "./security.js";
+import { getSessionManager } from "./session-manager.js";
+import { getSandboxManager } from "./sandbox.js";
+import {
+  getProcessPool,
+  PoolFullError,
+  TimeoutError,
+  QueueTimeoutError,
+} from "./process-pool.js";
+import { getAuditLogger } from "./audit.js";
+import { getRateLimiter } from "./rate-limiter.js";
+import { logger } from "../../utils/logger.js";
+import { randomUUID } from "crypto";
+import {
+  hasSecrets,
+  isSecretsDetectionEnabled,
+  redactSecrets,
+} from "./secrets.js";
 
 // =============================================================================
 // Constants
@@ -32,6 +42,19 @@ import { randomUUID } from 'crypto';
 
 const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
 const PROGRESS_THROTTLE_MS = 100; // Throttle progress updates
+
+const redactToolText = (text?: string): string | undefined => {
+  if (!text) {
+    return text;
+  }
+  if (!isSecretsDetectionEnabled()) {
+    return text;
+  }
+  if (!hasSecrets(text)) {
+    return text;
+  }
+  return redactSecrets(text);
+};
 
 // =============================================================================
 // Tool Executor
@@ -45,7 +68,10 @@ export class ToolExecutor {
    */
   async execute(
     toolCall: AIToolCall,
-    context: Omit<ToolExecutionContext, 'toolCallId' | 'sessionManager' | 'securityPolicy'>,
+    context: Omit<
+      ToolExecutionContext,
+      "toolCallId" | "sessionManager" | "securityPolicy"
+    >,
   ): Promise<ToolCallResult> {
     const toolCallId = toolCall.id || randomUUID();
     const startTime = Date.now();
@@ -69,7 +95,7 @@ export class ToolExecutor {
         result: {
           success: false,
           error: {
-            code: 'TOOL_NOT_FOUND',
+            code: "TOOL_NOT_FOUND",
             message: `Tool "${toolCall.name}" not found`,
           },
         },
@@ -100,7 +126,7 @@ export class ToolExecutor {
         result: {
           success: false,
           error: {
-            code: 'RATE_LIMITED',
+            code: "RATE_LIMITED",
             message: `Rate limit exceeded. Try again in ${rateLimitResult.retryAfter} seconds.`,
             details: {
               limit: rateLimitResult.limit,
@@ -117,12 +143,24 @@ export class ToolExecutor {
     // Validate parameters
     const parseResult = tool.parameters.safeParse(toolCall.arguments);
     if (!parseResult.success) {
+      const missingFields = parseResult.error.issues
+        .filter(
+          (issue) =>
+            issue.code === "invalid_type" && issue.received === "undefined",
+        )
+        .map((issue) => issue.path.join("."))
+        .filter((path) => path.length > 0);
+
+      const missingMessage = missingFields.length
+        ? `Missing required parameter${missingFields.length > 1 ? "s" : ""}: ${missingFields.join(", ")}`
+        : `Invalid parameters: ${parseResult.error.message}`;
+
       auditLogger.logError({
         toolName: toolCall.name,
         toolCallId,
         conversationId: context.conversationId,
         userId: context.userId,
-        error: `Invalid parameters: ${parseResult.error.message}`,
+        error: missingMessage,
       });
 
       return {
@@ -131,8 +169,9 @@ export class ToolExecutor {
         result: {
           success: false,
           error: {
-            code: 'INVALID_PARAMS',
-            message: `Invalid parameters: ${parseResult.error.message}`,
+            code:
+              missingFields.length > 0 ? "MISSING_PARAMS" : "INVALID_PARAMS",
+            message: missingMessage,
             details: parseResult.error.issues,
           },
         },
@@ -155,7 +194,7 @@ export class ToolExecutor {
         tool,
         params,
         { conversationId: context.conversationId, toolCallId },
-        securityCheck.securityLevel ?? 'moderate',
+        securityCheck.securityLevel ?? "moderate",
       );
 
       auditLogger.logApprovalRequested({
@@ -165,7 +204,7 @@ export class ToolExecutor {
         userId: context.userId,
         approvalId: approvalRequest.id,
         command: this.extractCommand(params),
-        securityLevel: securityCheck.securityLevel ?? 'moderate',
+        securityLevel: securityCheck.securityLevel ?? "moderate",
       });
 
       return {
@@ -174,8 +213,8 @@ export class ToolExecutor {
         result: {
           success: false,
           error: {
-            code: 'APPROVAL_REQUIRED',
-            message: 'This action requires your approval',
+            code: "APPROVAL_REQUIRED",
+            message: "This action requires your approval",
           },
         },
         approvalRequired: true,
@@ -192,7 +231,7 @@ export class ToolExecutor {
         userId: context.userId,
         command: this.extractCommand(params),
         securityMode: securityPolicy.mode,
-        reason: securityCheck.reason ?? 'Denied by security policy',
+        reason: securityCheck.reason ?? "Denied by security policy",
       });
 
       return {
@@ -201,8 +240,10 @@ export class ToolExecutor {
         result: {
           success: false,
           error: {
-            code: 'DENIED',
-            message: securityCheck.reason ?? 'Tool execution denied by security policy',
+            code: "DENIED",
+            message:
+              securityCheck.reason ??
+              "Tool execution denied by security policy",
           },
         },
       };
@@ -218,7 +259,10 @@ export class ToolExecutor {
         context.conversationId,
         async () => {
           // Check if sandbox execution is required
-          if (securityCheck.sandboxRequired && securityPolicy.mode === 'sandbox') {
+          if (
+            securityCheck.sandboxRequired &&
+            securityPolicy.mode === "sandbox"
+          ) {
             return this.executeInSandbox(tool, params, context, toolCallId);
           }
 
@@ -237,12 +281,20 @@ export class ToolExecutor {
         },
         {
           userId: context.userId,
-          priority: tool.securityLevel === 'safe' ? 1 : 0,
+          priority: tool.securityLevel === "safe" ? 1 : 0,
           timeout: DEFAULT_TIMEOUT_MS,
         },
       );
 
       const durationMs = Date.now() - startTime;
+      const sanitizedOutput = redactToolText(result.output);
+      const sanitizedResult: ToolResult =
+        sanitizedOutput === result.output
+          ? result
+          : {
+              ...result,
+              output: sanitizedOutput,
+            };
 
       // Log successful execution
       auditLogger.logExecution({
@@ -253,23 +305,23 @@ export class ToolExecutor {
         params,
         command: this.extractCommand(params),
         securityMode: securityPolicy.mode,
-        success: result.success,
+        success: sanitizedResult.success,
         durationMs,
-        exitCode: (result.data as { exitCode?: number })?.exitCode,
-        output: result.output,
-        error: result.error?.message,
+        exitCode: (sanitizedResult.data as { exitCode?: number })?.exitCode,
+        output: sanitizedResult.output,
+        error: sanitizedResult.error?.message,
       });
 
       logger.info(
         `[Executor] Tool ${toolCall.name} completed in ${durationMs}ms`,
-        { component: 'ToolExecutor' }
+        { component: "ToolExecutor" },
       );
 
       return {
         toolCallId,
         toolName: toolCall.name,
         result: {
-          ...result,
+          ...sanitizedResult,
           durationMs,
         },
         rateLimitInfo: {
@@ -287,7 +339,7 @@ export class ToolExecutor {
           toolCallId,
           conversationId: context.conversationId,
           userId: context.userId,
-          error: 'Execution pool is full',
+          error: "Execution pool is full",
         });
 
         return {
@@ -296,8 +348,9 @@ export class ToolExecutor {
           result: {
             success: false,
             error: {
-              code: 'POOL_FULL',
-              message: 'Too many concurrent executions. Please try again later.',
+              code: "POOL_FULL",
+              message:
+                "Too many concurrent executions. Please try again later.",
               retryable: true,
             },
             durationMs,
@@ -320,7 +373,7 @@ export class ToolExecutor {
           result: {
             success: false,
             error: {
-              code: 'TIMEOUT',
+              code: "TIMEOUT",
               message: error.message,
               retryable: true,
             },
@@ -339,10 +392,13 @@ export class ToolExecutor {
         securityMode: securityPolicy.mode,
         success: false,
         durationMs,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       });
 
-      logger.error(`[Executor] Tool ${toolCall.name} failed`, error instanceof Error ? error : undefined);
+      logger.error(
+        `[Executor] Tool ${toolCall.name} failed`,
+        error instanceof Error ? error : undefined,
+      );
 
       return {
         toolCallId,
@@ -350,8 +406,8 @@ export class ToolExecutor {
         result: {
           success: false,
           error: {
-            code: 'EXECUTION_ERROR',
-            message: error instanceof Error ? error.message : 'Unknown error',
+            code: "EXECUTION_ERROR",
+            message: error instanceof Error ? error.message : "Unknown error",
           },
           durationMs,
         },
@@ -364,7 +420,10 @@ export class ToolExecutor {
    */
   async executeMany(
     toolCalls: AIToolCall[],
-    context: Omit<ToolExecutionContext, 'toolCallId' | 'sessionManager' | 'securityPolicy'>,
+    context: Omit<
+      ToolExecutionContext,
+      "toolCallId" | "sessionManager" | "securityPolicy"
+    >,
     options: { parallel?: boolean } = {},
   ): Promise<ToolCallResult[]> {
     if (options.parallel) {
@@ -384,7 +443,10 @@ export class ToolExecutor {
   async executeAfterApproval(
     approvalId: string,
     decision: ApprovalDecision,
-    context: Omit<ToolExecutionContext, 'toolCallId' | 'sessionManager' | 'securityPolicy'>,
+    context: Omit<
+      ToolExecutionContext,
+      "toolCallId" | "sessionManager" | "securityPolicy"
+    >,
   ): Promise<ToolCallResult | null> {
     const securityManager = getSecurityManager();
     const auditLogger = getAuditLogger();
@@ -392,7 +454,9 @@ export class ToolExecutor {
     const approval = pendingApprovals.find((a) => a.id === approvalId);
 
     if (!approval) {
-      logger.warn(`[Executor] Approval not found: ${approvalId}`, { component: 'ToolExecutor' });
+      logger.warn(`[Executor] Approval not found: ${approvalId}`, {
+        component: "ToolExecutor",
+      });
       return null;
     }
 
@@ -414,15 +478,15 @@ export class ToolExecutor {
     });
 
     // If denied, return denial result
-    if (decision === 'deny') {
+    if (decision === "deny") {
       return {
         toolCallId: approval.toolCallId,
         toolName: approval.toolName,
         result: {
           success: false,
           error: {
-            code: 'USER_DENIED',
-            message: 'User denied the tool execution',
+            code: "USER_DENIED",
+            message: "User denied the tool execution",
           },
         },
       };
@@ -437,7 +501,7 @@ export class ToolExecutor {
         result: {
           success: false,
           error: {
-            code: 'TOOL_NOT_FOUND',
+            code: "TOOL_NOT_FOUND",
             message: `Tool "${approval.toolName}" not found`,
           },
         },
@@ -472,6 +536,14 @@ export class ToolExecutor {
       );
 
       const durationMs = Date.now() - startTime;
+      const sanitizedOutput = redactToolText(result.output);
+      const sanitizedResult: ToolResult =
+        sanitizedOutput === result.output
+          ? result
+          : {
+              ...result,
+              output: sanitizedOutput,
+            };
 
       auditLogger.logExecution({
         toolName: approval.toolName,
@@ -481,17 +553,17 @@ export class ToolExecutor {
         params: approval.params,
         command: approval.command,
         securityMode: securityManager.getPolicy().mode,
-        success: result.success,
+        success: sanitizedResult.success,
         durationMs,
-        output: result.output,
-        error: result.error?.message,
+        output: sanitizedResult.output,
+        error: sanitizedResult.error?.message,
       });
 
       return {
         toolCallId: approval.toolCallId,
         toolName: approval.toolName,
         result: {
-          ...result,
+          ...sanitizedResult,
           durationMs,
         },
       };
@@ -507,7 +579,7 @@ export class ToolExecutor {
         securityMode: securityManager.getPolicy().mode,
         success: false,
         durationMs,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       });
 
       return {
@@ -516,8 +588,8 @@ export class ToolExecutor {
         result: {
           success: false,
           error: {
-            code: 'EXECUTION_ERROR',
-            message: error instanceof Error ? error.message : 'Unknown error',
+            code: "EXECUTION_ERROR",
+            message: error instanceof Error ? error.message : "Unknown error",
           },
           durationMs,
         },
@@ -566,13 +638,19 @@ export class ToolExecutor {
   private async executeInSandbox(
     tool: ToolDefinition,
     params: Record<string, unknown>,
-    context: Omit<ToolExecutionContext, 'toolCallId' | 'sessionManager' | 'securityPolicy'>,
+    context: Omit<
+      ToolExecutionContext,
+      "toolCallId" | "sessionManager" | "securityPolicy"
+    >,
     toolCallId: string,
   ): Promise<ToolResult> {
     const sandbox = getSandboxManager();
 
     if (!sandbox.isAvailable()) {
-      logger.warn('[Executor] Sandbox not available, falling back to normal execution', { component: 'ToolExecutor' });
+      logger.warn(
+        "[Executor] Sandbox not available, falling back to normal execution",
+        { component: "ToolExecutor" },
+      );
       // Fall back to normal execution
       return this.executeWithTimeout(
         tool,
@@ -588,7 +666,7 @@ export class ToolExecutor {
     }
 
     // For exec-type tools, run command in sandbox
-    if (tool.name === 'exec' && params.command) {
+    if (tool.name === "exec" && params.command) {
       const result = await sandbox.execute({
         command: params.command as string,
         workdir: context.workdir,
@@ -598,15 +676,17 @@ export class ToolExecutor {
 
       return {
         success: result.success,
-        output: result.stdout + (result.stderr ? `\n${result.stderr}` : ''),
+        output: result.stdout + (result.stderr ? `\n${result.stderr}` : ""),
         data: {
           exitCode: result.exitCode,
           containerId: result.containerId,
         },
-        error: result.error ? {
-          code: 'SANDBOX_ERROR',
-          message: result.error,
-        } : undefined,
+        error: result.error
+          ? {
+              code: "SANDBOX_ERROR",
+              message: result.error,
+            }
+          : undefined,
       };
     }
 
@@ -641,7 +721,14 @@ export class ToolExecutor {
           const now = Date.now();
           if (now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
             lastProgressTime = now;
-            context.onProgress!(update);
+            const sanitizedUpdate =
+              update.type === "output"
+                ? {
+                    ...update,
+                    content: redactToolText(update.content) ?? "",
+                  }
+                : update;
+            context.onProgress!(sanitizedUpdate);
           }
         }
       : undefined;
@@ -650,7 +737,9 @@ export class ToolExecutor {
     const timeoutPromise = new Promise<ToolResult>((_, reject) => {
       setTimeout(() => {
         abortController.abort();
-        reject(new TimeoutError(`Tool execution timed out after ${timeoutMs}ms`));
+        reject(
+          new TimeoutError(`Tool execution timed out after ${timeoutMs}ms`),
+        );
       }, timeoutMs);
     });
 
@@ -673,7 +762,7 @@ export class ToolExecutor {
   }
 
   private extractCommand(params: Record<string, unknown>): string | undefined {
-    if (typeof params.command === 'string') {
+    if (typeof params.command === "string") {
       return params.command;
     }
     return undefined;

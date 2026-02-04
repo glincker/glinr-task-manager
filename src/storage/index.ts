@@ -1,10 +1,10 @@
-import { LibSQLAdapter } from './libsql.js';
-import type { StorageAdapter } from './adapter.js';
-import { loadConfig } from '../utils/config-loader.js';
+import { LibSQLAdapter } from "./libsql.js";
+import type { StorageAdapter } from "./adapter.js";
+import { loadConfig } from "../utils/config-loader.js";
 
 interface SettingsYaml {
   storage?: {
-    tier: 'local' | 'memory';
+    tier: "local" | "memory";
     dbPath?: string;
   };
 }
@@ -15,16 +15,21 @@ let storage: StorageAdapter | null = null;
  * Initialize storage based on configuration
  */
 export async function initStorage(): Promise<StorageAdapter> {
-  const settings = loadConfig<SettingsYaml>('settings.yml');
-  const tier = process.env.STORAGE_TIER || settings.storage?.tier || 'memory';
+  if (storage) {
+    return storage;
+  }
+  const settings = loadConfig<SettingsYaml>("settings.yml");
+  const tier = process.env.STORAGE_TIER || settings.storage?.tier || "memory";
 
-  if (tier === 'local') {
+  if (tier === "local") {
     const dbPath = process.env.DB_PATH || settings.storage?.dbPath;
     storage = new LibSQLAdapter({ dbPath });
-    console.log(`[Storage] Initializing LibSQL storage at ${dbPath || 'default path'}`);
+    console.log(
+      `[Storage] Initializing LibSQL storage at ${dbPath || "default path"}`,
+    );
   } else {
-    console.log('[Storage] Initializing in-memory storage (LibSQL in-memory)');
-    storage = new LibSQLAdapter({ dbPath: ':memory:' });
+    console.log("[Storage] Initializing in-memory storage (LibSQL in-memory)");
+    storage = new LibSQLAdapter({ dbPath: ":memory:" });
   }
 
   await storage.connect();
@@ -36,7 +41,7 @@ export async function initStorage(): Promise<StorageAdapter> {
  */
 export function getStorage(): StorageAdapter {
   if (!storage) {
-    throw new Error('Storage not initialized. Call initStorage() first.');
+    throw new Error("Storage not initialized. Call initStorage() first.");
   }
   return storage;
 }
@@ -46,7 +51,7 @@ export function getStorage(): StorageAdapter {
  */
 export function getDb(): any {
   if (!storage) {
-    throw new Error('Storage not initialized. Call initStorage() first.');
+    throw new Error("Storage not initialized. Call initStorage() first.");
   }
   // Access the internal db property
   return (storage as any).db;
@@ -57,13 +62,13 @@ export function getDb(): any {
  */
 export function getClient(): any {
   if (!storage) {
-    throw new Error('Storage not initialized. Call initStorage() first.');
+    throw new Error("Storage not initialized. Call initStorage() first.");
   }
   return (storage as any).client;
 }
 
-export * from './adapter.js';
-export * from './schema.js';
+export * from "./adapter.js";
+export * from "./schema.js";
 
 // =============================================================================
 // AI Provider Configuration Persistence
@@ -83,7 +88,9 @@ export interface SavedProviderConfig {
 /**
  * Save an AI provider configuration to the database
  */
-export async function saveProviderConfig(config: SavedProviderConfig): Promise<void> {
+export async function saveProviderConfig(
+  config: SavedProviderConfig,
+): Promise<void> {
   const client = getClient();
 
   // Store as JSON in settings table with category 'ai_providers'
@@ -102,7 +109,9 @@ export async function saveProviderConfig(config: SavedProviderConfig): Promise<v
 /**
  * Load an AI provider configuration from the database
  */
-export async function loadProviderConfig(type: string): Promise<SavedProviderConfig | null> {
+export async function loadProviderConfig(
+  type: string,
+): Promise<SavedProviderConfig | null> {
   const client = getClient();
 
   const result = await client.execute({
@@ -140,7 +149,10 @@ export async function loadAllProviderConfigs(): Promise<SavedProviderConfig[]> {
         return null;
       }
     })
-    .filter((config: SavedProviderConfig | null): config is SavedProviderConfig => config !== null);
+    .filter(
+      (config: SavedProviderConfig | null): config is SavedProviderConfig =>
+        config !== null,
+    );
 }
 
 /**

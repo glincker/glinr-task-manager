@@ -215,30 +215,40 @@ export function ProviderSetupDialog({
                 >
                   {/* Provider Card */}
                   <div
-                    className="flex items-center gap-3 p-3"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Configure ${info.name}`}
+                    aria-expanded={isExpanded}
+                    className="flex items-center gap-3 p-3 focus-visible:ring-2 focus-visible:ring-primary outline-none"
                     onClick={() => setExpandedProvider(isExpanded ? null : info.type)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setExpandedProvider(isExpanded ? null : info.type);
+                      }
+                    }}
                   >
                     <div className={cn(
                       'h-9 w-9 rounded-lg flex items-center justify-center shrink-0',
                       isHealthy ? 'bg-green-500/10' : 'bg-muted'
                     )}>
-                      <info.Logo className={cn('h-5 w-5', isHealthy && 'text-green-600')} />
+                      <info.Logo className={cn('h-5 w-5', isHealthy && 'text-green-600')} aria-hidden="true" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-sm truncate">{info.name}</span>
                         {info.status === 'beta' && (
-                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400 uppercase tracking-wide shrink-0">
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400 uppercase tracking-wide shrink-0">
                             Beta
                           </span>
                         )}
                         {info.status === 'experimental' && (
-                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-600 dark:text-purple-400 uppercase tracking-wide shrink-0">
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 uppercase tracking-wide shrink-0">
                             Exp
                           </span>
                         )}
                         {isHealthy && (
-                          <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                          <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" aria-hidden="true" />
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{info.description}</p>
@@ -274,11 +284,12 @@ export function ProviderSetupDialog({
                               }));
                             }}
                             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            aria-label={showApiKey[info.type] ? 'Hide API key' : 'Show API key'}
                           >
                             {showApiKey[info.type] ? (
-                              <EyeOff className="h-4 w-4" />
+                              <EyeOff className="h-4 w-4" aria-hidden="true" />
                             ) : (
-                              <Eye className="h-4 w-4" />
+                              <Eye className="h-4 w-4" aria-hidden="true" />
                             )}
                           </button>
                         </div>

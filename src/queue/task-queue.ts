@@ -1,11 +1,21 @@
-import { Queue, Worker, Job } from 'bullmq';
-import type { Task, TaskResult, CreateTaskInput, TaskStatusType } from '../types/task.js';
-import { getAgentRegistry } from '../adapters/registry.js';
-import { randomUUID } from 'crypto';
-import { postResultToSource } from './notifications.js';
-import { extractFromTaskResult, createSummary } from '../summaries/index.js';
-import { logger } from '../utils/logger.js';
-import { getStorage } from '../storage/index.js';
+import { Queue, Worker, Job } from "bullmq";
+import type {
+  Task,
+  TaskResult,
+  CreateTaskInput,
+  TaskStatusType,
+} from "../types/task.js";
+import { getAgentRegistry } from "../adapters/registry.js";
+import { randomUUID } from "crypto";
+import { postResultToSource } from "./notifications.js";
+import { extractFromTaskResult, createSummary } from "../summaries/index.js";
+import { logger } from "../utils/logger.js";
+import { getStorage, initStorage } from "../storage/index.js";
+import {
+  handleTaskFailure,
+  setTaskQueueRef,
+  initDeadLetterQueue,
+} from "./failure-handler.js";
 
 /**
  * Task Queue Manager
@@ -17,7 +27,7 @@ import { getStorage } from '../storage/index.js';
  * - Result storage
  */
 
-import { loadConfig } from '../utils/config-loader.js';
+import { loadConfig } from "../utils/config-loader.js";
 
 interface SettingsYaml {
   queue: {
@@ -31,21 +41,25 @@ interface SettingsYaml {
     retry: {
       attempts: number;
       backoff: number;
-      type: 'exponential' | 'fixed';
+      type: "exponential" | "fixed";
     };
   };
 }
 
-const settings = loadConfig<SettingsYaml>('settings.yml');
+const settings = loadConfig<SettingsYaml>("settings.yml");
 
-const QUEUE_NAME = settings.queue?.name || 'ai-tasks';
-const NOTIFICATION_QUEUE_NAME = settings.queue?.notificationName || 'ai-task-notifications';
-const REDIS_URL = process.env.REDIS_URL || settings.queue?.redis?.url || 'redis://localhost:6379';
+const QUEUE_NAME = settings.queue?.name || "ai-tasks";
+const NOTIFICATION_QUEUE_NAME =
+  settings.queue?.notificationName || "ai-task-notifications";
+const REDIS_URL =
+  process.env.REDIS_URL ||
+  settings.queue?.redis?.url ||
+  "redis://localhost:6379";
 
 // Connection config
 const connection = {
   host: new URL(REDIS_URL).hostname,
-  port: parseInt(new URL(REDIS_URL).port || '6379'),
+  port: parseInt(new URL(REDIS_URL).port || "6379"),
   password: new URL(REDIS_URL).password || undefined,
 };
 
@@ -55,7 +69,10 @@ let taskWorker: Worker<Task, TaskResult> | null = null;
 
 // Notification queue instance
 let notificationQueue: Queue<{ task: Task; result: TaskResult }> | null = null;
-let notificationWorker: Worker<{ task: Task; result: TaskResult }, void> | null = null;
+let notificationWorker: Worker<
+  { task: Task; result: TaskResult },
+  void
+> | null = null;
 
 // In-memory task store (cache, synced with DB)
 const taskStore = new Map<string, Task>();
@@ -93,7 +110,10 @@ async function persistTask(task: Task): Promise<void> {
       await storage.createTask(taskWithDates);
     }
   } catch (error) {
-    logger.error('[Queue] Failed to persist task to DB:', { taskId: task.id, error });
+    logger.error("[Queue] Failed to persist task to DB:", {
+      taskId: task.id,
+      error,
+    });
   }
 }
 
@@ -109,12 +129,14 @@ async function loadTasksFromDB(): Promise<void> {
     }
     logger.info(`[Queue] Loaded ${tasks.length} tasks from database`);
   } catch (error) {
-    logger.warn('[Queue] Failed to load tasks from DB, starting fresh:', { error });
+    logger.warn("[Queue] Failed to load tasks from DB, starting fresh:", {
+      error,
+    });
   }
 }
 
 interface TaskEvent {
-  type: 'created' | 'queued' | 'started' | 'progress' | 'completed' | 'failed';
+  type: "created" | "queued" | "started" | "progress" | "completed" | "failed";
   taskId: string;
   task: Task;
   result?: TaskResult;
@@ -125,8 +147,14 @@ interface TaskEvent {
  * Initialize the task queue
  */
 export async function initTaskQueue(): Promise<void> {
+  // Ensure storage is initialized before accessing DB
+  await initStorage();
+
   // Load existing tasks from database
   await loadTasksFromDB();
+
+  // Initialize dead letter queue table
+  await initDeadLetterQueue();
 
   // Create queue
   taskQueue = new Queue<Task>(QUEUE_NAME, {
@@ -134,7 +162,7 @@ export async function initTaskQueue(): Promise<void> {
     defaultJobOptions: {
       attempts: settings.queue?.retry?.attempts || 3,
       backoff: {
-        type: settings.queue?.retry?.type || 'exponential',
+        type: settings.queue?.retry?.type || "exponential",
         delay: settings.queue?.retry?.backoff || 5000,
       },
       removeOnComplete: {
@@ -155,22 +183,25 @@ export async function initTaskQueue(): Promise<void> {
     },
     {
       connection,
-      concurrency: parseInt(process.env.TASK_CONCURRENCY || '') || settings.queue?.concurrency || 2,
-    }
+      concurrency:
+        parseInt(process.env.TASK_CONCURRENCY || "") ||
+        settings.queue?.concurrency ||
+        2,
+    },
   );
 
   // Set up event handlers
-  taskWorker.on('completed', async (job, result) => {
+  taskWorker.on("completed", async (job, result) => {
     const task = taskStore.get(job.data.id);
     if (task) {
-      task.status = 'completed';
+      task.status = "completed";
       task.completedAt = new Date();
       task.result = result;
       taskStore.set(task.id, task);
       await persistTask(task); // Persist to DB
 
       emitEvent({
-        type: 'completed',
+        type: "completed",
         taskId: task.id,
         task,
         result,
@@ -179,16 +210,28 @@ export async function initTaskQueue(): Promise<void> {
     console.log(`[Queue] Task ${job.data.id} completed`);
   });
 
-  taskWorker.on('failed', async (job, err) => {
+  taskWorker.on("failed", async (job, err) => {
     if (!job) return;
-    const task = taskStore.get(job.data.id);
-    if (task) {
-      task.status = 'failed';
+    const task = taskStore.get(job.data.id) || job.data;
+
+    // Use failure handler for retry logic and DLQ management
+    try {
+      await handleTaskFailure(task, err);
+    } catch (handlerError) {
+      console.error(
+        `[Queue] Failure handler error for task ${task.id}:`,
+        handlerError,
+      );
+    }
+
+    // Update local state
+    if (task.attempts >= task.maxAttempts) {
+      task.status = "failed";
       task.result = {
         success: false,
-        output: '',
+        output: "",
         error: {
-          code: 'TASK_FAILED',
+          code: "TASK_FAILED",
           message: err.message,
           stack: err.stack,
         },
@@ -197,20 +240,24 @@ export async function initTaskQueue(): Promise<void> {
       await persistTask(task); // Persist to DB
 
       emitEvent({
-        type: 'failed',
+        type: "failed",
         taskId: task.id,
         task,
         result: task.result,
       });
     }
-    console.error(`[Queue] Task ${job.data.id} failed:`, err.message);
+
+    console.error(
+      `[Queue] Task ${job.data.id} failed (attempt ${task.attempts}/${task.maxAttempts}):`,
+      err.message,
+    );
   });
 
-  taskWorker.on('progress', (job, progress) => {
+  taskWorker.on("progress", (job, progress) => {
     const task = taskStore.get(job.data.id);
     if (task) {
       emitEvent({
-        type: 'progress',
+        type: "progress",
         taskId: task.id,
         task,
         progress: progress as number,
@@ -218,12 +265,15 @@ export async function initTaskQueue(): Promise<void> {
     }
   });
 
+  // Set queue reference for failure handler (enables delayed retries)
+  setTaskQueueRef(taskQueue);
+
   // Create notification queue
   notificationQueue = new Queue(NOTIFICATION_QUEUE_NAME, {
     connection,
     defaultJobOptions: {
       attempts: 5,
-      backoff: { type: 'exponential', delay: 2000 },
+      backoff: { type: "exponential", delay: 2000 },
       removeOnComplete: { count: 100 },
       removeOnFail: { count: 500 },
     },
@@ -239,10 +289,10 @@ export async function initTaskQueue(): Promise<void> {
     {
       connection,
       concurrency: 5, // Higher concurrency for IO bound tasks
-    }
+    },
   );
 
-  console.log('[Queue] Task queue initialized');
+  console.log("[Queue] Task queue initialized");
 }
 
 /**
@@ -254,13 +304,13 @@ export async function processTask(job: Job<Task>): Promise<TaskResult> {
   console.log(`[Queue] Processing task ${task.id}: ${task.title}`);
 
   // Update status
-  task.status = 'in_progress';
+  task.status = "in_progress";
   task.startedAt = new Date();
   taskStore.set(task.id, task);
   persistTask(task); // Persist to DB
 
   emitEvent({
-    type: 'started',
+    type: "started",
     taskId: task.id,
     task,
   });
@@ -272,7 +322,7 @@ export async function processTask(job: Job<Task>): Promise<TaskResult> {
   const adapter = registry.findAdapterForTask(task);
 
   if (!adapter) {
-    throw new Error('No suitable agent adapter found for task');
+    throw new Error("No suitable agent adapter found for task");
   }
 
   console.log(`[Queue] Using adapter: ${adapter.name}`);
@@ -294,14 +344,19 @@ export async function processTask(job: Job<Task>): Promise<TaskResult> {
       });
       await createSummary(summaryInput);
     } catch (error) {
-      logger.error(`[Queue] Failed to create summary for task ${task.id}:`, error as Error);
+      logger.error(
+        `[Queue] Failed to create summary for task ${task.id}:`,
+        error as Error,
+      );
     }
 
     // 2. Post results back to source (e.g., GitHub comment)
     if (notificationQueue) {
-      await notificationQueue.add('notify-source', { task, result });
+      await notificationQueue.add("notify-source", { task, result });
     } else {
-      console.warn('[Queue] Notification queue not initialized, falling back to direct call');
+      console.warn(
+        "[Queue] Notification queue not initialized, falling back to direct call",
+      );
       // Fallback for safety/testing without queue init
       await postResultToSource(task, result);
     }
@@ -315,7 +370,7 @@ export async function processTask(job: Job<Task>): Promise<TaskResult> {
  */
 export async function addTask(input: CreateTaskInput): Promise<Task> {
   if (!taskQueue) {
-    throw new Error('Task queue not initialized');
+    throw new Error("Task queue not initialized");
   }
 
   // Create full task object with defaults for optional fields
@@ -324,7 +379,7 @@ export async function addTask(input: CreateTaskInput): Promise<Task> {
     labels: input.labels ?? [],
     metadata: input.metadata ?? {},
     id: randomUUID(),
-    status: 'pending',
+    status: "pending",
     createdAt: new Date(),
     updatedAt: new Date(),
     attempts: 0,
@@ -338,7 +393,7 @@ export async function addTask(input: CreateTaskInput): Promise<Task> {
   await persistTask(task);
 
   emitEvent({
-    type: 'created',
+    type: "created",
     taskId: task.id,
     task,
   });
@@ -349,12 +404,12 @@ export async function addTask(input: CreateTaskInput): Promise<Task> {
     jobId: task.id,
   });
 
-  task.status = 'queued';
+  task.status = "queued";
   taskStore.set(task.id, task);
   await persistTask(task); // Update status in DB
 
   emitEvent({
-    type: 'queued',
+    type: "queued",
     taskId: task.id,
     task,
   });
@@ -389,8 +444,14 @@ export function getTasks(options?: {
   // Sort by created date (newest first)
   // Handle both Date objects and ISO strings
   tasks.sort((a, b) => {
-    const dateA = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
-    const dateB = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+    const dateA =
+      a.createdAt instanceof Date
+        ? a.createdAt.getTime()
+        : new Date(a.createdAt).getTime();
+    const dateB =
+      b.createdAt instanceof Date
+        ? b.createdAt.getTime()
+        : new Date(b.createdAt).getTime();
     return dateB - dateA;
   });
 
@@ -415,7 +476,9 @@ let sseBroadcaster: ((eventType: string, data: any) => void) | null = null;
 /**
  * Register SSE broadcaster for real-time updates
  */
-export function registerSSEBroadcaster(broadcaster: (eventType: string, data: any) => void): void {
+export function registerSSEBroadcaster(
+  broadcaster: (eventType: string, data: any) => void,
+): void {
   sseBroadcaster = broadcaster;
 }
 
@@ -428,7 +491,7 @@ function emitEvent(event: TaskEvent): void {
     try {
       callback(event);
     } catch (error) {
-      console.error('[Queue] Error in event callback:', error);
+      console.error("[Queue] Error in event callback:", error);
     }
   }
 
@@ -448,15 +511,17 @@ function emitEvent(event: TaskEvent): void {
           startedAt: event.task.startedAt,
           completedAt: event.task.completedAt,
         },
-        result: event.result ? {
-          success: event.result.success,
-          error: event.result.error?.message,
-        } : undefined,
+        result: event.result
+          ? {
+              success: event.result.success,
+              error: event.result.error?.message,
+            }
+          : undefined,
         progress: event.progress,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      console.error('[Queue] Error broadcasting SSE event:', error);
+      console.error("[Queue] Error broadcasting SSE event:", error);
     }
   }
 }
@@ -469,20 +534,25 @@ export async function cancelTask(id: string): Promise<boolean> {
   if (!task) return false;
 
   // Can only cancel pending, queued, assigned, or in_progress tasks
-  const cancellableStatuses: TaskStatusType[] = ['pending', 'queued', 'assigned', 'in_progress'];
+  const cancellableStatuses: TaskStatusType[] = [
+    "pending",
+    "queued",
+    "assigned",
+    "in_progress",
+  ];
   if (!cancellableStatuses.includes(task.status)) {
     return false;
   }
 
   // Update task status
-  task.status = 'cancelled';
+  task.status = "cancelled";
   task.completedAt = new Date();
   task.result = {
     success: false,
-    output: 'Task was cancelled by user',
+    output: "Task was cancelled by user",
     error: {
-      code: 'CANCELLED',
-      message: 'Task cancelled by user',
+      code: "CANCELLED",
+      message: "Task cancelled by user",
     },
   };
   taskStore.set(id, task);
@@ -500,7 +570,7 @@ export async function cancelTask(id: string): Promise<boolean> {
     }
   }
 
-  emitEvent({ type: 'failed', taskId: id, task });
+  emitEvent({ type: "failed", taskId: id, task });
   return true;
 }
 
@@ -512,7 +582,11 @@ export async function retryTask(id: string): Promise<Task | null> {
   if (!task) return null;
 
   // Can retry failed, cancelled, or completed tasks
-  const retryableStatuses: TaskStatusType[] = ['failed', 'cancelled', 'completed'];
+  const retryableStatuses: TaskStatusType[] = [
+    "failed",
+    "cancelled",
+    "completed",
+  ];
   if (!retryableStatuses.includes(task.status)) {
     return null;
   }
@@ -558,5 +632,5 @@ export async function closeTaskQueue(): Promise<void> {
     await notificationQueue.close();
     notificationQueue = null;
   }
-  console.log('[Queue] Task queue closed');
+  console.log("[Queue] Task queue closed");
 }

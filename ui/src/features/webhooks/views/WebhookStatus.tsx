@@ -37,7 +37,7 @@ const IntegrationIcons: Record<string, React.ElementType> = {
 const IntegrationColors: Record<string, string> = {
   github: 'from-gray-700 to-gray-900',
   jira: 'from-blue-600 to-blue-800',
-  linear: 'from-indigo-500 to-purple-600',
+  linear: 'from-indigo-500 to-indigo-600',
 };
 
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -158,7 +158,7 @@ function HookEndpointCard({
     <div className="flex items-center justify-between p-4 rounded-2xl glass-heavy border border-white/5">
       <div className="flex items-center gap-3">
         <div className="h-8 w-8 rounded-lg glass flex items-center justify-center">
-          <Terminal className="h-4 w-4 text-purple-400" />
+          <Terminal className="h-4 w-4 text-indigo-400" />
         </div>
         <div>
           <p className="text-sm font-bold">{name}</p>

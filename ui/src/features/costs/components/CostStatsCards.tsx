@@ -53,7 +53,7 @@ export function CostStatsCards({ summary, analytics }: CostStatsCardsProps) {
       value: `$${avgCostPerTask.toFixed(4)}`,
       icon: Activity,
       subtext: summary.taskCount > 0 ? 'Per task average' : 'No tasks yet',
-      color: 'text-purple-500',
+      color: 'text-indigo-500',
     },
     {
       label: 'Projected Monthly',

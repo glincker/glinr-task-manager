@@ -125,7 +125,7 @@ export function GatewayDashboard() {
 
       {/* Status Panel */}
       {status && (
-        <Card className="border-2">
+        <Card className="shadow-elevated">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
@@ -440,7 +440,7 @@ export function GatewayDashboard() {
               {agents.map((agent) => (
                 <div
                   key={agent.type}
-                  className="rounded-lg border p-4 space-y-2"
+                  className="rounded-lg bg-card/50 shadow-sm p-4 space-y-2"
                 >
                   <div className="flex items-center justify-between">
                     <div className="font-medium">{agent.name}</div>
@@ -493,7 +493,7 @@ export function GatewayDashboard() {
               {workflows.map((workflow) => (
                 <div
                   key={workflow.type}
-                  className="rounded-lg border p-4 space-y-2"
+                  className="rounded-lg bg-card/50 shadow-sm p-4 space-y-2"
                 >
                   <div className="flex items-center justify-between">
                     <div className="font-medium">{workflow.name}</div>

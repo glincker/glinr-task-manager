@@ -3,9 +3,9 @@ import type {
   AgentCapability,
   AgentConfig,
   AgentHealth,
-} from '../types/agent.js';
-import type { Task, TaskResult } from '../types/task.js';
-import { logger } from '../utils/logger.js';
+} from "../types/agent.js";
+import type { Task, TaskResult } from "../types/task.js";
+import { logger } from "../utils/logger.js";
 
 /**
  * Ollama Agent Adapter
@@ -16,16 +16,16 @@ import { logger } from '../utils/logger.js';
  * @see https://ollama.ai/
  */
 export class OllamaAdapter implements AgentAdapter {
-  readonly type = 'ollama';
-  readonly name = 'Ollama';
-  readonly description = 'Local LLM inference via Ollama - free, private, fast';
+  readonly type = "ollama";
+  readonly name = "Ollama";
+  readonly description = "Local LLM inference via Ollama - free, private, fast";
   readonly capabilities: AgentCapability[] = [
-    'code_generation',
-    'code_review',
-    'bug_fix',
-    'documentation',
-    'refactoring',
-    'research',
+    "code_generation",
+    "code_review",
+    "bug_fix",
+    "documentation",
+    "refactoring",
+    "research",
   ];
 
   private readonly baseUrl: string;
@@ -39,8 +39,9 @@ export class OllamaAdapter implements AgentAdapter {
       timeout?: number;
     };
 
-    this.baseUrl = baseUrl || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-    this.model = model || process.env.OLLAMA_MODEL || 'llama3.2';
+    this.baseUrl =
+      baseUrl || process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+    this.model = model || process.env.OLLAMA_MODEL || "llama3.2";
     this.timeout = timeout || 300000; // 5 minutes default
   }
 
@@ -67,20 +68,22 @@ export class OllamaAdapter implements AgentAdapter {
       }
 
       // Check if the model is available
-      const data = (await response.json()) as { models?: Array<{ name: string }> };
+      const data = (await response.json()) as {
+        models?: Array<{ name: string }>;
+      };
       const models = data.models || [];
       const modelNames = models.map((m) => m.name);
 
       // Check for exact match or partial match (e.g., 'llama3.2' matches 'llama3.2:latest')
       const modelAvailable = modelNames.some(
-        (name) => name === this.model || name.startsWith(`${this.model}:`)
+        (name) => name === this.model || name.startsWith(`${this.model}:`),
       );
 
       if (!modelAvailable) {
         return {
           healthy: false,
           latencyMs,
-          message: `Model '${this.model}' not found. Available: ${modelNames.join(', ')}`,
+          message: `Model '${this.model}' not found. Available: ${modelNames.join(", ")}`,
           lastChecked: new Date(),
           details: { availableModels: modelNames },
         };
@@ -97,7 +100,7 @@ export class OllamaAdapter implements AgentAdapter {
       return {
         healthy: false,
         latencyMs: Date.now() - startTime,
-        message: error instanceof Error ? error.message : 'Connection failed',
+        message: error instanceof Error ? error.message : "Connection failed",
         lastChecked: new Date(),
       };
     }
@@ -114,17 +117,19 @@ export class OllamaAdapter implements AgentAdapter {
       const systemPrompt = this.getSystemPrompt(task);
       const userPrompt = this.buildPrompt(task);
 
-      logger.info(`[Ollama] Executing task ${task.id} with model ${this.model}`);
+      logger.info(
+        `[Ollama] Executing task ${task.id} with model ${this.model}`,
+      );
 
       // Use the chat endpoint for better conversation handling
       const response = await fetch(`${this.baseUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: this.model,
           messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
           ],
           stream: false,
           options: {
@@ -140,7 +145,7 @@ export class OllamaAdapter implements AgentAdapter {
         logger.error(`[Ollama] API error: ${response.status} - ${errorText}`);
         return {
           success: false,
-          output: '',
+          output: "",
           duration: Date.now() - startTime,
           error: {
             code: `HTTP_${response.status}`,
@@ -152,7 +157,7 @@ export class OllamaAdapter implements AgentAdapter {
       const result = (await response.json()) as OllamaResponse;
 
       // Extract the message content
-      const output = result.message?.content || '';
+      const output = result.message?.content || "";
 
       // Calculate tokens from response
       const tokensUsed = result.eval_count
@@ -164,7 +169,7 @@ export class OllamaAdapter implements AgentAdapter {
         : undefined;
 
       logger.info(
-        `[Ollama] Task ${task.id} completed in ${Date.now() - startTime}ms, tokens: ${tokensUsed?.total || 'unknown'}`
+        `[Ollama] Task ${task.id} completed in ${Date.now() - startTime}ms, tokens: ${tokensUsed?.total || "unknown"}`,
       );
 
       return {
@@ -176,7 +181,7 @@ export class OllamaAdapter implements AgentAdapter {
         cost: tokensUsed
           ? {
               amount: 0, // Free!
-              currency: 'USD',
+              currency: "USD",
             }
           : undefined,
       };
@@ -184,11 +189,11 @@ export class OllamaAdapter implements AgentAdapter {
       logger.error(`[Ollama] Task execution failed:`, error as Error);
       return {
         success: false,
-        output: '',
+        output: "",
         duration: Date.now() - startTime,
         error: {
-          code: 'EXECUTION_ERROR',
-          message: error instanceof Error ? error.message : 'Unknown error',
+          code: "EXECUTION_ERROR",
+          message: error instanceof Error ? error.message : "Unknown error",
           stack: error instanceof Error ? error.stack : undefined,
         },
       };
@@ -214,7 +219,7 @@ export class OllamaAdapter implements AgentAdapter {
       prompt += `- Branch: ${task.branch}\n`;
     }
     if (task.labels.length > 0) {
-      prompt += `- Labels: ${task.labels.join(', ')}\n`;
+      prompt += `- Labels: ${task.labels.join(", ")}\n`;
     }
 
     prompt += `\n### Output Requirements\n`;
@@ -235,7 +240,7 @@ export class OllamaAdapter implements AgentAdapter {
     let systemPrompt = `You are an experienced software developer assistant. `;
 
     switch (taskType) {
-      case 'bug_fix':
+      case "bug_fix":
         systemPrompt += `You are fixing a bug. Focus on:
 - Identifying the root cause
 - Making minimal, targeted changes
@@ -243,7 +248,7 @@ export class OllamaAdapter implements AgentAdapter {
 - Suggesting tests to prevent regression`;
         break;
 
-      case 'feature':
+      case "feature":
         systemPrompt += `You are implementing a new feature. Focus on:
 - Understanding the requirements
 - Following existing code patterns
@@ -251,7 +256,7 @@ export class OllamaAdapter implements AgentAdapter {
 - Including appropriate error handling`;
         break;
 
-      case 'code_review':
+      case "code_review":
         systemPrompt += `You are reviewing code. Focus on:
 - Code quality and readability
 - Potential bugs or edge cases
@@ -259,7 +264,7 @@ export class OllamaAdapter implements AgentAdapter {
 - Security implications`;
         break;
 
-      case 'documentation':
+      case "documentation":
         systemPrompt += `You are writing documentation. Focus on:
 - Clear, concise explanations
 - Practical examples
@@ -267,7 +272,7 @@ export class OllamaAdapter implements AgentAdapter {
 - Keeping docs up-to-date with code`;
         break;
 
-      case 'refactoring':
+      case "refactoring":
         systemPrompt += `You are refactoring code. Focus on:
 - Improving code structure without changing behavior
 - Reducing complexity
@@ -288,18 +293,29 @@ Provide clear explanations and well-structured output.`;
    */
   private inferTaskType(task: Task): string {
     const labels = task.labels.map((l) => l.toLowerCase());
-    const content = `${task.title} ${task.description || ''} ${task.prompt}`.toLowerCase();
+    const labelSet = new Set(labels);
+    const content =
+      `${task.title} ${task.description || ""} ${task.prompt}`.toLowerCase();
 
-    if (labels.includes('bug') || content.includes('fix') || content.includes('bug'))
-      return 'bug_fix';
-    if (labels.includes('feature') || content.includes('implement') || content.includes('add'))
-      return 'feature';
-    if (labels.includes('test') || content.includes('test')) return 'testing';
-    if (labels.includes('docs') || content.includes('document')) return 'documentation';
-    if (labels.includes('refactor') || content.includes('refactor')) return 'refactoring';
-    if (content.includes('review')) return 'code_review';
+    if (labelSet.has("bug") || labelSet.has("bugfix")) return "bug_fix";
+    if (labelSet.has("feature") || labelSet.has("enhancement"))
+      return "feature";
+    if (labelSet.has("test") || labelSet.has("testing")) return "testing";
+    if (labelSet.has("docs") || labelSet.has("documentation"))
+      return "documentation";
+    if (labelSet.has("refactor") || labelSet.has("refactoring"))
+      return "refactoring";
+    if (labelSet.has("review")) return "code_review";
 
-    return 'general';
+    if (content.includes("fix") || content.includes("bug")) return "bug_fix";
+    if (content.includes("implement") || content.includes("add"))
+      return "feature";
+    if (content.includes("test")) return "testing";
+    if (content.includes("document")) return "documentation";
+    if (content.includes("refactor")) return "refactoring";
+    if (content.includes("review")) return "code_review";
+
+    return "general";
   }
 }
 

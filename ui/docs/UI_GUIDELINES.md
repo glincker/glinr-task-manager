@@ -23,11 +23,7 @@ The system supports three primary professional themes + a system default.
 - **Glass**: Subtle bluish tint in the frost effect.
 - **Vibe**: Modern, developer-focused, high energy.
 
-### 3. Midnight Black (Professional)
-- **Background**: Deep professional neutral charcoal-gray (`oklch(0.1 0 0)`).
-- **Glass**: Neutral gray frost, less "glowy," more utilitarian and professional.
-- **Accents**: Desaturated indigo or space gray tints.
-- **Vibe**: High-end professional workstation, focused, minimal.
+
 
 ## 🛠️ CSS Utility Classes
 

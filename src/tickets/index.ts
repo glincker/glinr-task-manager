@@ -4,48 +4,96 @@
  * Core CRUD operations for AI-native tickets
  */
 
-import { randomUUID } from 'crypto';
-import { eq, and, or, desc, asc, like, sql, inArray, gte, lte, isNull, notInArray } from 'drizzle-orm';
-import { getDb } from '../storage/index.js';
+import { randomUUID } from "crypto";
+import {
+  eq,
+  and,
+  or,
+  desc,
+  asc,
+  like,
+  sql,
+  inArray,
+  gte,
+  lte,
+  isNull,
+  notInArray,
+} from "drizzle-orm";
+import { getDb } from "../storage/index.js";
 import {
   tickets,
   ticketExternalLinks,
+  ticketRelations,
+  ticketWatchers,
+  ticketAssignees,
+  ticketMentions,
+  ticketAttachments,
+  ticketReactions,
   ticketComments,
   ticketHistory,
   ticketSequence,
   sprintTickets,
-} from '../storage/schema.js';
+} from "../storage/schema.js";
 import type {
   Ticket,
   TicketWithRelations,
   CreateTicketInput,
   UpdateTicketInput,
+  BulkUpdateTicketsInput,
+  BulkDeleteTicketsInput,
   TicketQuery,
   ExternalLink,
+  TicketRelation,
+  TicketRelationType,
+  TicketWatcher,
+  TicketAssignee,
+  TicketMention,
+  TicketAttachment,
+  TicketReaction,
   TicketComment,
   HistoryEntry,
-} from './types.js';
-import { CreateTicketSchema, UpdateTicketSchema, TicketQuerySchema } from './types.js';
-import { logger } from '../utils/logger.js';
+} from "./types.js";
+import {
+  CreateTicketSchema,
+  UpdateTicketSchema,
+  BulkUpdateTicketsSchema,
+  BulkDeleteTicketsSchema,
+  TicketQuerySchema,
+} from "./types.js";
+import { logger } from "../utils/logger.js";
 
 // Outbound sync callbacks (async, fire-and-forget)
 let syncCallbacks: {
-  onTicketChanged?: (ticketId: string, updates: Partial<Ticket>) => Promise<void>;
-  onCommentCreated?: (ticketId: string, content: string, source: string) => Promise<void>;
+  onTicketChanged?: (
+    ticketId: string,
+    updates: Partial<Ticket>,
+  ) => Promise<void>;
+  onCommentCreated?: (
+    ticketId: string,
+    content: string,
+    source: string,
+  ) => Promise<void>;
 } = {};
 
 /**
  * Register sync callbacks (called by sync integration module)
  */
 export function registerSyncCallbacks(callbacks: {
-  onTicketChanged?: (ticketId: string, updates: Partial<Ticket>) => Promise<void>;
-  onCommentCreated?: (ticketId: string, content: string, source: string) => Promise<void>;
+  onTicketChanged?: (
+    ticketId: string,
+    updates: Partial<Ticket>,
+  ) => Promise<void>;
+  onCommentCreated?: (
+    ticketId: string,
+    content: string,
+    source: string,
+  ) => Promise<void>;
 }): void {
   syncCallbacks = callbacks;
 }
 
 // Re-export types
-export * from './types.js';
+export * from "./types.js";
 
 // === Helpers ===
 
@@ -53,9 +101,9 @@ function generateId(): string {
   return randomUUID();
 }
 
-async function getNextSequence(workspaceId = 'default'): Promise<number> {
+async function getNextSequence(workspaceId = "default"): Promise<number> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   // Upsert sequence counter
   const result = await db
@@ -78,7 +126,7 @@ async function getNextSequence(workspaceId = 'default'): Promise<number> {
 export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
   const parsed = CreateTicketSchema.parse(input);
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const id = generateId();
   const sequence = await getNextSequence();
@@ -89,11 +137,11 @@ export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
     sequence,
     projectId: parsed.projectId,
     title: parsed.title,
-    description: parsed.description || '',
+    description: parsed.description || "",
     descriptionHtml: undefined,
-    type: parsed.type || 'task',
-    priority: parsed.priority || 'medium',
-    status: parsed.status || 'backlog',
+    type: parsed.type || "task",
+    priority: parsed.priority || "medium",
+    status: parsed.status || "backlog",
     labels: parsed.labels || [],
     assignee: parsed.assignee,
     assigneeAgent: parsed.assigneeAgent,
@@ -105,8 +153,9 @@ export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
     updatedAt: now,
     startedAt: undefined,
     completedAt: undefined,
+    startDate: parsed.startDate,
     dueDate: parsed.dueDate,
-    createdBy: parsed.createdBy || 'human',
+    createdBy: parsed.createdBy || "human",
     aiAgent: parsed.aiAgent,
     aiSessionId: parsed.aiSessionId,
     aiTaskId: parsed.aiTaskId,
@@ -133,15 +182,17 @@ export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
     aiAgent: ticket.aiAgent,
     aiSessionId: ticket.aiSessionId,
     aiTaskId: ticket.aiTaskId,
+    startDate: ticket.startDate,
+    dueDate: ticket.dueDate,
     estimate: ticket.estimate,
     estimateUnit: ticket.estimateUnit,
   });
 
   // Record creation in history
-  await recordHistory(id, 'created', undefined, 'created', {
-    type: parsed.createdBy || 'human',
-    name: parsed.aiAgent || 'User',
-    platform: 'glinr',
+  await recordHistory(id, "created", undefined, "created", {
+    type: parsed.createdBy || "human",
+    name: parsed.aiAgent || "User",
+    platform: "glinr",
   });
 
   // Create external link if provided
@@ -161,9 +212,13 @@ export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
  */
 export async function getTicket(id: string): Promise<Ticket | null> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
-  const result = await db.select().from(tickets).where(eq(tickets.id, id)).limit(1);
+  const result = await db
+    .select()
+    .from(tickets)
+    .where(eq(tickets.id, id))
+    .limit(1);
   if (result.length === 0) return null;
 
   const row = result[0];
@@ -175,7 +230,7 @@ export async function getTicket(id: string): Promise<Ticket | null> {
  */
 export async function getChildren(parentId: string): Promise<Ticket[]> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const rows = await db
     .select()
@@ -189,12 +244,32 @@ export async function getChildren(parentId: string): Promise<Ticket[]> {
 /**
  * Get a ticket with all relations
  */
-export async function getTicketWithRelations(id: string): Promise<TicketWithRelations | null> {
+export async function getTicketWithRelations(
+  id: string,
+): Promise<TicketWithRelations | null> {
   const ticket = await getTicket(id);
   if (!ticket) return null;
 
-  const [externalLinks, comments, history, children, parent] = await Promise.all([
+  const [
+    externalLinks,
+    relations,
+    watchers,
+    assignees,
+    mentions,
+    attachments,
+    reactions,
+    comments,
+    history,
+    children,
+    parent,
+  ] = await Promise.all([
     getExternalLinks(id),
+    getTicketRelations(id),
+    getTicketWatchers(id),
+    getTicketAssignees(id),
+    getTicketMentions(id),
+    getTicketAttachments(id),
+    getTicketReactions(id),
     getComments(id),
     getHistory(id),
     getChildren(id),
@@ -204,6 +279,12 @@ export async function getTicketWithRelations(id: string): Promise<TicketWithRela
   return {
     ...ticket,
     externalLinks,
+    relations,
+    watchers,
+    assignees,
+    mentions,
+    attachments,
+    reactions,
     comments,
     history,
     children,
@@ -214,10 +295,13 @@ export async function getTicketWithRelations(id: string): Promise<TicketWithRela
 /**
  * Update a ticket
  */
-export async function updateTicket(id: string, input: UpdateTicketInput): Promise<Ticket | null> {
+export async function updateTicket(
+  id: string,
+  input: UpdateTicketInput,
+): Promise<Ticket | null> {
   const parsed = UpdateTicketSchema.parse(input);
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const existing = await getTicket(id);
   if (!existing) return null;
@@ -227,55 +311,113 @@ export async function updateTicket(id: string, input: UpdateTicketInput): Promis
   };
 
   // Track changes for history
-  const changes: Array<{ field: string; oldValue: string | undefined; newValue: string | undefined }> = [];
+  const changes: Array<{
+    field: string;
+    oldValue: string | undefined;
+    newValue: string | undefined;
+  }> = [];
 
   if (parsed.title !== undefined && parsed.title !== existing.title) {
     updates.title = parsed.title;
-    changes.push({ field: 'title', oldValue: existing.title, newValue: parsed.title });
+    changes.push({
+      field: "title",
+      oldValue: existing.title,
+      newValue: parsed.title,
+    });
   }
-  if (parsed.description !== undefined && parsed.description !== existing.description) {
+  if (
+    parsed.description !== undefined &&
+    parsed.description !== existing.description
+  ) {
     updates.description = parsed.description;
-    changes.push({ field: 'description', oldValue: existing.description, newValue: parsed.description });
+    changes.push({
+      field: "description",
+      oldValue: existing.description,
+      newValue: parsed.description,
+    });
   }
   if (parsed.type !== undefined && parsed.type !== existing.type) {
     updates.type = parsed.type;
-    changes.push({ field: 'type', oldValue: existing.type, newValue: parsed.type });
+    changes.push({
+      field: "type",
+      oldValue: existing.type,
+      newValue: parsed.type,
+    });
   }
   if (parsed.priority !== undefined && parsed.priority !== existing.priority) {
     updates.priority = parsed.priority;
-    changes.push({ field: 'priority', oldValue: existing.priority, newValue: parsed.priority });
+    changes.push({
+      field: "priority",
+      oldValue: existing.priority,
+      newValue: parsed.priority,
+    });
   }
   if (parsed.status !== undefined && parsed.status !== existing.status) {
     updates.status = parsed.status;
-    changes.push({ field: 'status', oldValue: existing.status, newValue: parsed.status });
+    changes.push({
+      field: "status",
+      oldValue: existing.status,
+      newValue: parsed.status,
+    });
 
     // Auto-set timestamps based on status
-    if (parsed.status === 'in_progress' && !existing.startedAt) {
+    if (parsed.status === "in_progress" && !existing.startedAt) {
       updates.startedAt = new Date();
     }
-    if (parsed.status === 'done' || parsed.status === 'cancelled') {
+    if (parsed.status === "done" || parsed.status === "cancelled") {
       updates.completedAt = new Date();
     }
   }
   if (parsed.labels !== undefined) {
     updates.labels = parsed.labels;
-    changes.push({ field: 'labels', oldValue: JSON.stringify(existing.labels), newValue: JSON.stringify(parsed.labels) });
+    changes.push({
+      field: "labels",
+      oldValue: JSON.stringify(existing.labels),
+      newValue: JSON.stringify(parsed.labels),
+    });
   }
   if (parsed.assignee !== undefined && parsed.assignee !== existing.assignee) {
     updates.assignee = parsed.assignee;
-    changes.push({ field: 'assignee', oldValue: existing.assignee, newValue: parsed.assignee });
+    changes.push({
+      field: "assignee",
+      oldValue: existing.assignee,
+      newValue: parsed.assignee,
+    });
   }
-  if (parsed.assigneeAgent !== undefined && parsed.assigneeAgent !== existing.assigneeAgent) {
+  if (
+    parsed.assigneeAgent !== undefined &&
+    parsed.assigneeAgent !== existing.assigneeAgent
+  ) {
     updates.assigneeAgent = parsed.assigneeAgent;
-    changes.push({ field: 'assigneeAgent', oldValue: existing.assigneeAgent, newValue: parsed.assigneeAgent });
+    changes.push({
+      field: "assigneeAgent",
+      oldValue: existing.assigneeAgent,
+      newValue: parsed.assigneeAgent,
+    });
   }
   if (parsed.parentId !== undefined && parsed.parentId !== existing.parentId) {
     updates.parentId = parsed.parentId;
-    changes.push({ field: 'parentId', oldValue: existing.parentId, newValue: parsed.parentId });
+    changes.push({
+      field: "parentId",
+      oldValue: existing.parentId,
+      newValue: parsed.parentId,
+    });
   }
   if (parsed.dueDate !== undefined) {
     updates.dueDate = parsed.dueDate ? new Date(parsed.dueDate) : null;
-    changes.push({ field: 'dueDate', oldValue: existing.dueDate, newValue: parsed.dueDate });
+    changes.push({
+      field: "dueDate",
+      oldValue: existing.dueDate,
+      newValue: parsed.dueDate,
+    });
+  }
+  if (parsed.startDate !== undefined) {
+    updates.startDate = parsed.startDate ? new Date(parsed.startDate) : null;
+    changes.push({
+      field: "startDate",
+      oldValue: existing.startDate,
+      newValue: parsed.startDate,
+    });
   }
   if (parsed.estimate !== undefined) {
     updates.estimate = parsed.estimate;
@@ -283,9 +425,16 @@ export async function updateTicket(id: string, input: UpdateTicketInput): Promis
   if (parsed.estimateUnit !== undefined) {
     updates.estimateUnit = parsed.estimateUnit;
   }
-  if (parsed.projectId !== undefined && parsed.projectId !== existing.projectId) {
+  if (
+    parsed.projectId !== undefined &&
+    parsed.projectId !== existing.projectId
+  ) {
     updates.projectId = parsed.projectId;
-    changes.push({ field: 'projectId', oldValue: existing.projectId, newValue: parsed.projectId });
+    changes.push({
+      field: "projectId",
+      oldValue: existing.projectId,
+      newValue: parsed.projectId,
+    });
   }
 
   await db.update(tickets).set(updates).where(eq(tickets.id, id));
@@ -293,16 +442,16 @@ export async function updateTicket(id: string, input: UpdateTicketInput): Promis
   // Record history for each change
   for (const change of changes) {
     await recordHistory(id, change.field, change.oldValue, change.newValue, {
-      type: 'human',
-      name: 'User',
-      platform: 'glinr',
+      type: "human",
+      name: "User",
+      platform: "glinr",
     });
   }
 
   // Trigger outbound sync (fire-and-forget)
   if (syncCallbacks.onTicketChanged && changes.length > 0) {
-    syncCallbacks.onTicketChanged(id, parsed).catch(err => {
-      logger.error('[TicketService] Sync callback error', err as Error);
+    syncCallbacks.onTicketChanged(id, parsed).catch((err) => {
+      logger.error("[TicketService] Sync callback error", err as Error);
     });
   }
 
@@ -314,24 +463,101 @@ export async function updateTicket(id: string, input: UpdateTicketInput): Promis
  */
 export async function deleteTicket(id: string): Promise<boolean> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   // Delete related records first
-  await db.delete(ticketExternalLinks).where(eq(ticketExternalLinks.ticketId, id));
+  await db
+    .delete(ticketExternalLinks)
+    .where(eq(ticketExternalLinks.ticketId, id));
+  await db
+    .delete(ticketRelations)
+    .where(
+      or(
+        eq(ticketRelations.sourceTicketId, id),
+        eq(ticketRelations.targetTicketId, id),
+      ),
+    );
   await db.delete(ticketComments).where(eq(ticketComments.ticketId, id));
   await db.delete(ticketHistory).where(eq(ticketHistory.ticketId, id));
+  await db.delete(ticketWatchers).where(eq(ticketWatchers.ticketId, id));
+  await db.delete(ticketAssignees).where(eq(ticketAssignees.ticketId, id));
+  await db.delete(ticketMentions).where(eq(ticketMentions.ticketId, id));
+  await db.delete(ticketAttachments).where(eq(ticketAttachments.ticketId, id));
+  await db.delete(ticketReactions).where(eq(ticketReactions.ticketId, id));
 
   const result = await db.delete(tickets).where(eq(tickets.id, id));
   return true;
 }
 
+// === Bulk Operations ===
+
+export async function bulkUpdateTickets(
+  input: BulkUpdateTicketsInput,
+): Promise<{
+  updated: Ticket[];
+  failed: Array<{ id: string; error: string }>;
+}> {
+  const parsed = BulkUpdateTicketsSchema.parse(input);
+  const updated: Ticket[] = [];
+  const failed: Array<{ id: string; error: string }> = [];
+
+  for (const id of parsed.ids) {
+    try {
+      const ticket = await updateTicket(id, parsed.updates);
+      if (ticket) {
+        updated.push(ticket);
+      } else {
+        failed.push({ id, error: "Ticket not found" });
+      }
+    } catch (error) {
+      failed.push({
+        id,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  return { updated, failed };
+}
+
+export async function bulkDeleteTickets(
+  input: BulkDeleteTicketsInput,
+): Promise<{
+  deletedIds: string[];
+  failed: Array<{ id: string; error: string }>;
+}> {
+  const parsed = BulkDeleteTicketsSchema.parse(input);
+  const deletedIds: string[] = [];
+  const failed: Array<{ id: string; error: string }> = [];
+
+  for (const id of parsed.ids) {
+    try {
+      const deleted = await deleteTicket(id);
+      if (deleted) {
+        deletedIds.push(id);
+      } else {
+        failed.push({ id, error: "Ticket not found" });
+      }
+    } catch (error) {
+      failed.push({
+        id,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  return { deletedIds, failed };
+}
+
 /**
  * Query tickets with filters
  */
-export async function queryTickets(query: TicketQuery = {}): Promise<{ tickets: Ticket[]; total: number }> {
+export async function queryTickets(
+  query: TicketQuery = {},
+): Promise<{ tickets: Ticket[]; total: number }> {
   const parsed = TicketQuerySchema.parse(query);
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const conditions: any[] = [];
 
@@ -342,7 +568,9 @@ export async function queryTickets(query: TicketQuery = {}): Promise<{ tickets: 
 
   // Status filter
   if (parsed.status) {
-    const statuses = Array.isArray(parsed.status) ? parsed.status : [parsed.status];
+    const statuses = Array.isArray(parsed.status)
+      ? parsed.status
+      : [parsed.status];
     conditions.push(inArray(tickets.status, statuses));
   }
 
@@ -354,7 +582,9 @@ export async function queryTickets(query: TicketQuery = {}): Promise<{ tickets: 
 
   // Priority filter
   if (parsed.priority) {
-    const priorities = Array.isArray(parsed.priority) ? parsed.priority : [parsed.priority];
+    const priorities = Array.isArray(parsed.priority)
+      ? parsed.priority
+      : [parsed.priority];
     conditions.push(inArray(tickets.priority, priorities));
   }
 
@@ -378,8 +608,8 @@ export async function queryTickets(query: TicketQuery = {}): Promise<{ tickets: 
     conditions.push(
       or(
         like(tickets.title, `%${parsed.search}%`),
-        like(tickets.description, `%${parsed.search}%`)
-      )
+        like(tickets.description, `%${parsed.search}%`),
+      ),
     );
   }
 
@@ -391,6 +621,13 @@ export async function queryTickets(query: TicketQuery = {}): Promise<{ tickets: 
     conditions.push(lte(tickets.createdAt, new Date(parsed.createdBefore)));
   }
 
+  if (parsed.startDateAfter) {
+    conditions.push(gte(tickets.startDate, new Date(parsed.startDateAfter)));
+  }
+  if (parsed.startDateBefore) {
+    conditions.push(lte(tickets.startDate, new Date(parsed.startDateBefore)));
+  }
+
   // CreatedBy filter (human vs ai)
   if (parsed.createdBy) {
     conditions.push(eq(tickets.createdBy, parsed.createdBy));
@@ -400,7 +637,7 @@ export async function queryTickets(query: TicketQuery = {}): Promise<{ tickets: 
   if (parsed.label) {
     // SQLite JSON contains search - labels is stored as JSON array
     conditions.push(
-      sql`EXISTS (SELECT 1 FROM json_each(${tickets.labels}) WHERE json_each.value LIKE ${`%${parsed.label}%`})`
+      sql`EXISTS (SELECT 1 FROM json_each(${tickets.labels}) WHERE json_each.value LIKE ${`%${parsed.label}%`})`,
     );
   }
 
@@ -409,7 +646,39 @@ export async function queryTickets(query: TicketQuery = {}): Promise<{ tickets: 
     // All specified labels must be present
     for (const label of parsed.labels) {
       conditions.push(
-        sql`EXISTS (SELECT 1 FROM json_each(${tickets.labels}) WHERE json_each.value LIKE ${`%${label}%`})`
+        sql`EXISTS (SELECT 1 FROM json_each(${tickets.labels}) WHERE json_each.value LIKE ${`%${label}%`})`,
+      );
+    }
+  }
+
+  // Cursor-based pagination (Phase 17)
+  // When cursor is provided, filter for items "after" the cursor
+  // For DESC order: createdAt < cursorCreatedAt OR (createdAt = cursorCreatedAt AND id < cursorId)
+  // For ASC order: createdAt > cursorCreatedAt OR (createdAt = cursorCreatedAt AND id > cursorId)
+  if (parsed.cursorCreatedAt && parsed.cursorId) {
+    const cursorTime = parsed.cursorCreatedAt;
+    const cursorId = parsed.cursorId;
+    const isDesc = parsed.sortOrder !== "asc";
+
+    if (isDesc) {
+      conditions.push(
+        or(
+          sql`${tickets.createdAt} < ${cursorTime}`,
+          and(
+            sql`${tickets.createdAt} = ${cursorTime}`,
+            sql`${tickets.id} < ${cursorId}`,
+          ),
+        ),
+      );
+    } else {
+      conditions.push(
+        or(
+          sql`${tickets.createdAt} > ${cursorTime}`,
+          and(
+            sql`${tickets.createdAt} = ${cursorTime}`,
+            sql`${tickets.id} > ${cursorId}`,
+          ),
+        ),
       );
     }
   }
@@ -426,7 +695,9 @@ export async function queryTickets(query: TicketQuery = {}): Promise<{ tickets: 
       .select({ ticketId: sprintTickets.ticketId })
       .from(sprintTickets)
       .where(eq(sprintTickets.sprintId, parsed.sprintId));
-    ticketIdsToFilter = sprintTicketRows.map((r: { ticketId: string }) => r.ticketId);
+    ticketIdsToFilter = sprintTicketRows.map(
+      (r: { ticketId: string }) => r.ticketId,
+    );
 
     if (ticketIdsToFilter.length === 0) {
       return { tickets: [], total: 0 };
@@ -439,11 +710,18 @@ export async function queryTickets(query: TicketQuery = {}): Promise<{ tickets: 
     const ticketsInSprints = await db
       .selectDistinct({ ticketId: sprintTickets.ticketId })
       .from(sprintTickets);
-    const excludeIds = ticketsInSprints.map((r: { ticketId: string }) => r.ticketId);
+    const excludeIds = ticketsInSprints.map(
+      (r: { ticketId: string }) => r.ticketId,
+    );
 
     if (excludeIds.length > 0) {
       // Add NOT IN condition
-      conditions.push(sql`${tickets.id} NOT IN (${sql.join(excludeIds.map((id: string) => sql`${id}`), sql`, `)})`);
+      conditions.push(
+        sql`${tickets.id} NOT IN (${sql.join(
+          excludeIds.map((id: string) => sql`${id}`),
+          sql`, `,
+        )})`,
+      );
       whereClause = and(...conditions);
     }
   }
@@ -456,24 +734,41 @@ export async function queryTickets(query: TicketQuery = {}): Promise<{ tickets: 
   const total = countResult[0]?.count ?? 0;
 
   // Sorting
-  const sortColumn = parsed.sortBy === 'priority' ? tickets.priority
-    : parsed.sortBy === 'updatedAt' ? tickets.updatedAt
-    : parsed.sortBy === 'sequence' ? tickets.sequence
-    : parsed.sortBy === 'dueDate' ? tickets.dueDate
-    : tickets.createdAt;
-  const sortOrder = parsed.sortOrder === 'asc' ? asc(sortColumn) : desc(sortColumn);
+  const sortColumn =
+    parsed.sortBy === "priority"
+      ? tickets.priority
+      : parsed.sortBy === "updatedAt"
+        ? tickets.updatedAt
+        : parsed.sortBy === "sequence"
+          ? tickets.sequence
+          : parsed.sortBy === "dueDate"
+            ? tickets.dueDate
+            : parsed.sortBy === "startDate"
+              ? tickets.startDate
+              : tickets.createdAt;
+  const sortOrder =
+    parsed.sortOrder === "asc" ? asc(sortColumn) : desc(sortColumn);
 
   // Pagination
   const limit = parsed.limit || 50;
   const offset = parsed.offset || 0;
+  const useCursor = !!(parsed.cursorCreatedAt && parsed.cursorId);
 
-  const rows = await db
-    .select()
-    .from(tickets)
-    .where(whereClause)
-    .orderBy(sortOrder)
-    .limit(limit)
-    .offset(offset);
+  // When using cursor, don't use offset (cursor already filters)
+  const rows = useCursor
+    ? await db
+        .select()
+        .from(tickets)
+        .where(whereClause)
+        .orderBy(sortOrder)
+        .limit(limit)
+    : await db
+        .select()
+        .from(tickets)
+        .where(whereClause)
+        .orderBy(sortOrder)
+        .limit(limit)
+        .offset(offset);
 
   return {
     tickets: rows.map(rowToTicket),
@@ -481,14 +776,528 @@ export async function queryTickets(query: TicketQuery = {}): Promise<{ tickets: 
   };
 }
 
+// === Relations ===
+
+export async function createTicketRelation(
+  sourceTicketId: string,
+  targetTicketId: string,
+  relationType: TicketRelationType,
+): Promise<TicketRelation> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const id = generateId();
+  const now = new Date().toISOString();
+
+  await db.insert(ticketRelations).values({
+    id,
+    sourceTicketId,
+    targetTicketId,
+    relationType,
+  });
+
+  return {
+    id,
+    sourceTicketId,
+    targetTicketId,
+    relationType,
+    createdAt: now,
+  };
+}
+
+export async function getTicketRelations(
+  ticketId: string,
+): Promise<TicketRelation[]> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const rows = await db
+    .select()
+    .from(ticketRelations)
+    .where(
+      or(
+        eq(ticketRelations.sourceTicketId, ticketId),
+        eq(ticketRelations.targetTicketId, ticketId),
+      ),
+    )
+    .orderBy(desc(ticketRelations.createdAt));
+
+  return rows.map((row: any) => ({
+    id: row.id,
+    sourceTicketId: row.sourceTicketId,
+    targetTicketId: row.targetTicketId,
+    relationType: row.relationType as TicketRelationType,
+    createdAt: toISOString(row.createdAt),
+  }));
+}
+
+export async function deleteTicketRelation(
+  relationId: string,
+  ticketId?: string,
+): Promise<boolean> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const conditions = [eq(ticketRelations.id, relationId)];
+  if (ticketId) {
+    const relationScope = or(
+      eq(ticketRelations.sourceTicketId, ticketId),
+      eq(ticketRelations.targetTicketId, ticketId),
+    );
+    if (relationScope) {
+      conditions.push(relationScope);
+    }
+  }
+
+  const existing = await db
+    .select({ id: ticketRelations.id })
+    .from(ticketRelations)
+    .where(and(...conditions))
+    .limit(1);
+
+  if (existing.length === 0) return false;
+
+  await db.delete(ticketRelations).where(eq(ticketRelations.id, relationId));
+  return true;
+}
+
+// === Watchers ===
+
+export async function addTicketWatcher(
+  ticketId: string,
+  userId: string,
+): Promise<TicketWatcher> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const existing = await db
+    .select({ id: ticketWatchers.id })
+    .from(ticketWatchers)
+    .where(
+      and(
+        eq(ticketWatchers.ticketId, ticketId),
+        eq(ticketWatchers.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    const row = existing[0];
+    return {
+      id: row.id,
+      ticketId,
+      userId,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  const id = generateId();
+  const now = new Date().toISOString();
+
+  await db.insert(ticketWatchers).values({
+    id,
+    ticketId,
+    userId,
+  });
+
+  return { id, ticketId, userId, createdAt: now };
+}
+
+export async function removeTicketWatcher(
+  ticketId: string,
+  userId: string,
+): Promise<boolean> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const existing = await db
+    .select({ id: ticketWatchers.id })
+    .from(ticketWatchers)
+    .where(
+      and(
+        eq(ticketWatchers.ticketId, ticketId),
+        eq(ticketWatchers.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (existing.length === 0) return false;
+
+  await db
+    .delete(ticketWatchers)
+    .where(
+      and(
+        eq(ticketWatchers.ticketId, ticketId),
+        eq(ticketWatchers.userId, userId),
+      ),
+    );
+  return true;
+}
+
+export async function getTicketWatchers(
+  ticketId: string,
+): Promise<TicketWatcher[]> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const rows = await db
+    .select()
+    .from(ticketWatchers)
+    .where(eq(ticketWatchers.ticketId, ticketId))
+    .orderBy(desc(ticketWatchers.createdAt));
+
+  return rows.map((row: any) => ({
+    id: row.id,
+    ticketId: row.ticketId,
+    userId: row.userId,
+    createdAt: toISOString(row.createdAt),
+  }));
+}
+
+// === Assignees ===
+
+export async function addTicketAssignee(
+  ticketId: string,
+  userId: string,
+): Promise<TicketAssignee> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const existing = await db
+    .select({ id: ticketAssignees.id })
+    .from(ticketAssignees)
+    .where(
+      and(
+        eq(ticketAssignees.ticketId, ticketId),
+        eq(ticketAssignees.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    const row = existing[0];
+    return {
+      id: row.id,
+      ticketId,
+      userId,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  const id = generateId();
+  const now = new Date().toISOString();
+
+  await db.insert(ticketAssignees).values({
+    id,
+    ticketId,
+    userId,
+  });
+
+  return { id, ticketId, userId, createdAt: now };
+}
+
+export async function removeTicketAssignee(
+  ticketId: string,
+  userId: string,
+): Promise<boolean> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const existing = await db
+    .select({ id: ticketAssignees.id })
+    .from(ticketAssignees)
+    .where(
+      and(
+        eq(ticketAssignees.ticketId, ticketId),
+        eq(ticketAssignees.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (existing.length === 0) return false;
+
+  await db
+    .delete(ticketAssignees)
+    .where(
+      and(
+        eq(ticketAssignees.ticketId, ticketId),
+        eq(ticketAssignees.userId, userId),
+      ),
+    );
+  return true;
+}
+
+export async function getTicketAssignees(
+  ticketId: string,
+): Promise<TicketAssignee[]> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const rows = await db
+    .select()
+    .from(ticketAssignees)
+    .where(eq(ticketAssignees.ticketId, ticketId))
+    .orderBy(desc(ticketAssignees.createdAt));
+
+  return rows.map((row: any) => ({
+    id: row.id,
+    ticketId: row.ticketId,
+    userId: row.userId,
+    createdAt: toISOString(row.createdAt),
+  }));
+}
+
+// === Mentions ===
+
+export async function addTicketMention(params: {
+  ticketId: string;
+  userId: string;
+  source: "description" | "comment" | "history";
+  sourceId?: string;
+}): Promise<TicketMention> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const id = generateId();
+  const now = new Date().toISOString();
+
+  await db.insert(ticketMentions).values({
+    id,
+    ticketId: params.ticketId,
+    userId: params.userId,
+    source: params.source,
+    sourceId: params.sourceId,
+  });
+
+  return {
+    id,
+    ticketId: params.ticketId,
+    userId: params.userId,
+    source: params.source,
+    sourceId: params.sourceId,
+    createdAt: now,
+  };
+}
+
+export async function getTicketMentions(
+  ticketId: string,
+): Promise<TicketMention[]> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const rows = await db
+    .select()
+    .from(ticketMentions)
+    .where(eq(ticketMentions.ticketId, ticketId))
+    .orderBy(desc(ticketMentions.createdAt));
+
+  return rows.map((row: any) => ({
+    id: row.id,
+    ticketId: row.ticketId,
+    userId: row.userId,
+    source: row.source as TicketMention["source"],
+    sourceId: row.sourceId ?? undefined,
+    createdAt: toISOString(row.createdAt),
+  }));
+}
+
+// === Attachments ===
+
+export async function addTicketAttachment(params: {
+  ticketId: string;
+  fileName: string;
+  fileType?: string;
+  fileSize?: number;
+  url: string;
+  storagePath?: string;
+  uploadedBy?: string;
+}): Promise<TicketAttachment> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const id = generateId();
+  const now = new Date().toISOString();
+
+  await db.insert(ticketAttachments).values({
+    id,
+    ticketId: params.ticketId,
+    fileName: params.fileName,
+    fileType: params.fileType,
+    fileSize: params.fileSize,
+    url: params.url,
+    storagePath: params.storagePath,
+    uploadedBy: params.uploadedBy,
+  });
+
+  return {
+    id,
+    ticketId: params.ticketId,
+    fileName: params.fileName,
+    fileType: params.fileType,
+    fileSize: params.fileSize,
+    url: params.url,
+    storagePath: params.storagePath,
+    uploadedBy: params.uploadedBy,
+    createdAt: now,
+  };
+}
+
+export async function getTicketAttachments(
+  ticketId: string,
+): Promise<TicketAttachment[]> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const rows = await db
+    .select()
+    .from(ticketAttachments)
+    .where(eq(ticketAttachments.ticketId, ticketId))
+    .orderBy(desc(ticketAttachments.createdAt));
+
+  return rows.map((row: any) => ({
+    id: row.id,
+    ticketId: row.ticketId,
+    fileName: row.fileName,
+    fileType: row.fileType ?? undefined,
+    fileSize: row.fileSize ?? undefined,
+    url: row.url,
+    storagePath: row.storagePath ?? undefined,
+    uploadedBy: row.uploadedBy ?? undefined,
+    createdAt: toISOString(row.createdAt),
+  }));
+}
+
+export async function deleteTicketAttachment(
+  attachmentId: string,
+  ticketId?: string,
+): Promise<boolean> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const conditions = [eq(ticketAttachments.id, attachmentId)];
+  if (ticketId) {
+    conditions.push(eq(ticketAttachments.ticketId, ticketId));
+  }
+
+  const existing = await db
+    .select({ id: ticketAttachments.id })
+    .from(ticketAttachments)
+    .where(and(...conditions))
+    .limit(1);
+
+  if (existing.length === 0) return false;
+
+  await db
+    .delete(ticketAttachments)
+    .where(eq(ticketAttachments.id, attachmentId));
+  return true;
+}
+
+// === Reactions ===
+
+export async function addTicketReaction(params: {
+  ticketId: string;
+  userId: string;
+  emoji: string;
+}): Promise<TicketReaction> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const existing = await db
+    .select({ id: ticketReactions.id })
+    .from(ticketReactions)
+    .where(
+      and(
+        eq(ticketReactions.ticketId, params.ticketId),
+        eq(ticketReactions.userId, params.userId),
+        eq(ticketReactions.emoji, params.emoji),
+      ),
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    const row = existing[0];
+    return {
+      id: row.id,
+      ticketId: params.ticketId,
+      userId: params.userId,
+      emoji: params.emoji,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  const id = generateId();
+  const now = new Date().toISOString();
+
+  await db.insert(ticketReactions).values({
+    id,
+    ticketId: params.ticketId,
+    userId: params.userId,
+    emoji: params.emoji,
+  });
+
+  return {
+    id,
+    ticketId: params.ticketId,
+    userId: params.userId,
+    emoji: params.emoji,
+    createdAt: now,
+  };
+}
+
+export async function getTicketReactions(
+  ticketId: string,
+): Promise<TicketReaction[]> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const rows = await db
+    .select()
+    .from(ticketReactions)
+    .where(eq(ticketReactions.ticketId, ticketId))
+    .orderBy(desc(ticketReactions.createdAt));
+
+  return rows.map((row: any) => ({
+    id: row.id,
+    ticketId: row.ticketId,
+    userId: row.userId,
+    emoji: row.emoji,
+    createdAt: toISOString(row.createdAt),
+  }));
+}
+
+export async function deleteTicketReaction(
+  reactionId: string,
+  ticketId?: string,
+): Promise<boolean> {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  const conditions = [eq(ticketReactions.id, reactionId)];
+  if (ticketId) {
+    conditions.push(eq(ticketReactions.ticketId, ticketId));
+  }
+
+  const existing = await db
+    .select({ id: ticketReactions.id })
+    .from(ticketReactions)
+    .where(and(...conditions))
+    .limit(1);
+
+  if (existing.length === 0) return false;
+
+  await db.delete(ticketReactions).where(eq(ticketReactions.id, reactionId));
+  return true;
+}
+
 // === External Links ===
 
 export async function createExternalLink(
   ticketId: string,
-  link: { platform: string; externalId: string; externalUrl?: string }
+  link: { platform: string; externalId: string; externalUrl?: string },
 ): Promise<ExternalLink> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const id = generateId();
   const now = new Date().toISOString();
@@ -508,14 +1317,16 @@ export async function createExternalLink(
     externalId: link.externalId,
     externalUrl: link.externalUrl,
     syncEnabled: true,
-    syncDirection: 'bidirectional',
+    syncDirection: "bidirectional",
     createdAt: now,
   };
 }
 
-export async function getExternalLinks(ticketId: string): Promise<ExternalLink[]> {
+export async function getExternalLinks(
+  ticketId: string,
+): Promise<ExternalLink[]> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const rows = await db
     .select()
@@ -541,10 +1352,10 @@ export async function getExternalLinks(ticketId: string): Promise<ExternalLink[]
 export async function addComment(
   ticketId: string,
   content: string,
-  author: { type: 'human' | 'ai'; name: string; platform: string }
+  author: { type: "human" | "ai"; name: string; platform: string },
 ): Promise<TicketComment> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const id = generateId();
   const now = new Date().toISOString();
@@ -557,14 +1368,19 @@ export async function addComment(
     authorName: author.name,
     authorPlatform: author.platform,
     source: author.platform as any,
-    isAiResponse: author.type === 'ai',
+    isAiResponse: author.type === "ai",
   });
 
   // Trigger outbound sync (fire-and-forget)
   if (syncCallbacks.onCommentCreated) {
-    syncCallbacks.onCommentCreated(ticketId, content, author.platform).catch(err => {
-      logger.error('[TicketService] Comment sync callback error', err as Error);
-    });
+    syncCallbacks
+      .onCommentCreated(ticketId, content, author.platform)
+      .catch((err) => {
+        logger.error(
+          "[TicketService] Comment sync callback error",
+          err as Error,
+        );
+      });
   }
 
   return {
@@ -573,14 +1389,14 @@ export async function addComment(
     content,
     author: { type: author.type, name: author.name, platform: author.platform },
     source: author.platform as any,
-    isAiResponse: author.type === 'ai',
+    isAiResponse: author.type === "ai",
     createdAt: now,
   };
 }
 
 export async function getComments(ticketId: string): Promise<TicketComment[]> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const rows = await db
     .select()
@@ -615,7 +1431,7 @@ async function recordHistory(
   field: string,
   oldValue: string | undefined,
   newValue: string | undefined,
-  changedBy: { type: 'human' | 'ai'; name: string; platform: string }
+  changedBy: { type: "human" | "ai"; name: string; platform: string },
 ): Promise<void> {
   const db = getDb();
   if (!db) return;
@@ -634,7 +1450,7 @@ async function recordHistory(
 
 export async function getHistory(ticketId: string): Promise<HistoryEntry[]> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const rows = await db
     .select()
@@ -662,17 +1478,22 @@ export async function getHistory(ticketId: string): Promise<HistoryEntry[]> {
 /**
  * Get a ticket by its external link (for sync engine)
  */
-export async function getTicketByExternalLink(platform: string, externalId: string): Promise<Ticket | null> {
+export async function getTicketByExternalLink(
+  platform: string,
+  externalId: string,
+): Promise<Ticket | null> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const links = await db
     .select()
     .from(ticketExternalLinks)
-    .where(and(
-      eq(ticketExternalLinks.platform, platform),
-      eq(ticketExternalLinks.externalId, externalId)
-    ))
+    .where(
+      and(
+        eq(ticketExternalLinks.platform, platform),
+        eq(ticketExternalLinks.externalId, externalId),
+      ),
+    )
     .limit(1);
 
   if (links.length === 0) return null;
@@ -685,28 +1506,34 @@ export async function getTicketByExternalLink(platform: string, externalId: stri
  */
 export async function updateExternalLink(
   id: string,
-  updates: { lastSyncedAt?: string; syncError?: string; syncEnabled?: boolean }
+  updates: { lastSyncedAt?: string; syncError?: string; syncEnabled?: boolean },
 ): Promise<void> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const updateData: Record<string, any> = {};
-  if (updates.lastSyncedAt) updateData.lastSyncedAt = new Date(updates.lastSyncedAt);
-  if (updates.syncError !== undefined) updateData.syncError = updates.syncError || null;
-  if (updates.syncEnabled !== undefined) updateData.syncEnabled = updates.syncEnabled;
+  if (updates.lastSyncedAt)
+    updateData.lastSyncedAt = new Date(updates.lastSyncedAt);
+  if (updates.syncError !== undefined)
+    updateData.syncError = updates.syncError || null;
+  if (updates.syncEnabled !== undefined)
+    updateData.syncEnabled = updates.syncEnabled;
 
-  await db.update(ticketExternalLinks).set(updateData).where(eq(ticketExternalLinks.id, id));
+  await db
+    .update(ticketExternalLinks)
+    .set(updateData)
+    .where(eq(ticketExternalLinks.id, id));
 }
 
 /**
  * Create a ticket from sync (with external link)
  */
 export async function createTicketFromSync(
-  ticket: Omit<Ticket, 'id' | 'sequence'>,
-  link: { platform: string; externalId: string; externalUrl?: string }
+  ticket: Omit<Ticket, "id" | "sequence">,
+  link: { platform: string; externalId: string; externalUrl?: string },
 ): Promise<Ticket> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const id = generateId();
   const sequence = await getNextSequence();
@@ -735,6 +1562,8 @@ export async function createTicketFromSync(
     aiAgent: newTicket.aiAgent,
     aiSessionId: newTicket.aiSessionId,
     aiTaskId: newTicket.aiTaskId,
+    startDate: newTicket.startDate,
+    dueDate: newTicket.dueDate,
     estimate: newTicket.estimate,
     estimateUnit: newTicket.estimateUnit,
   });
@@ -743,11 +1572,17 @@ export async function createTicketFromSync(
   await createExternalLink(id, link);
 
   // Record creation in history
-  await recordHistory(id, 'created', undefined, `synced from ${link.platform}`, {
-    type: 'human',
-    name: link.platform,
-    platform: link.platform,
-  });
+  await recordHistory(
+    id,
+    "created",
+    undefined,
+    `synced from ${link.platform}`,
+    {
+      type: "human",
+      name: link.platform,
+      platform: link.platform,
+    },
+  );
 
   return newTicket;
 }
@@ -758,11 +1593,11 @@ export async function createTicketFromSync(
 export async function updateTicketFromSync(
   id: string,
   updates: UpdateTicketInput,
-  source: string
+  source: string,
 ): Promise<Ticket | null> {
   const parsed = UpdateTicketSchema.parse(updates);
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const existing = await getTicket(id);
   if (!existing) return null;
@@ -772,43 +1607,102 @@ export async function updateTicketFromSync(
   };
 
   // Track changes for history
-  const changes: Array<{ field: string; oldValue: string | undefined; newValue: string | undefined }> = [];
+  const changes: Array<{
+    field: string;
+    oldValue: string | undefined;
+    newValue: string | undefined;
+  }> = [];
 
   if (parsed.title !== undefined && parsed.title !== existing.title) {
     dbUpdates.title = parsed.title;
-    changes.push({ field: 'title', oldValue: existing.title, newValue: parsed.title });
+    changes.push({
+      field: "title",
+      oldValue: existing.title,
+      newValue: parsed.title,
+    });
   }
-  if (parsed.description !== undefined && parsed.description !== existing.description) {
+  if (
+    parsed.description !== undefined &&
+    parsed.description !== existing.description
+  ) {
     dbUpdates.description = parsed.description;
-    changes.push({ field: 'description', oldValue: existing.description, newValue: parsed.description });
+    changes.push({
+      field: "description",
+      oldValue: existing.description,
+      newValue: parsed.description,
+    });
   }
   if (parsed.type !== undefined && parsed.type !== existing.type) {
     dbUpdates.type = parsed.type;
-    changes.push({ field: 'type', oldValue: existing.type, newValue: parsed.type });
+    changes.push({
+      field: "type",
+      oldValue: existing.type,
+      newValue: parsed.type,
+    });
   }
   if (parsed.priority !== undefined && parsed.priority !== existing.priority) {
     dbUpdates.priority = parsed.priority;
-    changes.push({ field: 'priority', oldValue: existing.priority, newValue: parsed.priority });
+    changes.push({
+      field: "priority",
+      oldValue: existing.priority,
+      newValue: parsed.priority,
+    });
   }
   if (parsed.status !== undefined && parsed.status !== existing.status) {
     dbUpdates.status = parsed.status;
-    changes.push({ field: 'status', oldValue: existing.status, newValue: parsed.status });
+    changes.push({
+      field: "status",
+      oldValue: existing.status,
+      newValue: parsed.status,
+    });
 
     // Auto-set timestamps based on status
-    if (parsed.status === 'in_progress' && !existing.startedAt) {
+    if (parsed.status === "in_progress" && !existing.startedAt) {
       dbUpdates.startedAt = new Date();
     }
-    if (parsed.status === 'done' || parsed.status === 'cancelled') {
+    if (parsed.status === "done" || parsed.status === "cancelled") {
       dbUpdates.completedAt = new Date();
     }
   }
   if (parsed.labels !== undefined) {
     dbUpdates.labels = parsed.labels;
-    changes.push({ field: 'labels', oldValue: JSON.stringify(existing.labels), newValue: JSON.stringify(parsed.labels) });
+    changes.push({
+      field: "labels",
+      oldValue: JSON.stringify(existing.labels),
+      newValue: JSON.stringify(parsed.labels),
+    });
   }
   if (parsed.assignee !== undefined && parsed.assignee !== existing.assignee) {
     dbUpdates.assignee = parsed.assignee;
-    changes.push({ field: 'assignee', oldValue: existing.assignee, newValue: parsed.assignee });
+    changes.push({
+      field: "assignee",
+      oldValue: existing.assignee,
+      newValue: parsed.assignee,
+    });
+  }
+  if (parsed.startDate !== undefined) {
+    dbUpdates.startDate = parsed.startDate ? new Date(parsed.startDate) : null;
+    changes.push({
+      field: "startDate",
+      oldValue: existing.startDate,
+      newValue: parsed.startDate,
+    });
+  }
+  if (parsed.dueDate !== undefined) {
+    dbUpdates.dueDate = parsed.dueDate ? new Date(parsed.dueDate) : null;
+    changes.push({
+      field: "dueDate",
+      oldValue: existing.dueDate,
+      newValue: parsed.dueDate,
+    });
+  }
+  if (parsed.startDate !== undefined) {
+    dbUpdates.startDate = parsed.startDate ? new Date(parsed.startDate) : null;
+    changes.push({
+      field: "startDate",
+      oldValue: existing.startDate,
+      newValue: parsed.startDate,
+    });
   }
 
   await db.update(tickets).set(dbUpdates).where(eq(tickets.id, id));
@@ -816,7 +1710,7 @@ export async function updateTicketFromSync(
   // Record history with source
   for (const change of changes) {
     await recordHistory(id, change.field, change.oldValue, change.newValue, {
-      type: 'human',
+      type: "human",
       name: source,
       platform: source,
     });
@@ -831,11 +1725,11 @@ export async function updateTicketFromSync(
 export async function addCommentFromSync(
   ticketId: string,
   content: string,
-  author: { type: 'human' | 'ai'; name: string; platform: string },
-  externalId?: string
+  author: { type: "human" | "ai"; name: string; platform: string },
+  externalId?: string,
 ): Promise<TicketComment> {
   const db = getDb();
-  if (!db) throw new Error('Database not initialized');
+  if (!db) throw new Error("Database not initialized");
 
   const id = generateId();
   const now = new Date().toISOString();
@@ -849,7 +1743,7 @@ export async function addCommentFromSync(
     authorPlatform: author.platform,
     source: author.platform as any,
     externalId,
-    isAiResponse: author.type === 'ai',
+    isAiResponse: author.type === "ai",
   });
 
   return {
@@ -859,7 +1753,7 @@ export async function addCommentFromSync(
     author,
     source: author.platform as any,
     externalId,
-    isAiResponse: author.type === 'ai',
+    isAiResponse: author.type === "ai",
     createdAt: now,
   };
 }
@@ -875,7 +1769,7 @@ function toISOString(value: unknown): string {
     }
     return value.toISOString();
   }
-  if (typeof value === 'number') {
+  if (typeof value === "number") {
     // Handle numeric timestamps (could be ms or seconds)
     const timestamp = value > 1e12 ? value : value * 1000; // Assume seconds if too small
     if (isNaN(timestamp) || timestamp < 0 || timestamp > 8640000000000000) {
@@ -883,7 +1777,7 @@ function toISOString(value: unknown): string {
     }
     return new Date(timestamp).toISOString();
   }
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const date = new Date(value);
     const time = date.getTime();
     if (isNaN(time) || time < 0 || time > 8640000000000000) {
@@ -903,7 +1797,7 @@ function toOptionalISOString(value: unknown): string | undefined {
     }
     return value.toISOString();
   }
-  if (typeof value === 'number') {
+  if (typeof value === "number") {
     // Handle numeric timestamps (could be ms or seconds)
     const timestamp = value > 1e12 ? value : value * 1000;
     if (isNaN(timestamp) || timestamp < 0 || timestamp > 8640000000000000) {
@@ -911,7 +1805,7 @@ function toOptionalISOString(value: unknown): string | undefined {
     }
     return new Date(timestamp).toISOString();
   }
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const date = new Date(value);
     const time = date.getTime();
     if (isNaN(time) || time < 0 || time > 8640000000000000) {
@@ -922,7 +1816,9 @@ function toOptionalISOString(value: unknown): string | undefined {
   return undefined;
 }
 
-function rowToTicket(row: any): Ticket & { projectId?: string; projectKey?: string; projectName?: string } {
+function rowToTicket(
+  row: any,
+): Ticket & { projectId?: string; projectKey?: string; projectName?: string } {
   return {
     id: row.id,
     sequence: row.sequence,
@@ -947,6 +1843,7 @@ function rowToTicket(row: any): Ticket & { projectId?: string; projectKey?: stri
     updatedAt: toISOString(row.updatedAt),
     startedAt: toOptionalISOString(row.startedAt),
     completedAt: toOptionalISOString(row.completedAt),
+    startDate: toOptionalISOString(row.startDate),
     dueDate: toOptionalISOString(row.dueDate),
     createdBy: row.createdBy,
     aiAgent: row.aiAgent ?? undefined,

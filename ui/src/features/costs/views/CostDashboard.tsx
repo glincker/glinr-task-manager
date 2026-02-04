@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
-const COLORS = ['#60a5fa', '#a855f7', '#ec4899', '#f97316', '#10b981'];
+const COLORS = ['#60a5fa', '#818cf8', '#ec4899', '#f97316', '#10b981'];
 
 export function CostDashboard() {
   const { data: analytics, isLoading } = useCostAnalytics();
@@ -79,7 +79,7 @@ export function CostDashboard() {
           icon={Activity}
           trend="+5%"
           trendDir="up"
-          glowColor="bg-purple-500"
+          glowColor="bg-indigo-500"
         />
         <StatCard
           title="Avg. Cost / Task"
@@ -233,7 +233,7 @@ export function CostDashboard() {
                   width={100}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="tokens" fill="#a855f7" radius={[0, 10, 10, 0]} barSize={20} />
+                <Bar dataKey="tokens" fill="#818cf8" radius={[0, 10, 10, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
