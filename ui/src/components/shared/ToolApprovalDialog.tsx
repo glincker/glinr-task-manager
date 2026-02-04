@@ -105,12 +105,12 @@ export function ToolApprovalDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-lg mx-4 bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg mx-4 bg-white dark:bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div
           className={cn(
-            'px-6 py-4 border-b border-border flex items-center gap-3',
-            isDangerous ? 'bg-red-500/10' : 'bg-yellow-500/10'
+            'px-6 py-4 border-b border-gray-200 dark:border-border flex items-center gap-3',
+            isDangerous ? 'bg-red-50 dark:bg-red-500/10' : 'bg-yellow-50 dark:bg-yellow-500/10'
           )}
         >
           {isDangerous ? (
@@ -119,8 +119,8 @@ export function ToolApprovalDialog({
             <Shield className="h-6 w-6 text-yellow-500" />
           )}
           <div className="flex-1">
-            <h2 className="text-lg font-semibold">Tool Approval Required</h2>
-            <p className="text-sm text-muted-foreground">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-foreground">Tool Approval Required</h2>
+            <p className="text-sm text-gray-600 dark:text-muted-foreground">
               {isDangerous
                 ? 'This tool requires explicit approval'
                 : 'Review before executing'}
@@ -143,7 +143,7 @@ export function ToolApprovalDialog({
             <div
               className={cn(
                 'p-3 rounded-lg',
-                isDangerous ? 'bg-red-500/10' : 'bg-yellow-500/10'
+                isDangerous ? 'bg-red-100 dark:bg-red-500/10' : 'bg-yellow-100 dark:bg-yellow-500/10'
               )}
             >
               <Icon
@@ -155,19 +155,19 @@ export function ToolApprovalDialog({
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold">{approval.toolName}</h3>
+                <h3 className="font-semibold text-gray-900 dark:text-foreground">{approval.toolName}</h3>
                 <span
                   className={cn(
                     'px-2 py-0.5 text-xs font-medium rounded-full',
                     isDangerous
-                      ? 'bg-red-500/20 text-red-500'
-                      : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
+                      ? 'bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-500'
+                      : 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'
                   )}
                 >
                   {approval.securityLevel}
                 </span>
               </div>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-sm text-gray-600 dark:text-muted-foreground mt-1">
                 {isDangerous
                   ? 'This tool can modify files, execute commands, or access sensitive data.'
                   : 'This tool may access files or execute commands.'}
@@ -177,11 +177,11 @@ export function ToolApprovalDialog({
 
           {/* Command/Params */}
           {(approval.command || Object.keys(approval.params).length > 0) && (
-            <div className="bg-muted/50 rounded-lg p-4 border border-border">
+            <div className="bg-gray-100 dark:bg-muted/50 rounded-lg p-4 border border-gray-200 dark:border-border">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                 {approval.command ? 'Command' : 'Parameters'}
               </div>
-              <pre className="text-sm font-mono whitespace-pre-wrap break-all">
+              <pre className="text-sm font-mono whitespace-pre-wrap break-all text-gray-800 dark:text-foreground">
                 {approval.command || formatParams(approval.params)}
               </pre>
             </div>
@@ -189,11 +189,11 @@ export function ToolApprovalDialog({
 
           {/* Warning */}
           {isDangerous && (
-            <div className="flex items-start gap-3 p-3 bg-red-500/10 rounded-lg border border-red-500/20">
+            <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-500/10 rounded-lg border border-red-200 dark:border-red-500/20">
               <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-medium text-red-500">Security Warning</p>
-                <p className="text-muted-foreground mt-1">
+                <p className="font-medium text-red-600 dark:text-red-500">Security Warning</p>
+                <p className="text-gray-600 dark:text-muted-foreground mt-1">
                   This operation could potentially harm your system or expose
                   sensitive data. Only approve if you trust the source.
                 </p>
@@ -203,12 +203,12 @@ export function ToolApprovalDialog({
         </div>
 
         {/* Actions */}
-        <div className="px-6 py-4 bg-muted/30 border-t border-border flex items-center justify-between gap-3">
+        <div className="px-6 py-4 bg-gray-50 dark:bg-muted/30 border-t border-gray-200 dark:border-border flex items-center justify-between gap-3">
           <Button
             variant="ghost"
             onClick={() => handleDecision('deny')}
             disabled={isLoading}
-            className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+            className="text-red-600 dark:text-red-500 hover:text-red-700 dark:hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-500/10"
           >
             <XCircle className="h-4 w-4 mr-2" />
             Deny
@@ -219,9 +219,9 @@ export function ToolApprovalDialog({
               variant="outline"
               onClick={() => handleDecision('allow-always')}
               disabled={isLoading}
-              className="border-green-500/30 hover:bg-green-500/10"
+              className="border-green-300 dark:border-green-500/30 hover:bg-green-100 dark:hover:bg-green-500/10 text-green-700 dark:text-foreground"
             >
-              <ShieldCheck className="h-4 w-4 mr-2 text-green-500" />
+              <ShieldCheck className="h-4 w-4 mr-2 text-green-600 dark:text-green-500" />
               Allow Always
             </Button>
             <Button
@@ -229,8 +229,8 @@ export function ToolApprovalDialog({
               disabled={isLoading}
               className={cn(
                 isDangerous
-                  ? 'bg-red-500 hover:bg-red-600'
-                  : 'bg-yellow-500 hover:bg-yellow-600 text-black'
+                  ? 'bg-red-500 hover:bg-red-600 text-white'
+                  : 'bg-yellow-500 hover:bg-yellow-600 text-gray-900'
               )}
             >
               {isLoading && selectedDecision === 'allow-once' ? (
