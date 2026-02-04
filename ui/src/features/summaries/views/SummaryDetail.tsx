@@ -33,9 +33,9 @@ ${summary.whatChanged}
 
 ${summary.whyChanged ? `## Why Changed\n${summary.whyChanged}\n` : ''}
 ${summary.howChanged ? `## How Changed\n${summary.howChanged}\n` : ''}
-${summary.filesChanged.length > 0 ? `## Files Changed\n${summary.filesChanged.map(f => `- ${f}`).join('\n')}\n` : ''}
-${summary.decisions.length > 0 ? `## Key Decisions\n${summary.decisions.map(d => `- ${d}`).join('\n')}\n` : ''}
-${summary.blockers.length > 0 ? `## Blockers\n${summary.blockers.map(b => `- ${b}`).join('\n')}\n` : ''}
+${summary.filesChanged.length > 0 ? `## Files Changed\n${summary.filesChanged.map(f => typeof f === 'string' ? `- ${f}` : `- ${f.path}`).join('\n')}\n` : ''}
+${summary.decisions.length > 0 ? `## Key Decisions\n${summary.decisions.map(d => typeof d === 'string' ? `- ${d}` : `- ${d.description}`).join('\n')}\n` : ''}
+${summary.blockers.length > 0 ? `## Blockers\n${summary.blockers.map(b => typeof b === 'string' ? `- ${b}` : `- ${b.description}`).join('\n')}\n` : ''}
 ---
 Agent: ${summary.agent}${summary.model ? ` | Model: ${summary.model}` : ''}
 Created: ${new Date(summary.createdAt).toLocaleString()}
@@ -207,7 +207,7 @@ Created: ${new Date(summary.createdAt).toLocaleString()}
                   variant="outline"
                   className="font-mono text-xs px-3 py-1.5 bg-white/[0.02] border-white/10 hover:bg-white/5 transition-colors"
                 >
-                  {file}
+                  {typeof file === 'string' ? file : file.path}
                 </Badge>
               ))}
             </div>
@@ -235,7 +235,7 @@ Created: ${new Date(summary.createdAt).toLocaleString()}
                     <div className="h-5 w-5 rounded-full bg-indigo-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-[10px] font-bold text-indigo-400">{idx + 1}</span>
                     </div>
-                    <span className="text-muted-foreground text-sm leading-relaxed">{decision}</span>
+                    <span className="text-muted-foreground text-sm leading-relaxed">{typeof decision === 'string' ? decision : decision.description}</span>
                   </li>
                 ))}
               </ul>
@@ -260,7 +260,7 @@ Created: ${new Date(summary.createdAt).toLocaleString()}
                 {summary.blockers.map((blocker, idx) => (
                   <li key={idx} className="flex items-start gap-3">
                     <AlertTriangle className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
-                    <span className="text-red-300 text-sm leading-relaxed">{blocker}</span>
+                    <span className="text-red-300 text-sm leading-relaxed">{typeof blocker === 'string' ? blocker : blocker.description}</span>
                   </li>
                 ))}
               </ul>

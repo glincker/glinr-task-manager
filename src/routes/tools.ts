@@ -610,4 +610,240 @@ tools.post('/ratelimit/reset', (c) => {
   return c.json({ success: true });
 });
 
+// =============================================================================
+// SSE Streaming
+// =============================================================================
+
+// Store SSE connections per session
+const sseConnections = new Map<string, Set<ReadableStreamDefaultController<Uint8Array>>>();
+
+/**
+ * Broadcast event to all SSE connections for a session
+ */
+function broadcastToSession(sessionId: string, event: string, data: unknown) {
+  const connections = sseConnections.get(sessionId);
+  if (!connections) return;
+
+  const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  const encoder = new TextEncoder();
+  const encoded = encoder.encode(message);
+
+  for (const controller of connections) {
+    try {
+      controller.enqueue(encoded);
+    } catch {
+      // Connection closed, remove it
+      connections.delete(controller);
+    }
+  }
+
+  // Clean up empty sets
+  if (connections.size === 0) {
+    sseConnections.delete(sessionId);
+  }
+}
+
+/**
+ * SSE stream for tool execution output
+ * Subscribe to real-time output from a running tool session
+ */
+tools.get('/sessions/:sessionId/stream', (c) => {
+  const sessionId = c.req.param('sessionId');
+  const sessionManager = getSessionManager();
+  const session = sessionManager.get(sessionId);
+
+  if (!session) {
+    return c.json({ error: 'Session not found' }, 404);
+  }
+
+  const encoder = new TextEncoder();
+  let controller: ReadableStreamDefaultController<Uint8Array>;
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(ctrl) {
+      controller = ctrl;
+
+      // Add to session connections
+      if (!sseConnections.has(sessionId)) {
+        sseConnections.set(sessionId, new Set());
+      }
+      sseConnections.get(sessionId)!.add(controller);
+
+      // Send initial session state
+      const initEvent = `event: init\ndata: ${JSON.stringify({
+        sessionId: session.id,
+        toolName: session.toolName,
+        status: session.status,
+        command: session.command,
+        createdAt: session.createdAt,
+        startedAt: session.startedAt,
+      })}\n\n`;
+      controller.enqueue(encoder.encode(initEvent));
+
+      // Send existing output if any
+      if (session.stdout) {
+        const outputEvent = `event: stdout\ndata: ${JSON.stringify({ content: session.stdout })}\n\n`;
+        controller.enqueue(encoder.encode(outputEvent));
+      }
+      if (session.stderr) {
+        const stderrEvent = `event: stderr\ndata: ${JSON.stringify({ content: session.stderr })}\n\n`;
+        controller.enqueue(encoder.encode(stderrEvent));
+      }
+
+      // If already completed, send completion event
+      if (session.status === 'completed' || session.status === 'failed' || session.status === 'killed') {
+        const doneEvent = `event: done\ndata: ${JSON.stringify({
+          status: session.status,
+          exitCode: session.exitCode,
+          exitSignal: session.exitSignal,
+          completedAt: session.completedAt,
+        })}\n\n`;
+        controller.enqueue(encoder.encode(doneEvent));
+      }
+    },
+    cancel() {
+      // Remove from session connections
+      const connections = sseConnections.get(sessionId);
+      if (connections) {
+        connections.delete(controller);
+        if (connections.size === 0) {
+          sseConnections.delete(sessionId);
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+});
+
+/**
+ * Execute a tool with SSE streaming output
+ * Returns a stream of execution events
+ */
+tools.post('/execute/stream', zValidator('json', ExecuteToolSchema), async (c) => {
+  const { toolCall, conversationId, workdir } = c.req.valid('json');
+
+  logger.info(`[ToolRoutes] Execute tool (streaming): ${toolCall.name}`, { component: 'ToolRoutes' });
+
+  const encoder = new TextEncoder();
+  let streamController: ReadableStreamDefaultController<Uint8Array>;
+  let sessionId: string | undefined;
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      streamController = controller;
+
+      try {
+        const executor = getToolExecutor();
+
+        // Send start event
+        const startEvent = `event: start\ndata: ${JSON.stringify({
+          toolName: toolCall.name,
+          timestamp: Date.now(),
+        })}\n\n`;
+        controller.enqueue(encoder.encode(startEvent));
+
+        // Execute with progress callback
+        const result = await executor.execute(toolCall, {
+          conversationId,
+          workdir: workdir ?? process.cwd(),
+          env: {},
+          onProgress: (update) => {
+            // Stream progress updates
+            const progressEvent = `event: progress\ndata: ${JSON.stringify(update)}\n\n`;
+            try {
+              controller.enqueue(encoder.encode(progressEvent));
+            } catch {
+              // Stream closed
+            }
+          },
+        });
+
+        // Track session ID if available
+        if (result.result.sessionId) {
+          sessionId = result.result.sessionId;
+        }
+
+        // If approval required, send approval event
+        if (result.approvalRequired && result.approvalId) {
+          const pendingApprovals = executor.getPendingApprovals(conversationId);
+          const approval = pendingApprovals.find((a) => a.id === result.approvalId);
+
+          const approvalEvent = `event: approval-required\ndata: ${JSON.stringify({
+            approvalId: result.approvalId,
+            approval: approval ? {
+              id: approval.id,
+              toolName: approval.toolName,
+              command: approval.command,
+              params: approval.params,
+              securityLevel: approval.securityLevel,
+              expiresAt: approval.expiresAt,
+            } : null,
+          })}\n\n`;
+          controller.enqueue(encoder.encode(approvalEvent));
+        } else {
+          // Send result
+          const resultEvent = `event: result\ndata: ${JSON.stringify({
+            success: result.result.success,
+            output: result.result.output,
+            data: result.result.data,
+            error: result.result.error,
+            durationMs: result.result.durationMs,
+            sessionId: result.result.sessionId,
+            isBackgrounded: result.result.isBackgrounded,
+          })}\n\n`;
+          controller.enqueue(encoder.encode(resultEvent));
+        }
+
+        // Send done event
+        const doneEvent = `event: done\ndata: ${JSON.stringify({
+          toolCallId: result.toolCallId,
+          success: result.result.success,
+          timestamp: Date.now(),
+        })}\n\n`;
+        controller.enqueue(encoder.encode(doneEvent));
+
+      } catch (error) {
+        logger.error(`[ToolRoutes] Stream execute failed`, error instanceof Error ? error : undefined);
+
+        const errorEvent = `event: error\ndata: ${JSON.stringify({
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: Date.now(),
+        })}\n\n`;
+        controller.enqueue(encoder.encode(errorEvent));
+      } finally {
+        controller.close();
+      }
+    },
+    cancel() {
+      // Cleanup if needed
+      if (sessionId) {
+        const connections = sseConnections.get(sessionId);
+        if (connections) {
+          connections.delete(streamController);
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
+});
+
+// Export the broadcast function for use by session manager
+export { broadcastToSession };
+
 export default tools;

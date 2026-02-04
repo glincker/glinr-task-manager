@@ -838,12 +838,13 @@ chatRoutes.post(
 
       // Add runtime info (model awareness like OpenClaw)
       const sessionOverride = getSessionModel(conversationId);
-      const resolvedModel = sessionOverride || body.model || 'sonnet';
-      const modelAlias = MODEL_ALIASES[resolvedModel as keyof typeof MODEL_ALIASES];
+      // Use the auto-selected default provider when no model specified
+      const defaultProvider = aiProvider.getDefaultProvider();
+      const resolvedRef = aiProvider.resolveModel(sessionOverride || body.model || defaultProvider);
       context.runtime = {
-        model: modelAlias ? `${modelAlias.provider}/${modelAlias.model}` : resolvedModel,
-        provider: modelAlias?.provider || 'anthropic',
-        defaultModel: 'anthropic/claude-sonnet-4-5',
+        model: `${resolvedRef.provider}/${resolvedRef.model}`,
+        provider: resolvedRef.provider,
+        defaultModel: `${defaultProvider}/${resolvedRef.model}`,
         conversationId,
         sessionOverride,
       };
@@ -1027,12 +1028,13 @@ chatRoutes.post(
 
       // Add runtime info (model awareness like OpenClaw)
       const sessionOverride = getSessionModel(conversationId);
-      const resolvedModel = sessionOverride || body.model || 'sonnet';
-      const modelAlias = MODEL_ALIASES[resolvedModel as keyof typeof MODEL_ALIASES];
+      // Use the auto-selected default provider when no model specified
+      const defaultProvider = aiProvider.getDefaultProvider();
+      const resolvedRef = aiProvider.resolveModel(sessionOverride || body.model || defaultProvider);
       context.runtime = {
-        model: modelAlias ? `${modelAlias.provider}/${modelAlias.model}` : resolvedModel,
-        provider: modelAlias?.provider || 'anthropic',
-        defaultModel: 'anthropic/claude-sonnet-4-5',
+        model: `${resolvedRef.provider}/${resolvedRef.model}`,
+        provider: resolvedRef.provider,
+        defaultModel: `${defaultProvider}/${resolvedRef.model}`,
         conversationId,
         sessionOverride,
       };

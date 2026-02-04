@@ -1,6 +1,6 @@
 import { type ReactNode, useState, useMemo, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ListTodo, FileText, Settings, Bot, Search, Coins, Menu, X, ChevronLeft, ChevronRight, Webhook, AlertTriangle, PanelLeftClose, PanelLeft, Command, Zap, Ticket, Sparkles, FolderKanban, Users } from 'lucide-react';
+import { LayoutDashboard, ListTodo, FileText, Settings, Bot, Search, Coins, Menu, X, ChevronLeft, ChevronRight, Webhook, AlertTriangle, PanelLeftClose, PanelLeft, Command, Zap, Ticket, Sparkles, FolderKanban, Users, Clock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
 import { CommandPalette, openCommandPalette } from '@/components/shared/CommandPalette';
@@ -31,6 +31,7 @@ const contentNav = [
 ];
 
 const systemNav = [
+  { name: 'Cron Jobs', href: '/cron', icon: Clock },
   { name: 'Gateway', href: '/gateway', icon: Zap },
   { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'Webhooks', href: '/webhooks', icon: Webhook },
@@ -408,25 +409,31 @@ export function RootLayout({ children }: RootLayoutProps) {
               )}
               <NavItem
                 item={systemNav[0]}
+                isActive={location.pathname === '/cron'}
+                collapsed={collapsed}
+                onClick={() => setSidebarOpen(false)}
+              />
+              <NavItem
+                item={systemNav[1]}
                 isActive={location.pathname === '/gateway'}
                 collapsed={collapsed}
                 onClick={() => setSidebarOpen(false)}
                 shortcut="⌘9"
               />
               <NavItem
-                item={systemNav[1]}
+                item={systemNav[2]}
                 isActive={location.pathname === '/agents'}
                 collapsed={collapsed}
                 onClick={() => setSidebarOpen(false)}
               />
               <NavItem
-                item={systemNav[2]}
+                item={systemNav[3]}
                 isActive={location.pathname === '/webhooks'}
                 collapsed={collapsed}
                 onClick={() => setSidebarOpen(false)}
               />
               <NavItem
-                item={systemNav[3]}
+                item={systemNav[4]}
                 isActive={location.pathname === '/settings' || location.pathname.startsWith('/settings/')}
                 collapsed={collapsed}
                 onClick={() => setSidebarOpen(false)}

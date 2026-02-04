@@ -70,8 +70,8 @@ export function ProjectDetail() {
     enabled: !!id,
   });
 
-  // Extract project from the response (API wraps it in { project: ... })
-  const project = projectData?.project ?? projectData;
+  // projectData is already the Project (API unwraps it)
+  const project = projectData;
 
   const startSprint = useMutation({
     mutationFn: (sprintId: string) => api.projects.sprints.start(id!, sprintId),

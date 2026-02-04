@@ -21,3 +21,4 @@ export { userRoutes } from './users.js';
 export { default as toolsRoutes } from './tools.js';
 export { setupRoutes } from './setup.js';
 export { labelsRoutes } from './labels.js';
+export { cronRoutes } from './cron.js';

@@ -90,6 +90,9 @@ export type ToolCategory =
   | 'web'          // Web fetch, search
   | 'data'         // Database, API calls
   | 'system'       // System info, env
+  | 'glinr'        // GLINR task/ticket operations
+  | 'memory'       // Conversation memory management
+  | 'browser'      // Browser automation (Playwright)
   | 'custom';      // User-defined
 
 export interface ToolExample {

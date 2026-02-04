@@ -28,6 +28,10 @@ export const TicketStatus = z.enum([
 ]);
 export type TicketStatus = z.infer<typeof TicketStatus>;
 
+// State groups for custom workflow states (maps custom states to core groups)
+export const StateGroup = z.enum(['backlog', 'unstarted', 'started', 'completed', 'cancelled']);
+export type StateGroup = z.infer<typeof StateGroup>;
+
 export const ExternalPlatform = z.enum(['github', 'linear', 'jira', 'plane', 'monday']);
 export type ExternalPlatform = z.infer<typeof ExternalPlatform>;
 

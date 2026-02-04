@@ -82,6 +82,18 @@ statsRoutes.get('/dashboard', async (c) => {
       }, {} as Record<string, number>),
     };
 
+    // Helper to safely parse date
+    const safeGetDateStr = (dateValue: any): string | null => {
+      if (!dateValue) return null;
+      try {
+        const date = new Date(dateValue);
+        if (isNaN(date.getTime())) return null;
+        return date.toISOString().split('T')[0];
+      } catch {
+        return null;
+      }
+    };
+
     // Velocity data - tasks per day for last 30 days
     const velocityData: Array<{ date: string; created: number; completed: number }> = [];
     for (let i = 29; i >= 0; i--) {
@@ -90,13 +102,13 @@ statsRoutes.get('/dashboard', async (c) => {
       const dateStr = date.toISOString().split('T')[0];
 
       const created = allTasks.filter(t => {
-        const taskDate = new Date(t.createdAt).toISOString().split('T')[0];
+        const taskDate = safeGetDateStr(t.createdAt);
         return taskDate === dateStr;
       }).length;
 
       const completed = allTasks.filter(t => {
         if (!t.completedAt) return false;
-        const taskDate = new Date(t.completedAt).toISOString().split('T')[0];
+        const taskDate = safeGetDateStr(t.completedAt);
         return taskDate === dateStr;
       }).length;
 
@@ -116,13 +128,13 @@ statsRoutes.get('/dashboard', async (c) => {
       const dateStr = date.toISOString().split('T')[0];
 
       const created = allTickets.filter(t => {
-        const ticketDate = new Date(t.createdAt).toISOString().split('T')[0];
+        const ticketDate = safeGetDateStr(t.createdAt);
         return ticketDate === dateStr;
       }).length;
 
       const completed = allTickets.filter(t => {
         if (!t.completedAt) return false;
-        const ticketDate = new Date(t.completedAt).toISOString().split('T')[0];
+        const ticketDate = safeGetDateStr(t.completedAt);
         return ticketDate === dateStr;
       }).length;
 

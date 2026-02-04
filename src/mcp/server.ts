@@ -28,6 +28,7 @@ import {
   CallToolRequestSchema,
   type CallToolResult,
 } from '@modelcontextprotocol/sdk/types.js';
+import { BROWSER_TOOLS, handleBrowserTool } from './browser-tools.js';
 
 // MCP Server configuration
 const GLINR_API_URL = process.env.GLINR_API_URL || 'http://localhost:3000';
@@ -349,9 +350,12 @@ const TOOLS = [
   },
 ];
 
+// Combine all tools
+const ALL_TOOLS = [...TOOLS, ...BROWSER_TOOLS];
+
 // Handle tool listing
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: TOOLS };
+  return { tools: ALL_TOOLS };
 });
 
 // Handle tool calls
@@ -394,11 +398,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToo
       case 'glinr__assign_ticket':
         return await handleAssignTicket(args as unknown as AssignTicketArgs);
 
-      default:
+      default: {
+        // Try browser tools
+        const browserResult = await handleBrowserTool(name, args);
+        if (browserResult) {
+          return browserResult;
+        }
+
         return {
           content: [{ type: 'text', text: `Unknown tool: ${name}` }],
           isError: true,
         };
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

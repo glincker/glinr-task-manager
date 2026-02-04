@@ -36,11 +36,22 @@ interface ImportExecuteRequest {
   color?: string;
   importIterations: boolean;
   enableSync: boolean;
+  preserveTimestamps: boolean;
+  selectedItemIds?: string[]; // Only import selected items
   fieldMappings: {
     status: Record<string, string>;
     priority: Record<string, string>;
     type: Record<string, string>;
   };
+}
+
+interface DryRunRequest {
+  fieldMappings: {
+    status: Record<string, string>;
+    priority: Record<string, string>;
+    type: Record<string, string>;
+  };
+  selectedItemIds?: string[];
 }
 
 // Token storage helpers
@@ -272,6 +283,148 @@ importRoutes.get('/github/projects/:projectId/preview', async (c) => {
 });
 
 /**
+ * POST /api/import/github/projects/:projectId/dry-run
+ * Dry run - show what would be created without executing
+ */
+importRoutes.post('/github/projects/:projectId/dry-run', async (c) => {
+  const projectId = c.req.param('projectId');
+
+  try {
+    const body: DryRunRequest = await c.req.json();
+    const { fieldMappings, selectedItemIds } = body;
+
+    const token = await getStoredToken();
+    if (!token) {
+      return c.json({ error: 'No GitHub token stored' }, 401);
+    }
+
+    const preview = await getGitHubProjectPreview(token, projectId);
+
+    // Filter to selected items if specified
+    const itemsToImport = selectedItemIds
+      ? preview.items.filter((item) => selectedItemIds.includes(item.id))
+      : preview.items;
+
+    // Analyze each item
+    const analyzedItems = itemsToImport.map((item) => {
+      const conflicts: Array<{
+        field: string;
+        severity: 'error' | 'warning' | 'info';
+        message: string;
+        suggestion?: string;
+      }> = [];
+
+      // Check status mapping
+      const statusMapped = !item.status || !!fieldMappings.status[item.status];
+      if (!statusMapped) {
+        conflicts.push({
+          field: 'status',
+          severity: 'warning',
+          message: `Status "${item.status}" is not mapped`,
+          suggestion: 'Will use default: backlog',
+        });
+      }
+
+      // Check priority mapping
+      const priorityMapped = !item.priority || !!fieldMappings.priority[item.priority];
+      if (!priorityMapped) {
+        conflicts.push({
+          field: 'priority',
+          severity: 'warning',
+          message: `Priority "${item.priority}" is not mapped`,
+          suggestion: 'Will use default: medium',
+        });
+      }
+
+      // Check type mapping
+      const typeMapped = !item.type || !!fieldMappings.type[item.type];
+      if (!typeMapped) {
+        conflicts.push({
+          field: 'type',
+          severity: 'warning',
+          message: `Type "${item.type}" is not mapped`,
+          suggestion: 'Will use default: task',
+        });
+      }
+
+      return {
+        id: item.id,
+        source: item,
+        target: {
+          title: item.title,
+          description: item.body || '',
+          status: item.status ? fieldMappings.status[item.status] || 'backlog' : 'backlog',
+          priority: item.priority ? fieldMappings.priority[item.priority] || 'medium' : 'medium',
+          type: item.type ? fieldMappings.type[item.type] || 'task' : 'task',
+          labels: item.labels,
+          assignee: item.assignees[0] || null,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        },
+        mappingStatus: {
+          status: statusMapped ? 'mapped' : 'unmapped',
+          priority: priorityMapped ? 'mapped' : 'unmapped',
+          type: typeMapped ? 'mapped' : 'unmapped',
+        },
+        conflicts,
+      };
+    });
+
+    // Calculate unmapped values
+    const unmappedValues = {
+      status: [] as string[],
+      priority: [] as string[],
+      type: [] as string[],
+    };
+
+    const seenStatus = new Set<string>();
+    const seenPriority = new Set<string>();
+    const seenType = new Set<string>();
+
+    for (const item of itemsToImport) {
+      if (item.status && !fieldMappings.status[item.status] && !seenStatus.has(item.status)) {
+        unmappedValues.status.push(item.status);
+        seenStatus.add(item.status);
+      }
+      if (item.priority && !fieldMappings.priority[item.priority] && !seenPriority.has(item.priority)) {
+        unmappedValues.priority.push(item.priority);
+        seenPriority.add(item.priority);
+      }
+      if (item.type && !fieldMappings.type[item.type] && !seenType.has(item.type)) {
+        unmappedValues.type.push(item.type);
+        seenType.add(item.type);
+      }
+    }
+
+    const warningCount = analyzedItems.filter((i) => i.conflicts.some((c) => c.severity === 'warning')).length;
+    const errorCount = analyzedItems.filter((i) => i.conflicts.some((c) => c.severity === 'error')).length;
+
+    return c.json({
+      success: true,
+      summary: {
+        totalItems: preview.items.length,
+        itemsToCreate: itemsToImport.length,
+        itemsToSkip: preview.items.length - itemsToImport.length,
+        iterations: preview.iterations.length,
+        conflicts: {
+          errors: errorCount,
+          warnings: warningCount,
+        },
+        unmappedValues,
+      },
+      items: analyzedItems,
+      iterations: preview.iterations,
+      fieldMappings,
+    });
+  } catch (error) {
+    console.error('[Import] Dry run error:', error);
+    return c.json({
+      error: error instanceof Error ? error.message : 'Dry run failed',
+    }, 500);
+  }
+});
+
+/**
  * POST /api/import/github/projects/:projectId/execute
  * Execute the import
  */
@@ -288,6 +441,8 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
       color,
       importIterations,
       enableSync,
+      preserveTimestamps = true,
+      selectedItemIds,
       fieldMappings,
     } = body;
 
@@ -305,6 +460,11 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
 
     // Get full project data
     const preview = await getGitHubProjectPreview(token, githubProjectId);
+
+    // Filter to selected items if specified
+    const itemsToImport = selectedItemIds
+      ? preview.items.filter((item) => selectedItemIds.includes(item.id))
+      : preview.items;
 
     // Create GLINR project
     const glinrProject = await createProject({
@@ -343,10 +503,11 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
     if (!db) throw new Error('Database not initialized');
 
     const createdTickets: any[] = [];
+    const now = new Date();
+    const importedAt = now;
 
-    for (const item of preview.items) {
+    for (const item of itemsToImport) {
       const ticketId = randomUUID();
-      const now = new Date();
 
       // Map fields using provided mappings
       const status = mapField(item.status, fieldMappings.status, 'backlog');
@@ -362,6 +523,14 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
         .limit(1);
       const nextSequence = ((sequenceResult[0]?.sequence as number) || 0) + 1;
 
+      // Preserve original timestamps or use current time
+      const createdAt = preserveTimestamps && item.createdAt
+        ? new Date(item.createdAt)
+        : now;
+      const updatedAt = preserveTimestamps && item.updatedAt
+        ? new Date(item.updatedAt)
+        : now;
+
       await db.insert(tickets).values({
         id: ticketId,
         sequence: nextSequence,
@@ -373,9 +542,9 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
         status,
         labels: item.labels,
         assignee: item.assignees[0] || null,
-        createdAt: now,
-        updatedAt: now,
-        createdBy: 'import',
+        createdAt,
+        updatedAt,
+        createdBy: 'github-import', // Mark as imported
       } as any);
 
       createdTickets.push({
@@ -383,9 +552,11 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
         sequence: nextSequence,
         title: item.title,
         githubUrl: item.url,
+        githubIssueNumber: item.issueNumber,
+        originalCreatedAt: item.createdAt,
       });
 
-      // Create external link for the ticket
+      // Create external link for the ticket (for bidirectional sync)
       if (item.issueNumber && item.repoOwner && item.repoName) {
         await db.insert(await import('../storage/schema.js').then(m => m.ticketExternalLinks)).values({
           id: randomUUID(),
@@ -395,7 +566,7 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
           externalUrl: item.url,
           syncEnabled: enableSync,
           syncDirection: 'bidirectional',
-          createdAt: now,
+          createdAt: importedAt,
         });
       }
     }

@@ -92,6 +92,31 @@ export interface TaskEvent {
 // Summary Types
 // ================================
 
+// File change record
+export interface FileChange {
+  path: string;
+  action: 'created' | 'modified' | 'deleted' | 'renamed';
+  linesAdded?: number;
+  linesRemoved?: number;
+  oldPath?: string;
+}
+
+// Decision made during task execution
+export interface Decision {
+  description: string;
+  reason?: string;
+  alternatives?: string[];
+  confidence?: number;
+}
+
+// Blocker or issue encountered
+export interface Blocker {
+  description: string;
+  severity: 'info' | 'warning' | 'error' | 'critical';
+  resolved?: boolean;
+  resolution?: string;
+}
+
 export interface Summary {
   id: string;
   taskId?: string;
@@ -102,9 +127,9 @@ export interface Summary {
   whatChanged: string;
   whyChanged?: string;
   howChanged?: string;
-  filesChanged: string[];
-  decisions: string[];
-  blockers: string[];
+  filesChanged: (string | FileChange)[];
+  decisions: (string | Decision)[];
+  blockers: (string | Blocker)[];
   artifacts: string[];
   createdAt: string;
 }
@@ -131,6 +156,21 @@ export interface SummaryStats {
 export type TicketStatus = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
 export type TicketType = 'bug' | 'feature' | 'enhancement' | 'task' | 'documentation' | 'epic' | 'story' | 'subtask';
 export type TicketPriority = 'urgent' | 'high' | 'medium' | 'low' | 'none';
+export type StateGroup = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
+
+export interface State {
+  id: string;
+  projectId: string | null;
+  name: string;
+  slug: string;
+  color: string;
+  description: string | null;
+  stateGroup: StateGroup;
+  isDefault: boolean;
+  sequence: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface Ticket {
   id: string;
@@ -213,6 +253,28 @@ export interface TicketCategorization {
   priority: TicketPriority;
   labels: string[];
   confidence: number;
+}
+
+export interface TicketChecklistItem {
+  id: string;
+  checklistId: string;
+  content: string;
+  completed: boolean;
+  assignee?: string;
+  dueDate?: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TicketChecklist {
+  id: string;
+  ticketId: string;
+  title: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  items?: TicketChecklistItem[];
 }
 
 export interface TicketSuggestion {
@@ -341,6 +403,15 @@ export interface Conversation {
   updatedAt: string;
 }
 
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  result?: unknown;
+  status?: 'pending' | 'running' | 'completed' | 'error';
+  error?: string;
+}
+
 export interface ConversationMessage {
   id: string;
   conversationId: string;
@@ -354,6 +425,7 @@ export interface ConversationMessage {
     total: number;
   };
   cost?: number;
+  toolCalls?: ToolCall[];
   createdAt: string;
 }
 
@@ -885,5 +957,115 @@ export interface DashboardStats {
       created: number;
       completed: number;
     };
+  };
+}
+
+// ================================
+// Cron / Scheduled Jobs Types
+// ================================
+
+export type JobType = 'http' | 'tool' | 'script' | 'message';
+export type JobStatus = 'active' | 'paused' | 'completed' | 'failed' | 'archived';
+export type RunStatus = 'pending' | 'running' | 'success' | 'failure' | 'error' | 'timeout' | 'cancelled';
+
+export interface ScheduledJob {
+  id: string;
+  name: string;
+  description?: string;
+  cronExpression?: string;
+  intervalMs?: number;
+  runAt?: string;
+  timezone: string;
+  jobType: JobType;
+  payload: Record<string, unknown>;
+  status: JobStatus;
+  labels: string[];
+  userId?: string;
+  projectId?: string;
+  createdBy: 'human' | 'ai';
+  lastRunAt?: string;
+  lastRunStatus?: string;
+  lastRunError?: string;
+  nextRunAt?: string;
+  runCount: number;
+  successCount: number;
+  failureCount: number;
+  maxRuns?: number;
+  maxFailures?: number;
+  expiresAt?: string;
+  archivedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JobRunHistory {
+  id: string;
+  jobId: string;
+  startedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+  status: RunStatus;
+  output?: string;
+  error?: string;
+  triggeredBy: 'schedule' | 'manual' | 'event';
+}
+
+export interface CronStats {
+  total: number;
+  active: number;
+  paused: number;
+  completed: number;
+  failed: number;
+  archived: number;
+  totalRuns: number;
+  totalSuccesses: number;
+  totalFailures: number;
+  byType: Record<JobType, number>;
+}
+
+export interface CreateJobInput {
+  name: string;
+  description?: string;
+  cronExpression?: string;
+  intervalMs?: number;
+  runAt?: string;
+  timezone?: string;
+  jobType: JobType;
+  payload: Record<string, unknown>;
+  labels?: string[];
+  projectId?: string;
+  maxRuns?: number;
+  maxFailures?: number;
+  expiresAt?: string;
+}
+
+export interface UpdateJobInput {
+  name?: string;
+  description?: string;
+  cronExpression?: string;
+  intervalMs?: number;
+  runAt?: string;
+  timezone?: string;
+  payload?: Record<string, unknown>;
+  labels?: string[];
+  status?: 'active' | 'paused';
+  maxRuns?: number;
+  maxFailures?: number;
+  expiresAt?: string;
+}
+
+export interface JobsResponse {
+  jobs: ScheduledJob[];
+  total: number;
+}
+
+export interface JobHistoryResponse {
+  history: JobRunHistory[];
+  job: {
+    id: string;
+    name: string;
+    runCount: number;
+    successCount: number;
+    failureCount: number;
   };
 }

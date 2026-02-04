@@ -6,20 +6,52 @@ import type { TaskFilterOptions } from '../storage/adapter.js';
 
 const tasks = new Hono();
 
-// List tasks
-tasks.get('/', (c) => {
+// List tasks - reads from database for consistency with dashboard
+tasks.get('/', async (c) => {
+  const storage = getStorage();
   const status = c.req.query('status');
   const limit = parseInt(c.req.query('limit') || '50');
   const offset = parseInt(c.req.query('offset') || '0');
 
+  // Use database query for persistence and consistency
+  if (storage.getTasksFiltered) {
+    try {
+      const options: TaskFilterOptions = {
+        limit,
+        offset,
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+      };
+      if (status) {
+        options.status = status;
+      }
+
+      const result = await storage.getTasksFiltered(options);
+      return c.json({
+        tasks: result.tasks,
+        total: result.total,
+        count: result.tasks.length,
+        limit,
+        offset,
+      });
+    } catch (error) {
+      console.error('[API] Error loading tasks from DB, falling back to in-memory:', error);
+    }
+  }
+
+  // Fallback to in-memory queue
   const taskList = getTasks({
     status: status as any,
     limit,
     offset,
   });
 
+  // Get total count (without limit)
+  const allTasks = getTasks({ status: status as any });
+
   return c.json({
     tasks: taskList,
+    total: allTasks.length,
     count: taskList.length,
     limit,
     offset,

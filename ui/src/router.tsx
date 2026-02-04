@@ -14,6 +14,7 @@ import { GatewayDashboard } from '@/features/gateway';
 import { TicketList, TicketDetail, TicketBoard } from '@/features/tickets';
 import { ChatView } from '@/features/chat';
 import { ProjectList, ProjectDetail } from '@/features/projects';
+import { CronDashboard } from '@/features/cron';
 import { LoginPage, SignupPage, AuthGuard, GuestGuard } from '@/features/auth';
 import { SetupWizard } from '@/features/setup/views/SetupWizard';
 import { OnboardingPage } from '@/features/setup/views/OnboardingPage';
@@ -121,6 +122,10 @@ const router = createBrowserRouter([
   {
     path: '/projects/:id',
     element: <AuthGuard><RootLayout><ProjectDetail /></RootLayout></AuthGuard>,
+  },
+  {
+    path: '/cron',
+    element: <AuthGuard><RootLayout><CronDashboard /></RootLayout></AuthGuard>,
   },
   // Admin routes
   {

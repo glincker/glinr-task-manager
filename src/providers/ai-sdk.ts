@@ -477,6 +477,26 @@ interface ProviderInstances {
   copilot?: ReturnType<typeof createOpenAI>; // GitHub Copilot proxy uses OpenAI-compatible API
 }
 
+// Provider priority for auto-selection (prefer cloud providers over local)
+const PROVIDER_PRIORITY: ProviderType[] = [
+  'anthropic',  // Claude - best for tools/reasoning
+  'openai',     // GPT-4 - excellent all-around
+  'azure',      // Azure OpenAI - enterprise
+  'google',     // Gemini - good multimodal
+  'groq',       // Fast inference
+  'xai',        // Grok
+  'mistral',    // Mistral
+  'deepseek',   // DeepSeek R1
+  'together',   // Together AI
+  'fireworks',  // Fireworks
+  'cerebras',   // Cerebras
+  'openrouter', // OpenRouter (many models)
+  'cohere',     // Cohere
+  'perplexity', // Perplexity (search-focused)
+  'copilot',    // GitHub Copilot proxy
+  'ollama',     // Local - lowest priority (often doesn't support tools)
+];
+
 class AIProviderManager {
   private providers: ProviderInstances = {};
   private configs: Map<ProviderType, ProviderConfig> = new Map();
@@ -485,6 +505,8 @@ class AIProviderManager {
   constructor() {
     // Initialize with environment variables
     this.initFromEnv();
+    // Auto-select best provider as default
+    this.autoSelectDefaultProvider();
   }
 
   private initFromEnv(): void {
@@ -837,6 +859,28 @@ class AIProviderManager {
     return this.defaultProvider;
   }
 
+  /**
+   * Auto-select the best configured provider as default.
+   * Prioritizes cloud providers (that support tools) over Ollama.
+   */
+  autoSelectDefaultProvider(): void {
+    for (const provider of PROVIDER_PRIORITY) {
+      const config = this.configs.get(provider);
+      if (config?.enabled) {
+        // For providers that need API keys, verify they have one
+        if (provider !== 'ollama' && provider !== 'copilot') {
+          if (!config.apiKey && !config.baseUrl) continue;
+        }
+        this.defaultProvider = provider;
+        logger.info(`[AIProvider] Auto-selected default provider: ${provider}`);
+        return;
+      }
+    }
+    // Fallback to ollama if nothing else is configured
+    this.defaultProvider = 'ollama';
+    logger.info('[AIProvider] Using ollama as default (no cloud providers configured)');
+  }
+
   isConfigured(type: ProviderType): boolean {
     const config = this.configs.get(type);
     return config?.enabled ?? false;
@@ -892,6 +936,11 @@ class AIProviderManager {
         loaded++;
       }
 
+      // Re-evaluate default provider after loading saved configs
+      if (loaded > 0) {
+        this.autoSelectDefaultProvider();
+      }
+
       return loaded;
     } catch (error) {
       logger.error('[AI] Failed to load saved configs:', error instanceof Error ? error : undefined);
@@ -925,8 +974,11 @@ class AIProviderManager {
       return { provider: catalogModel.provider, model: catalogModel.id };
     }
 
-    // Default to ollama with the given model name
-    return { provider: 'ollama', model: modelOrAlias };
+    // Default to the auto-selected default provider
+    // Use the provider's default model if configured, otherwise use the given model name
+    const defaultConfig = this.configs.get(this.defaultProvider);
+    const defaultModel = defaultConfig?.defaultModel || modelOrAlias;
+    return { provider: this.defaultProvider, model: defaultModel };
   }
 
   getModel(provider: ProviderType, modelId: string): LanguageModel {

@@ -22,6 +22,7 @@ import type {
   ToolExecutionResult,
 } from '../providers/ai-sdk.js';
 import { logger } from '../utils/logger.js';
+import { SAFE_BROWSER_TOOL_NAMES } from '../browser/index.js';
 
 // =============================================================================
 // Types
@@ -362,6 +363,8 @@ export function getDefaultChatTools(): NativeToolDefinition[] {
     'git_diff',
     'git_log',
     'web_fetch',
+    // Browser tools (safe ones from centralized definition)
+    ...SAFE_BROWSER_TOOL_NAMES,
   ];
 
   return getChatTools(safeTools);

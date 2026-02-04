@@ -35,7 +35,7 @@ import {
 import { toast } from 'sonner';
 import { api } from '@/core/api/client';
 import { CreateProjectModal } from '../components/CreateProjectModal';
-import { ImportWizard } from '../components/ImportWizard';
+import { ImportWizardEnhanced as ImportWizard } from '../components/ImportWizardEnhanced';
 import { ProjectIcon } from '../components/ProjectIcon';
 
 // Project stats component with lazy loading

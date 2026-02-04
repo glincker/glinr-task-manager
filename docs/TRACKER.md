@@ -1,7 +1,27 @@
 # GLINR Development Tracker
 
-> **Last Updated:** 2026-02-02T18:30:00Z
+> **Last Updated:** 2026-02-03T06:45:00Z
 > **Active Agents:** Claude Opus (Main)
+
+---
+
+## Recently Completed
+
+### GitHub Projects Import Wizard Enhancement (Phase 12) ✅
+- [x] Enhanced import wizard (6-step modal with preview)
+- [x] Field mapping UI (visual source → target mapping)
+- [x] Dry-run API endpoint with conflict detection
+- [x] TanStack Table for interactive item selection
+- [x] Timestamp preservation (backdate from GitHub)
+- [x] Selective import with checkbox filtering
+- [x] Test suite (33 tests passing - unit + E2E)
+
+### Tool Execution SSE Streaming (Phase 13) ✅
+- [x] SSE streaming endpoint for tool execution (`/tools/execute/stream`)
+- [x] Session output streaming (`/tools/sessions/:id/stream`)
+- [x] Real-time progress updates via EventSource
+- [x] Connection management with cleanup
+- [x] Test suite (10 tests passing)
 
 ---
 

@@ -1,6 +1,6 @@
 # GLINR Task Manager - Roadmap
 
-> **Last Updated:** 2026-02-02
+> **Last Updated:** 2026-02-03
 > **For AI Agents:** Pick any unchecked item, validate, implement, and PR.
 
 ---
@@ -48,7 +48,7 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 | 10. Multi-Model AI Chat | Complete | 100% |
 | 11. Projects & Scrum | Complete | 100% |
 | 12. GitHub Projects Import | Complete | 100% |
-| 13. Tool Execution Engine | In Progress | 85% |
+| 13. Tool Execution Engine | In Progress | 90% |
 | 14. UI Dashboard & Polish | Complete | 98% |
 | 15. CLI & Unified Control | Partial | 70% |
 | 16. DevOps | Not Started | 0% |
@@ -135,9 +135,15 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 ### GitHub Projects Import (Phase 12)
 - [x] GitHub token storage and validation
 - [x] GraphQL client for Projects V2
-- [x] Import wizard (5-step modal)
-- [x] Field mapping (status, priority, type)
+- [x] Import wizard (6-step modal with enhanced UX)
+- [x] Field mapping UI (visual source → target mapping)
+- [x] Dry-run preview with conflict detection
+- [x] Interactive TanStack Table for item selection
+- [x] Timestamp preservation (backdate from GitHub)
+- [x] Selective import (checkbox filtering)
+- [x] External link creation with GitHub references
 - [x] Sync integration with external links
+- [x] Comprehensive test coverage (33 tests - unit + E2E)
 
 ### Tool Execution Engine (Phase 13)
 - [x] Tool registry with Zod validation
@@ -148,7 +154,7 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 - [x] Audit logging with filters
 - [x] Rate limiting per user/conversation
 - [x] Chat integration with native tool calling
-- [ ] Output streaming (SSE)
+- [x] Output streaming (SSE) - `/tools/execute/stream` and `/tools/sessions/:id/stream`
 - [ ] Secrets detection in output
 - [ ] Interactive PTY support
 
@@ -186,10 +192,10 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 
 ### Tool Execution Gaps
 - [ ] PTY support for interactive commands
-- [ ] Output streaming via SSE
+- [x] Output streaming via SSE (complete)
 - [ ] Secrets detection in output
 - [ ] Security UI for mode/allowlist management
-- [ ] Tool approval dialog in chat
+- [x] Tool approval dialog in chat (component exists)
 
 ### Remaining Integrations
 - [ ] Slack slash commands

@@ -336,6 +336,24 @@ export const projectSequence = sqliteTable('project_sequence', {
 });
 
 /**
+ * States Table - Custom workflow states per project
+ * Maps to core StateGroups: backlog, unstarted, started, completed, cancelled
+ */
+export const states = sqliteTable('states', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id').references(() => projects.id),
+  name: text('name').notNull(),
+  slug: text('slug').notNull(),
+  color: text('color').notNull().default('#6B7280'),
+  description: text('description'),
+  stateGroup: text('state_group').notNull(), // backlog, unstarted, started, completed, cancelled
+  isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+  sequence: integer('sequence').notNull().default(65535),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+/**
  * Sprints Table - Time-boxed iterations within projects
  */
 export const sprints = sqliteTable('sprints', {
@@ -620,4 +638,150 @@ export const githubCommentSyncs = sqliteTable('github_comment_syncs', {
 
   // Timestamps
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+// =============================================================================
+// CRON / SCHEDULED JOBS SYSTEM
+// =============================================================================
+
+/**
+ * Scheduled Jobs Table - Cron jobs, intervals, one-shot, and event-triggered jobs
+ */
+export const scheduledJobs = sqliteTable('scheduled_jobs', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+
+  // Schedule configuration (one of these must be set)
+  cronExpression: text('cron_expression'),     // "*/5 * * * *"
+  intervalMs: integer('interval_ms'),          // 300000 (5 minutes)
+  runAt: integer('run_at', { mode: 'timestamp' }), // One-shot: specific datetime
+  timezone: text('timezone').notNull().default('UTC'),
+
+  // Event triggers (for event-driven jobs)
+  eventTrigger: text('event_trigger', { mode: 'json' }).$type<{
+    type: 'webhook' | 'ticket' | 'file' | 'github';
+    config: Record<string, any>;
+  } | null>(),
+
+  // Job type and payload
+  jobType: text('job_type').notNull(), // 'http' | 'tool' | 'script' | 'message'
+  payload: text('payload', { mode: 'json' }).$type<Record<string, any>>().notNull(),
+  templateId: text('template_id'),
+
+  // Labels for organization
+  labels: text('labels', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+
+  // Delivery configuration
+  delivery: text('delivery', { mode: 'json' }).$type<{
+    channels: Array<{
+      type: 'slack' | 'webhook' | 'email';
+      target: string;
+      onSuccess?: boolean;
+      onFailure?: boolean;
+    }>;
+  } | null>(),
+
+  // Status
+  status: text('status').notNull().default('active'), // active, paused, completed, failed, archived
+
+  // Ownership
+  userId: text('user_id'),
+  projectId: text('project_id'),
+  createdBy: text('created_by').notNull().default('human'), // human, ai
+
+  // Run tracking
+  lastRunAt: integer('last_run_at', { mode: 'timestamp' }),
+  lastRunStatus: text('last_run_status'),
+  lastRunError: text('last_run_error'),
+  lastRunDurationMs: integer('last_run_duration_ms'),
+  nextRunAt: integer('next_run_at', { mode: 'timestamp' }),
+  runCount: integer('run_count').notNull().default(0),
+  successCount: integer('success_count').notNull().default(0),
+  failureCount: integer('failure_count').notNull().default(0),
+
+  // Limits
+  maxRuns: integer('max_runs'),
+  maxFailures: integer('max_failures'),
+  expiresAt: integer('expires_at', { mode: 'timestamp' }),
+
+  // Retry policy
+  retryOnFailure: integer('retry_on_failure', { mode: 'boolean' }).notNull().default(true),
+  retryDelayMs: integer('retry_delay_ms').default(60000),
+  retryBackoffMultiplier: integer('retry_backoff_multiplier').default(2),
+  retryMaxDelayMs: integer('retry_max_delay_ms').default(3600000),
+  currentRetryCount: integer('current_retry_count').default(0),
+  deleteOnComplete: integer('delete_on_complete', { mode: 'boolean' }).default(false),
+
+  // Timestamps
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  archivedAt: integer('archived_at', { mode: 'timestamp' }), // Soft delete timestamp
+});
+
+/**
+ * Job Run History Table - Execution history for scheduled jobs
+ */
+export const jobRunHistory = sqliteTable('job_run_history', {
+  id: text('id').primaryKey(),
+  jobId: text('job_id').notNull().references(() => scheduledJobs.id, { onDelete: 'cascade' }),
+
+  // Execution details
+  startedAt: integer('started_at', { mode: 'timestamp' }).notNull(),
+  completedAt: integer('completed_at', { mode: 'timestamp' }),
+  durationMs: integer('duration_ms'),
+
+  // Result
+  status: text('status').notNull(), // pending, running, success, failure
+  output: text('output'),
+  error: text('error'),
+
+  // Trigger info
+  triggeredBy: text('triggered_by').notNull().default('schedule'), // schedule, manual, event
+  eventData: text('event_data', { mode: 'json' }).$type<Record<string, any>>(),
+});
+
+/**
+ * Job Templates Table - Reusable job configurations
+ */
+export const jobTemplates = sqliteTable('job_templates', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  icon: text('icon').default('zap'),
+  category: text('category').notNull().default('custom'), // sync, report, maintenance, notification, custom
+
+  // Ownership (null = global/built-in)
+  userId: text('user_id'),
+  projectId: text('project_id'),
+
+  // Job configuration
+  jobType: text('job_type').notNull(), // http, tool, script, message
+  payloadTemplate: text('payload_template', { mode: 'json' }).$type<Record<string, any>>().notNull(),
+
+  // Suggested schedule
+  suggestedCron: text('suggested_cron'),
+  suggestedIntervalMs: integer('suggested_interval_ms'),
+
+  // Default policies
+  defaultRetryPolicy: text('default_retry_policy', { mode: 'json' }).$type<{
+    enabled: boolean;
+    initialDelayMs: number;
+    backoffMultiplier: number;
+    maxDelayMs: number;
+    maxRetries: number;
+  }>(),
+  defaultDelivery: text('default_delivery', { mode: 'json' }).$type<{
+    channels: Array<{
+      type: 'slack' | 'webhook' | 'email';
+      target: string;
+      onSuccess?: boolean;
+      onFailure?: boolean;
+    }>;
+  }>(),
+
+  // Metadata
+  isBuiltIn: integer('is_built_in', { mode: 'boolean' }).default(false),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`CURRENT_TIMESTAMP`),
 });

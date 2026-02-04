@@ -503,6 +503,108 @@ export class LibSQLAdapter implements StorageAdapter {
       )
     `);
 
+    // === CRON / SCHEDULED JOBS TABLES ===
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS scheduled_jobs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        cron_expression TEXT,
+        interval_ms INTEGER,
+        run_at INTEGER,
+        timezone TEXT NOT NULL DEFAULT 'UTC',
+        event_trigger TEXT,
+        job_type TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        template_id TEXT,
+        labels TEXT NOT NULL DEFAULT '[]',
+        delivery TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        user_id TEXT,
+        project_id TEXT,
+        created_by TEXT NOT NULL DEFAULT 'human',
+        last_run_at INTEGER,
+        last_run_status TEXT,
+        last_run_error TEXT,
+        last_run_duration_ms INTEGER,
+        next_run_at INTEGER,
+        run_count INTEGER NOT NULL DEFAULT 0,
+        success_count INTEGER NOT NULL DEFAULT 0,
+        failure_count INTEGER NOT NULL DEFAULT 0,
+        max_runs INTEGER,
+        max_failures INTEGER,
+        expires_at INTEGER,
+        retry_on_failure INTEGER NOT NULL DEFAULT 1,
+        retry_delay_ms INTEGER DEFAULT 60000,
+        retry_backoff_multiplier INTEGER DEFAULT 2,
+        retry_max_delay_ms INTEGER DEFAULT 3600000,
+        current_retry_count INTEGER DEFAULT 0,
+        delete_on_complete INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        archived_at INTEGER
+      )
+    `);
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS job_run_history (
+        id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL REFERENCES scheduled_jobs(id) ON DELETE CASCADE,
+        started_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        duration_ms INTEGER,
+        status TEXT NOT NULL,
+        output TEXT,
+        error TEXT,
+        triggered_by TEXT NOT NULL DEFAULT 'schedule',
+        event_data TEXT
+      )
+    `);
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS job_templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        icon TEXT DEFAULT 'zap',
+        category TEXT NOT NULL DEFAULT 'custom',
+        user_id TEXT,
+        project_id TEXT,
+        job_type TEXT NOT NULL,
+        payload_template TEXT NOT NULL,
+        suggested_cron TEXT,
+        suggested_interval_ms INTEGER,
+        default_retry_policy TEXT,
+        default_delivery TEXT,
+        is_built_in INTEGER DEFAULT 0,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Add new columns to scheduled_jobs if they don't exist
+    try {
+      await this.client.execute(`ALTER TABLE scheduled_jobs ADD COLUMN labels TEXT NOT NULL DEFAULT '[]'`);
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    try {
+      await this.client.execute(`ALTER TABLE scheduled_jobs ADD COLUMN archived_at INTEGER`);
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    try {
+      await this.client.execute(`ALTER TABLE scheduled_jobs ADD COLUMN last_run_duration_ms INTEGER`);
+    } catch (e) {
+      // Column already exists, ignore
+    }
+    try {
+      await this.client.execute(`ALTER TABLE scheduled_jobs ADD COLUMN retry_delay_ms INTEGER DEFAULT 60000`);
+    } catch (e) {
+      // Column already exists, ignore
+    }
+
     // Create indexes for task_events
     await this.client.execute(`
       CREATE INDEX IF NOT EXISTS idx_task_events_task_id ON task_events(task_id)
@@ -618,6 +720,26 @@ export class LibSQLAdapter implements StorageAdapter {
     `);
     await this.client.execute(`
       CREATE INDEX IF NOT EXISTS idx_github_comment_syncs_github_id ON github_comment_syncs(github_comment_id)
+    `);
+
+    // Create indexes for scheduled_jobs
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_status ON scheduled_jobs(status)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_job_type ON scheduled_jobs(job_type)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_next_run ON scheduled_jobs(next_run_at)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_job_run_history_job_id ON job_run_history(job_id)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_job_run_history_status ON job_run_history(status)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_job_templates_category ON job_templates(category)
     `);
   }
 
@@ -1226,7 +1348,7 @@ export class LibSQLAdapter implements StorageAdapter {
 
     return {
       tasks: tasks as Task[],
-      total: totalRes[0].value,
+      total: Number(totalRes[0]?.value ?? 0),
     };
   }
 

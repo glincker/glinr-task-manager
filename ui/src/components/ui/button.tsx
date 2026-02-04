@@ -14,6 +14,7 @@ const buttonVariants = cva(
         ghost: 'btn-ghost',
         link: 'text-[var(--primary)] underline-offset-4 hover:underline bg-transparent border-none shadow-none',
         success: 'btn-success',
+        glass: 'bg-white/10 backdrop-blur-sm border border-white/20 text-[var(--foreground)] hover:bg-white/20 hover:border-white/30 shadow-lg',
       },
       size: {
         default: 'h-10 px-4 py-2 rounded-xl',
