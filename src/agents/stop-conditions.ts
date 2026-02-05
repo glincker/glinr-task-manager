@@ -301,8 +301,9 @@ export const defaultStopConditions: StopCondition[] = [
   budgetExceeded(), // Token budget protection
   timeoutExceeded(5 * 60 * 1000), // 5 minute timeout
 
-  // Task completion
-  taskCompleted(), // Primary completion signal
+  // Task completion - multiple ways to complete
+  taskCompleted(), // Primary completion signal via complete_task tool
+  noToolCallsInLastStep(), // Complete if AI responds without tools (simple messages)
 
   // Error handling
   consecutiveFailures(3), // Stop after 3 consecutive failures

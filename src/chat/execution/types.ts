@@ -79,9 +79,24 @@ export interface ToolDefinition<TParams = unknown, TResult = unknown> {
   // Execution
   execute: ToolExecutor<TParams, TResult>;
 
+  /**
+   * Optional availability check. If defined, the tool is only included in the
+   * tool list sent to the AI model when `available` is true. Tools that require
+   * external configuration (API keys, services) should implement this to avoid
+   * wasting tokens on tools the model can't use.
+   *
+   * Follows OpenClaw's config-gated tool pattern.
+   */
+  isAvailable?: () => ToolAvailability;
+
   // Optional metadata
   examples?: ToolExample[];
   rateLimit?: RateLimitConfig;
+}
+
+export interface ToolAvailability {
+  available: boolean;
+  reason?: string;
 }
 
 export type ToolCategory =

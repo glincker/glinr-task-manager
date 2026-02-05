@@ -261,7 +261,7 @@ export function TicketBoard() {
 
   if (error) {
     return (
-      <div className="glass rounded-[28px] p-12 text-center">
+      <div className="premium-card rounded-[28px] p-12 text-center">
         <AlertCircle className="h-12 w-12 mx-auto text-red-400 mb-4" />
         <p className="text-lg font-bold text-red-400">Error loading board</p>
         <p className="text-sm text-muted-foreground mt-1">{(error as Error).message}</p>
@@ -334,7 +334,7 @@ export function TicketBoard() {
               placeholder="Search tickets..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-white/5 border-white/10 rounded-xl h-9"
+              className="pl-10 h-9"
             />
           </div>
           <ViewSwitcher
@@ -352,7 +352,7 @@ export function TicketBoard() {
 
       {/* Board */}
       {isLoading ? (
-        <div className="glass rounded-[28px] p-12 flex items-center justify-center">
+        <div className="premium-card rounded-[28px] p-12 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : (

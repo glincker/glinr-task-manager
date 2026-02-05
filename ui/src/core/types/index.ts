@@ -236,6 +236,36 @@ export interface TicketHistoryEntry {
   createdAt?: string;
 }
 
+export type TicketRelationType =
+  | 'blocks'
+  | 'blocked_by'
+  | 'relates_to'
+  | 'duplicates'
+  | 'start_before'
+  | 'finish_before';
+
+export interface TicketRelation {
+  id: string;
+  sourceTicketId: string;
+  targetTicketId: string;
+  relationType: TicketRelationType;
+  createdAt: string;
+  targetTicket?: {
+    id: string;
+    sequence: number;
+    projectKey?: string;
+    title: string;
+    status: string;
+  };
+  sourceTicket?: {
+    id: string;
+    sequence: number;
+    projectKey?: string;
+    title: string;
+    status: string;
+  };
+}
+
 export interface TicketExternalLink {
   id: string;
   ticketId: string;
@@ -677,6 +707,7 @@ export interface TicketWithRelations extends Ticket {
   externalLinks: TicketExternalLink[];
   comments: TicketComment[];
   history: TicketHistoryEntry[];
+  relations: TicketRelation[];
   children?: Ticket[];
   parent?: Ticket;
 }

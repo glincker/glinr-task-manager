@@ -11,6 +11,7 @@ import { Check, Plus, X, Tag, Loader2 } from 'lucide-react';
 import { api } from '@/core/api/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import {
   Popover,
   PopoverContent,
@@ -208,13 +209,13 @@ export function LabelPicker({
           </PopoverTrigger>
           <PopoverContent className="w-64 p-0" align="start">
             {/* Search input */}
-            <div className="border-b p-2">
-              <input
+            <div className="p-2">
+              <Input
                 type="text"
                 placeholder="Search labels..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+                className="h-8 text-xs px-2"
               />
             </div>
 

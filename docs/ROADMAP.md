@@ -1,6 +1,6 @@
 # GLINR Task Manager - Roadmap
 
-> **Last Updated:** 2026-02-04 (Ticket relations/watchers/mentions/attachments/reactions + bulk ops; tool error messaging clarity; chat UI polish)
+> **Last Updated:** 2026-02-05 (Plane Parity Tracker added - Phases 18-21 for PM feature parity)
 > **For AI Agents:** Pick any unchecked item, validate, implement, and PR.
 
 ---
@@ -52,7 +52,13 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 | 14. UI Dashboard & Polish | Complete | 98% |
 | 15. CLI & Unified Control | Partial | 70% |
 | 16. DevOps | In Progress | 50% |
-| 17. Data Architecture Optimization | Not Started | 0% |
+| 17. Data Architecture Optimization | In Progress | 60% |
+| **18. Plane Parity - Phase A** | In Progress | 30% |
+| **19. Plane Parity - Phase B** | Not Started | 0% |
+| **20. Plane Parity - Phase C** | Not Started | 0% |
+| **21. Plane Parity - Phase D** | Not Started | 0% |
+
+> **Plane Parity Tracker**: See [PLANE_PARITY_TRACKER.md](./PLANE_PARITY_TRACKER.md) for detailed feature comparison and implementation plans.
 
 ---
 
@@ -72,7 +78,7 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 - [x] Jira webhook handler with OAuth
 - [x] Linear webhook handler with OAuth
 - [x] Slack slash commands
-- [ ] Discord bot commands
+- [x] Discord bot commands (HTTP Interactions + Ed25519)
 
 ### Agent Adapters
 - [x] OpenClaw adapter with artifact extraction
@@ -222,7 +228,7 @@ GLINR = AI-NATIVE TICKET SYSTEM + AGENT ORCHESTRATOR
 - [x] Tool approval dialog in chat (component exists)
 
 ### Remaining Integrations
-- [ ] Discord bot
+- [x] Discord bot (HTTP Interactions + Ed25519)
 - [ ] Copilot proxy for $0 AI inference
 - [ ] Gemini Flash cheap fallback
 
@@ -252,15 +258,16 @@ Features from OpenClaw that would enhance GLINR:
 | Feature | OpenClaw | GLINR Status | Effort |
 |---------|----------|--------------|--------|
 | Context Pruning | `pi-extensions/context-pruning/` | **Complete** (Enhanced) | Medium |
-| Skills System | `agents/skills/` | Not started | High |
+| Skills System | `agents/skills/` | **Complete** (Enhanced) | High |
 | Agent Auth Profiles | `agents/auth-profiles/` | Not started | Medium |
 | Canvas/Visual | `canvas-host/` | Not started | High |
 
 ### Low Priority (Messaging Channels)
 | Feature | OpenClaw | GLINR Status | Effort |
 |---------|----------|--------------|--------|
-| Discord Integration | `discord/` | Not started | Medium |
-| Telegram Bot | `telegram/` | Not started | Medium |
+| Discord Integration | `discord/` | **Complete** (HTTP Interactions) | Medium |
+| Telegram Bot | `telegram/` | **Complete** (Webhooks) | Medium |
+| WhatsApp Business | N/A | **Complete** (Cloud API) | Medium |
 | iMessage Bridge | `imessage/` | Not started | High |
 | Matrix Support | `channels/` | Not started | Medium |
 
@@ -327,6 +334,84 @@ Features from OpenClaw that would enhance GLINR:
 
 ---
 
+## Plane Parity Roadmap
+
+> Full details: [PLANE_PARITY_TRACKER.md](./PLANE_PARITY_TRACKER.md)
+> Comparison analysis: [PLANE_COMPARISON.md](./research/PLANE_COMPARISON.md)
+
+### Phase 18: Core PM Parity (Phase A)
+
+**Backend already complete, need UI:**
+- [x] Issue relations (blocks, relates, duplicates) - Backend ✅
+- [ ] Issue relations UI in TicketDetail
+- [x] Multi-assignee support - Backend ✅
+- [ ] Multi-assignee picker UI
+- [x] Watchers/Subscribers - Backend ✅
+- [ ] Watchers UI widget
+- [x] Attachments API - Backend ✅
+- [ ] Attachments upload UI
+- [x] Reactions API - Backend ✅
+- [ ] Reactions picker UI
+- [x] Bulk operations API - Backend ✅
+- [ ] Bulk action toolbar in list view
+
+**New features needed:**
+- [ ] Estimate points (story points) - Schema + API + UI
+- [ ] Estimate points in sprint capacity
+
+### Phase 19: Views & Organization (Phase B)
+
+- [ ] Saved views (filters, layouts, display props)
+  - [ ] `saved_views` table + API
+  - [ ] ViewSelector dropdown
+  - [ ] ViewFiltersPanel
+  - [ ] CreateViewModal
+- [ ] Modules/Epics
+  - [ ] `modules` tables + API
+  - [ ] ModuleList and ModuleDetail views
+  - [ ] Add tickets to modules
+  - [ ] Module progress tracking
+- [ ] Calendar view
+- [ ] Gantt chart view
+- [ ] Advanced filters (15+ fields)
+- [ ] Display property toggles
+- [ ] Group by options (status, priority, assignee, label, sprint, module)
+
+### Phase 20: Collaboration (Phase C)
+
+- [ ] In-app notifications
+  - [ ] `notifications` table + API
+  - [ ] Notification creation service
+  - [ ] NotificationBell with dropdown
+  - [ ] NotificationCenter page
+  - [ ] SSE real-time updates
+  - [ ] Notification preferences
+- [ ] Outbound webhooks
+  - [ ] `webhooks` table + API
+  - [ ] Webhook delivery service (BullMQ)
+  - [ ] Webhook management UI
+  - [ ] Delivery logs
+- [ ] Email notifications (optional)
+- [ ] @mentions rendering in comments
+
+### Phase 21: Advanced Features (Phase D)
+
+- [ ] Pages/Wiki system
+  - [ ] `pages` tables + API
+  - [ ] TipTap editor with extensions
+  - [ ] Page tree sidebar
+  - [ ] Version history
+  - [ ] AI content generation
+- [ ] Advanced analytics
+  - [ ] Custom query builder
+  - [ ] More chart types
+- [ ] CSV/JSON import
+- [ ] Multi-format export (JSON, XLSX)
+- [ ] Inbox/Intake triage (optional)
+- [ ] Draft issues (optional)
+
+---
+
 ## MVP Milestones
 
 ### MVP 1.0 (Orchestrator) - COMPLETE
@@ -354,17 +439,47 @@ Features from OpenClaw that would enhance GLINR:
 
 ## Competitive Advantage
 
+### AI-Native Features (GLINR Wins)
+
 | Feature | GLINR | Plane | Linear | Jira |
 |---------|-------|-------|--------|------|
-| AI-native tickets | Yes | No | No | No |
-| AI moves states | Yes | No | No | No |
-| Multi-agent routing | Yes | No | No | No |
-| Token cost tracking | Yes | No | No | No |
-| Multi-platform sync | Yes | Import only | Jira only | No |
-| MCP server | Yes | Yes | No | No |
-| Open source | Yes | Yes | No | No |
-| Self-hostable | Yes | Yes | No | Data Center |
-| Lightweight (SQLite) | Yes | No (Postgres) | No | No |
+| AI creates tickets | **Yes** (MCP) | No | No | No |
+| AI moves states | **Yes** (MCP) | No | No | No |
+| Multi-agent routing | **Yes** (15 providers) | No | No | No |
+| Token cost tracking | **Yes** (per-message) | No | No | No |
+| 51 built-in tools | **Yes** | No | No | No |
+| Agent memory system | **Yes** (vector + FTS) | No | No | No |
+| Provider failover | **Yes** | No | No | No |
+| Session orchestration | **Yes** | No | No | No |
+
+### Traditional PM Features (Building Parity)
+
+| Feature | GLINR | Plane | Gap |
+|---------|-------|-------|-----|
+| Issue relations | ✅ Backend | ✅ Full | UI needed |
+| Multi-assignee | ✅ Backend | ✅ Full | UI needed |
+| Watchers | ✅ Backend | ✅ Full | UI needed |
+| Attachments | ✅ Backend | ✅ Full | UI needed |
+| Reactions | ✅ Backend | ✅ Full | UI needed |
+| Story points | ❌ | ✅ | Phase 18 |
+| Saved views | ❌ | ✅ | Phase 19 |
+| Modules/Epics | ❌ | ✅ | Phase 19 |
+| Calendar view | ❌ | ✅ | Phase 19 |
+| Gantt chart | ❌ | ✅ | Phase 19 |
+| In-app notifications | ❌ | ✅ | Phase 20 |
+| Outbound webhooks | ❌ | ✅ | Phase 20 |
+| Pages/Wiki | ❌ | ✅ | Phase 21 |
+
+### Infrastructure
+
+| Feature | GLINR | Plane | Notes |
+|---------|-------|-------|-------|
+| Multi-platform sync | ✅ Bi-directional | Import only | GLINR wins |
+| MCP server | ✅ Built-in (7 tools) | ✅ Separate repo | Tie |
+| Open source | ✅ | ✅ | Tie |
+| Self-hostable | ✅ | ✅ | Tie |
+| Lightweight | ✅ SQLite (2-3 containers) | ❌ Postgres (10 containers) | GLINR wins |
+| Prometheus/Grafana | ✅ Built-in | ❌ | GLINR wins |
 
 ---
 

@@ -91,9 +91,9 @@ export type ModelAlias = z.infer<typeof ModelAliasSchema>;
 // Default model aliases (like OpenClaw)
 export const DEFAULT_MODEL_ALIASES: ModelAlias[] = [
   // Anthropic
-  { alias: 'opus', provider: 'anthropic', model: 'claude-3-opus-20240229' },
-  { alias: 'sonnet', provider: 'anthropic', model: 'claude-3-5-sonnet-20241022' },
-  { alias: 'haiku', provider: 'anthropic', model: 'claude-3-5-haiku-20241022' },
+  { alias: 'opus', provider: 'anthropic', model: 'claude-opus-4-6' },
+  { alias: 'sonnet', provider: 'anthropic', model: 'claude-sonnet-4-5-20250929' },
+  { alias: 'haiku', provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
 
   // OpenAI
   { alias: 'gpt', provider: 'openai', model: 'gpt-4o' },
@@ -241,20 +241,20 @@ export interface AIProvider {
 
 export const ANTHROPIC_MODELS: ModelDefinition[] = [
   {
-    id: 'claude-3-opus-20240229',
-    name: 'Claude 3 Opus',
+    id: 'claude-opus-4-6',
+    name: 'Claude Opus 4.6',
     provider: 'anthropic',
     capabilities: ['text', 'vision', 'code', 'reasoning', 'function_calling', 'streaming'],
-    contextWindow: 200000,
+    contextWindow: 1000000,
     maxOutputTokens: 32000,
     supportsStreaming: true,
     supportsVision: true,
-    cost: { inputPerMillion: 15, outputPerMillion: 75, cacheReadPerMillion: 1.5, cacheWritePerMillion: 3.75 },
+    cost: { inputPerMillion: 5, outputPerMillion: 25, cacheReadPerMillion: 0.5, cacheWritePerMillion: 1.25 },
     isDefault: true,
   },
   {
-    id: 'claude-3-5-sonnet-20241022',
-    name: 'Claude 3.5 Sonnet',
+    id: 'claude-sonnet-4-5-20250929',
+    name: 'Claude Sonnet 4.5',
     provider: 'anthropic',
     capabilities: ['text', 'vision', 'code', 'reasoning', 'function_calling', 'streaming'],
     contextWindow: 200000,
@@ -265,8 +265,8 @@ export const ANTHROPIC_MODELS: ModelDefinition[] = [
     isDefault: false,
   },
   {
-    id: 'claude-3-5-haiku-20241022',
-    name: 'Claude 3.5 Haiku',
+    id: 'claude-haiku-4-5-20251001',
+    name: 'Claude Haiku 4.5',
     provider: 'anthropic',
     capabilities: ['text', 'vision', 'code', 'function_calling', 'streaming'],
     contextWindow: 200000,

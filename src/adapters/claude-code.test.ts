@@ -307,9 +307,6 @@ Modified: src/server.ts`;
   describe("buildPrompt", () => {
     it("should include all task information", async () => {
       const adapter = new ClaudeCodeAdapter(mockConfig);
-      const mockProcess = createMockProcess();
-
-      (spawn as ReturnType<typeof vi.fn>).mockReturnValueOnce(mockProcess);
 
       // Capture the prompt argument
       let capturedPrompt = "";

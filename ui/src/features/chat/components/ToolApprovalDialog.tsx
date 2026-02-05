@@ -221,7 +221,7 @@ export function ToolApprovalDialog({ approvals, onApprovalHandled }: ToolApprova
               <span className="text-xs font-medium text-muted-foreground">
                 {currentApproval.command ? 'Command' : 'Parameters'}
               </span>
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="premium-label">
                 Review Carefully
               </span>
             </div>

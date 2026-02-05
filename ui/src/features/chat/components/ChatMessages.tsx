@@ -71,29 +71,29 @@ export function ChatMessages({
 
   if (messages.length === 0) {
     return (
-      <div className="flex-1 bg-white/50 dark:bg-zinc-900/50 rounded-[2rem] p-8 overflow-y-auto">
+      <div className="flex-1 premium-card rounded-[2rem] p-8 overflow-y-auto">
         <div className="flex flex-col items-center justify-center h-full text-center max-w-lg mx-auto">
-          <div className="h-20 w-20 rounded-[1.5rem] bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-6 shadow-sm">
-            <PresetIcon icon={currentPreset?.icon || 'bot'} className="h-10 w-10 text-zinc-400 dark:text-zinc-500" />
+          <div className="h-24 w-24 rounded-3xl glass-heavy flex items-center justify-center mb-8 shadow-xl shadow-primary/10 border-primary/5">
+            <PresetIcon icon={currentPreset?.icon || 'bot'} className="h-12 w-12 text-primary/60" />
           </div>
-          <h2 className="text-2xl font-bold mb-3 tracking-tight text-foreground">
+          <h2 className="text-3xl font-bold mb-4 tracking-tighter text-foreground font-heading graduate-text-gradient">
             {currentPreset?.name || 'Start a conversation'}
           </h2>
-          <p className="text-[15px] leading-relaxed text-muted-foreground mb-8">
+          <p className="text-base leading-relaxed text-muted-foreground mb-10 opacity-80">
             {currentPreset?.description || 'Ask me anything about GLINR, your tasks, or get help with coding.'}
           </p>
 
           {healthyProviders > 0 && quickActions.length > 0 && (
-            <div className="grid grid-cols-2 gap-3 w-full">
+            <div className="grid grid-cols-2 gap-4 w-full">
               {quickActions.slice(0, 4).map((action) => (
                 <button
                   key={action.id}
                   onClick={() => onQuickAction(action.prompt)}
-                  className="px-4 py-3 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:border-blue-500/50 hover:bg-blue-50 dark:hover:bg-blue-900/10 text-sm font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] text-left group shadow-sm"
+                  className="px-5 py-4 rounded-xl glass hover:bg-primary/5 border-primary/5 hover:border-primary/20 text-sm font-semibold transition-all duration-300 hover:-translate-y-1 active:scale-[0.98] text-left group shadow-lg"
                   aria-label={`Quick action: ${action.label}`}
                 >
-                  <p className="truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{action.label}</p>
-                  <div className="h-0.5 w-8 bg-zinc-200 dark:bg-zinc-700 mt-2 rounded-full group-hover:bg-blue-500/50 group-hover:w-16 transition-all duration-300" />
+                  <p className="truncate group-hover:text-primary transition-colors">{action.label}</p>
+                  <div className="h-0.5 w-6 bg-primary/20 mt-2 rounded-full group-hover:bg-primary group-hover:w-12 transition-all duration-500" />
                 </button>
               ))}
             </div>
@@ -102,11 +102,11 @@ export function ChatMessages({
           {healthyProviders === 0 && (
             <button
               onClick={onOpenProviderSetup}
-              className="group flex items-center gap-2 px-6 py-3 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-all font-medium shadow-sm"
+              className="group flex items-center gap-2 px-8 py-3.5 rounded-full bg-primary text-primary-foreground hover:brightness-110 active:scale-95 transition-all font-bold shadow-xl shadow-primary/25"
               aria-label="Configure a provider to start chatting"
             >
-              <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
-              Configure provider to start
+              <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-700 ease-in-out" />
+              Configure Provider
             </button>
           )}
         </div>
@@ -162,27 +162,27 @@ function MessageItem({
       {/* Avatar */}
       <div
         className={cn(
-          'h-8 w-8 rounded-full flex items-center justify-center shrink-0 border transition-all duration-300',
+          'h-9 w-9 rounded-xl flex items-center justify-center shrink-0 border transition-all duration-300 shadow-sm',
           message.role === 'user' 
-            ? 'bg-blue-500/10 border-blue-500/20 text-blue-600 hidden sm:flex' 
-            : 'bg-zinc-100 dark:bg-zinc-800 border-transparent text-zinc-500 dark:text-zinc-400'
+            ? 'bg-primary/10 border-primary/20 text-primary hidden sm:flex' 
+            : 'bg-muted/50 border-border/50 text-muted-foreground'
         )}
       >
         {message.role === 'user' ? (
-          <User className="h-4 w-4" />
+          <User className="h-5 w-5" />
         ) : (
-          <Bot className="h-4 w-4" />
+          <Bot className="h-5 w-5" />
         )}
       </div>
 
       {/* Content */}
       <div
         className={cn(
-          'max-w-[85%] sm:max-w-[75%] rounded-[1.25rem] px-5 py-3 group relative transition-all duration-300',
+          'max-w-[85%] sm:max-w-[75%] rounded-2xl px-5 py-3 group relative transition-all duration-300',
           message.role === 'user' 
-            ? 'bg-blue-600 text-white shadow-sm ml-auto rounded-tr-sm' 
-            : 'bg-zinc-100 dark:bg-zinc-800/80 text-foreground shadow-sm rounded-tl-sm border border-zinc-200/50 dark:border-transparent',
-          message.error && 'border border-red-500/50 bg-red-50 dark:bg-red-900/10'
+            ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/10 ml-auto rounded-tr-sm' 
+            : 'premium-card text-foreground shadow-sm rounded-tl-sm',
+          message.error && 'border border-destructive/50 bg-destructive/5'
         )}
       >
         {message.role === 'user' && (
@@ -289,11 +289,11 @@ function MessageItem({
             {message.role === 'assistant' && !message.isLoading && (
               <button
                 onClick={() => onCopy(processed.content, message.id)}
-                className="opacity-0 group-hover:opacity-100 absolute top-3 right-3 p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-300 hover:scale-110 active:scale-95"
+                className="opacity-0 group-hover:opacity-100 absolute top-2 right-2 p-2 rounded-xl glass-heavy hover:bg-primary/10 border-primary/10 transition-all duration-300 hover:scale-110 active:scale-95"
                 aria-label="Copy message content"
               >
                 {copiedId === message.id ? (
-                  <Check className="h-3.5 w-3.5 text-green-400 shadow-[0_0_8px_rgba(74,222,128,0.5)]" aria-hidden="true" />
+                  <Check className="h-3.5 w-3.5 text-success shadow-[0_0_8px_var(--success)]" aria-hidden="true" />
                 ) : (
                   <Copy className="h-3.5 w-3.5 text-muted-foreground/60" aria-hidden="true" />
                 )}

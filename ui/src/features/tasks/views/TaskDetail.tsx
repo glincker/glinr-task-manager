@@ -158,12 +158,14 @@ export function TaskDetail() {
           </div>
 
           {/* Prompt Section */}
-          <div className="glass rounded-[28px] overflow-hidden">
-             <div className="flex items-center gap-3 px-6 py-4 border-b border-white/5 bg-white/[0.02]">
-                <Terminal className="h-4 w-4 text-blue-400" />
-                <h3 className="text-sm font-bold uppercase tracking-widest">Instruction Prompt</h3>
+          <div className="glass rounded-[24px] overflow-hidden shadow-inner">
+             <div className="flex items-center gap-3 px-6 py-4 bg-primary/5">
+                <div className="h-8 w-8 rounded-lg glass-heavy flex items-center justify-center shadow-sm">
+                  <Terminal className="h-4 w-4 text-primary" />
+                </div>
+                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-foreground/80">Instruction Prompt</h3>
              </div>
-             <div className="p-6 bg-black/20 font-mono text-xs leading-relaxed text-slate-300 overflow-x-auto whitespace-pre-wrap">
+             <div className="p-6 recessed-card font-mono text-xs leading-relaxed text-foreground/80 overflow-x-auto whitespace-pre-wrap selection:bg-primary/20">
                {task.prompt}
              </div>
           </div>
@@ -224,7 +226,7 @@ function TaskMeta({ label, value, icon: Icon, href }: { label: string, value: st
         <Icon className="h-3.5 w-3.5 text-muted-foreground group-hover/meta:text-[var(--primary)] transition-colors" />
       </div>
       <div className="flex flex-col">
-        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">{label}</span>
+        <span className="premium-label">{label}</span>
         <span className="text-[11px] font-bold truncate max-w-[120px]">{value}</span>
       </div>
     </div>

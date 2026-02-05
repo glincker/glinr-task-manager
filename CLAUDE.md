@@ -132,13 +132,17 @@ AgentCapability: 'code_generation' | 'code_review' | 'bug_fix' | 'testing' | ...
 
 ## Smart Model & Mode Selection
 
-### Model Selection (switch with `/model <name>`)
+**claude-router plugin** handles automatic routing, but use judgment:
 
-| Task Type | Model | Why |
-|-----------|-------|-----|
-| Simple questions, file renames, typos | `haiku` | 12x cheaper, fast |
-| Standard coding, tests, refactoring | `sonnet` | Best balance |
-| Architecture, complex multi-file, debugging hard bugs | `opus` | Superior reasoning |
+| Task | Model | Override |
+|------|-------|----------|
+| Questions, file lookups, typos | Haiku | Auto |
+| **Writing code, tests, services** | **Sonnet** | `/claude-router:route sonnet` |
+| Architecture, complex debugging | Opus | `/claude-router:route opus` |
+
+**IMPORTANT**: For any code writing task, prefer Sonnet/Opus over Haiku. Haiku is for simple queries only.
+
+Commands: `/claude-router:route <model>`, `/claude-router:router-stats`, `/claude-router:retry`
 
 ### Mode Selection
 

@@ -65,6 +65,7 @@ export interface AgenticChatRequest {
   messages: ChatMessage[];
   systemPrompt: string;
   model?: string;
+  provider?: string;
   temperature?: number;
   toolHandler: ChatToolHandler;
   tools: Array<{
@@ -137,11 +138,22 @@ export async function executeAgenticChat(
     goal: goal.substring(0, 100),
   });
 
-  // Resolve the primary model
+  // Resolve the primary model and provider
+  const explicitProvider = request.provider as ProviderType | undefined;
   const modelRef = request.model || 'sonnet';
   const aliasEntry = MODEL_ALIASES[modelRef as keyof typeof MODEL_ALIASES];
-  const primaryProvider = (aliasEntry?.provider || 'anthropic') as ProviderType;
-  const primaryModel = aliasEntry?.model || modelRef;
+  const primaryProvider = explicitProvider || (aliasEntry?.provider || 'anthropic') as ProviderType;
+
+  // For Azure and similar providers, use the configured deployment name, not hardcoded alias
+  let primaryModel = aliasEntry?.model || modelRef;
+  try {
+    const resolved = aiProvider.resolveModel(primaryProvider);
+    if (resolved.provider === primaryProvider && resolved.model) {
+      primaryModel = resolved.model; // Use configured deployment (e.g., 'gpt4o')
+    }
+  } catch {
+    // Keep the alias model if provider not configured
+  }
 
   // Get configured providers
   const configuredProviders = aiProvider.getConfiguredProviders();
@@ -166,14 +178,8 @@ export async function executeAgenticChat(
     enableStreaming: true,
   };
 
-  // Convert tools to the format expected by the AI SDK
-  const tools: Record<string, any> = {};
-  for (const tool of request.tools) {
-    tools[tool.name] = {
-      description: tool.description,
-      parameters: tool.parameters,
-    };
-  }
+  // Store raw tool definitions - we'll convert to AI SDK format per-provider
+  const toolDefinitions = request.tools;
 
   // Build messages with system prompt
   const messages = [
@@ -201,38 +207,70 @@ export async function executeAgenticChat(
         // Get the model instance for this provider
         const modelInstance = aiProvider.getModel(provider, model);
 
-        // For Azure, normalize tool schemas to ensure compatibility
-        // Azure has stricter JSON Schema requirements than other providers
-        let normalizedTools = tools;
-        if (provider === 'azure') {
-          normalizedTools = {};
-          for (const [name, toolDef] of Object.entries(tools)) {
-            try {
-              // Convert Zod schema to JSON Schema
-              // NOTE: Do NOT use target: 'openAi' - it produces complex schemas with
-              // $ref to OpenAiAnyType that become { not: {} } after cleaning, which
-              // Azure interprets as type: "None" and rejects.
+        // Convert tool definitions to AI SDK format using createTool()
+        // For Azure, we need to normalize schemas to avoid type: "None" errors
+        // IMPORTANT: jsonSchema() requires a validate function to parse model responses
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const aiSdkTools: Record<string, any> = {};
+        const isAzure = provider === 'azure';
+
+        // Passthrough validator - accepts any value the model returns
+        const passthroughValidate = (value: unknown) => ({
+          success: true as const,
+          value: value as Record<string, unknown>,
+        });
+
+        if (isAzure) {
+          logger.info(`[AgenticChat] Azure detected - normalizing ${toolDefinitions.length} tool schemas`);
+        }
+
+        for (const toolDef of toolDefinitions) {
+          try {
+            if (isAzure) {
+              // For Azure: Convert Zod schema to JSON Schema, then normalize
               const rawJsonSchema = zodToJsonSchema(toolDef.parameters as z.ZodType, {
                 $refStrategy: 'none',
               });
+
               // Normalize for Azure compatibility (removes additionalProperties, etc.)
               const normalized = normalizeToolSchema(rawJsonSchema);
-              normalizedTools[name] = {
+              if (normalized.type !== 'object') {
+                normalized.type = 'object';
+              }
+              if (!normalized.properties) {
+                normalized.properties = {};
+              }
+
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              aiSdkTools[toolDef.name] = createTool({
                 description: toolDef.description,
-                parameters: jsonSchema(normalized),
-              };
-              logger.debug(`[AgenticChat] Normalized schema for Azure tool: ${name}`, {
-                component: 'AgenticChat',
+                inputSchema: jsonSchema(normalized as any, { validate: passthroughValidate }),
               });
-            } catch (schemaError) {
-              // Fall back to original if normalization fails
-              logger.warn(`[AgenticChat] Failed to normalize schema for ${name}, using original`, {
-                component: 'AgenticChat',
-                error: schemaError instanceof Error ? schemaError.message : String(schemaError),
+            } else {
+              // For other providers: Convert Zod schema to JSON Schema first
+              const rawJsonSchema = zodToJsonSchema(toolDef.parameters as z.ZodType, {
+                $refStrategy: 'none',
               });
-              normalizedTools[name] = toolDef;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              aiSdkTools[toolDef.name] = createTool({
+                description: toolDef.description,
+                inputSchema: jsonSchema(rawJsonSchema as any, { validate: passthroughValidate }),
+              });
             }
+          } catch (schemaError) {
+            logger.warn(`[AgenticChat] Failed to create tool ${toolDef.name}, using minimal schema`, {
+              error: schemaError instanceof Error ? schemaError.message : String(schemaError),
+            });
+            aiSdkTools[toolDef.name] = createTool({
+              description: toolDef.description,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              inputSchema: jsonSchema({ type: 'object', properties: {} } as any, { validate: passthroughValidate }),
+            });
           }
+        }
+
+        if (isAzure) {
+          logger.info(`[AgenticChat] Azure schema normalization complete`);
         }
 
         // Create the agent executor
@@ -256,7 +294,7 @@ export async function executeAgenticChat(
         }
 
         // Run the agent with normalized tools
-        return agent.run(modelInstance, messages, normalizedTools, onToolExecute);
+        return agent.run(modelInstance, messages, aiSdkTools, onToolExecute);
       },
       onError: (attempt) => {
         const described = describeFailoverError(attempt.error);
@@ -293,7 +331,7 @@ export async function executeAgenticChat(
       status: tc.status === 'executed' ? ('success' as const) : ('error' as const),
     }));
 
-    // Extract summary from final result or last tool result
+    // Extract content from final result
     let content = finalState.finalResult?.summary || 'Task completed.';
 
     // If the complete_task tool was called, use its summary
@@ -306,6 +344,11 @@ export async function executeAgenticChat(
         const data = result.data as Record<string, unknown>;
         content = (data.summary as string) || content;
       }
+    } else if (finalState.finalResult?.stopReason === 'textResponse') {
+      // No tools were called - the AI responded directly with text
+      // This happens for simple messages like "hi" where tools aren't needed
+      // Use the summary which should contain the model's text response
+      content = finalState.finalResult.summary || 'Response provided.';
     }
 
     logger.info('[AgenticChat] Completed agentic execution', {
@@ -424,6 +467,9 @@ export interface StreamAgenticChatRequest extends AgenticChatRequest {
  *
  * Features OpenClaw-style provider fallback: if the primary provider fails,
  * automatically tries other configured providers with cooldown tracking.
+ *
+ * Tool usage is guided by system prompt - we trust the AI to decide when
+ * tools are needed vs when to respond directly (OpenClaw pattern).
  */
 export async function* streamAgenticChat(
   request: StreamAgenticChatRequest
@@ -442,11 +488,30 @@ export async function* streamAgenticChat(
     showThinking,
   });
 
-  // Resolve the primary model
+  // Resolve the primary model and provider
+  // If provider is explicitly given, use it directly
+  const explicitProvider = request.provider as ProviderType | undefined;
   const modelRef = request.model || 'sonnet';
   const aliasEntry = MODEL_ALIASES[modelRef as keyof typeof MODEL_ALIASES];
-  const primaryProvider = (aliasEntry?.provider || 'anthropic') as ProviderType;
-  const primaryModel = aliasEntry?.model || modelRef;
+  const primaryProvider = explicitProvider || (aliasEntry?.provider || 'anthropic') as ProviderType;
+
+  // For Azure and similar providers, use the configured deployment name, not hardcoded alias
+  let primaryModel = aliasEntry?.model || modelRef;
+  try {
+    const resolved = aiProvider.resolveModel(primaryProvider);
+    if (resolved.provider === primaryProvider && resolved.model) {
+      primaryModel = resolved.model; // Use configured deployment (e.g., 'gpt4o')
+    }
+  } catch {
+    // Keep the alias model if provider not configured
+  }
+
+  logger.info('[AgenticChat] Provider resolution', {
+    explicitProvider: explicitProvider || 'none',
+    modelRef,
+    primaryProvider,
+    primaryModel,
+  });
 
   // Get configured providers
   const configuredProviders = aiProvider.getConfiguredProviders();
@@ -498,14 +563,8 @@ export async function* streamAgenticChat(
     enableStreaming: true,
   };
 
-  // Convert tools to the format expected by the AI SDK
-  const tools: Record<string, any> = {};
-  for (const tool of request.tools) {
-    tools[tool.name] = {
-      description: tool.description,
-      parameters: tool.parameters,
-    };
-  }
+  // Store raw tool definitions - we'll convert to AI SDK format per-provider
+  const toolDefinitions = request.tools;
 
   // Build messages with system prompt
   const messages = [
@@ -681,42 +740,74 @@ export async function* streamAgenticChat(
             });
           });
 
-          // For Azure, normalize tool schemas to ensure compatibility
-          // Azure has stricter JSON Schema requirements than other providers
-          let normalizedTools = tools;
-          if (provider === 'azure') {
-            normalizedTools = {};
-            for (const [name, toolDef] of Object.entries(tools)) {
-              try {
-                // Convert Zod schema to JSON Schema
-                // NOTE: Do NOT use target: 'openAi' - it produces complex schemas with
-                // $ref to OpenAiAnyType that become { not: {} } after cleaning, which
-                // Azure interprets as type: "None" and rejects.
+          // Convert tool definitions to AI SDK format using createTool()
+          // For Azure, we need to normalize schemas to avoid type: "None" errors
+          // IMPORTANT: jsonSchema() requires a validate function to parse model responses
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const aiSdkTools: Record<string, any> = {};
+          const isAzure = provider === 'azure';
+
+          // Passthrough validator - accepts any value the model returns
+          const passthroughValidate = (value: unknown) => ({
+            success: true as const,
+            value: value as Record<string, unknown>,
+          });
+
+          if (isAzure) {
+            logger.info(`[AgenticChat/Stream] Azure detected - normalizing ${toolDefinitions.length} tool schemas`);
+          }
+
+          for (const toolDef of toolDefinitions) {
+            try {
+              if (isAzure) {
+                // For Azure: Convert Zod schema to JSON Schema, then normalize
                 const rawJsonSchema = zodToJsonSchema(toolDef.parameters as z.ZodType, {
                   $refStrategy: 'none',
                 });
-                // Normalize for Azure compatibility (removes additionalProperties, etc.)
+
+                // Normalize for Azure compatibility
                 const normalized = normalizeToolSchema(rawJsonSchema);
-                normalizedTools[name] = {
+                if (normalized.type !== 'object') {
+                  normalized.type = 'object';
+                }
+                if (!normalized.properties) {
+                  normalized.properties = {};
+                }
+
+                aiSdkTools[toolDef.name] = createTool({
                   description: toolDef.description,
-                  parameters: jsonSchema(normalized),
-                };
-                logger.debug(`[AgenticChat] Normalized schema for Azure tool: ${name}`, {
-                  component: 'AgenticChat',
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  inputSchema: jsonSchema(normalized as any, { validate: passthroughValidate }),
                 });
-              } catch (schemaError) {
-                // Fall back to original if normalization fails
-                logger.warn(`[AgenticChat] Failed to normalize schema for ${name}, using original`, {
-                  component: 'AgenticChat',
-                  error: schemaError instanceof Error ? schemaError.message : String(schemaError),
+              } else {
+                // For other providers: Convert Zod schema to JSON Schema first
+                const rawJsonSchema = zodToJsonSchema(toolDef.parameters as z.ZodType, {
+                  $refStrategy: 'none',
                 });
-                normalizedTools[name] = toolDef;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                aiSdkTools[toolDef.name] = createTool({
+                  description: toolDef.description,
+                  inputSchema: jsonSchema(rawJsonSchema as any, { validate: passthroughValidate }),
+                });
               }
+            } catch (schemaError) {
+              logger.warn(`[AgenticChat/Stream] Failed to create tool ${toolDef.name}, using minimal schema`, {
+                error: schemaError instanceof Error ? schemaError.message : String(schemaError),
+              });
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              aiSdkTools[toolDef.name] = createTool({
+                description: toolDef.description,
+                inputSchema: jsonSchema({ type: 'object', properties: {} } as any, { validate: passthroughValidate }),
+              });
             }
           }
 
-          // Run the agent with normalized tools
-          return agent.run(modelInstance, messages, normalizedTools, onToolExecute);
+          if (isAzure) {
+            logger.info(`[AgenticChat/Stream] Azure schema normalization complete`);
+          }
+
+          // Run the agent
+          return agent.run(modelInstance, messages, aiSdkTools, onToolExecute);
         },
         onError: (attempt) => {
           const described = describeFailoverError(attempt.error);

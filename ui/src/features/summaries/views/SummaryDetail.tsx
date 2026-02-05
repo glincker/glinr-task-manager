@@ -299,7 +299,7 @@ function MetaItem({ icon: Icon, label, value, isLink }: { icon: any; label: stri
         <Icon className={cn("h-3.5 w-3.5 text-muted-foreground", isLink && "group-hover/meta:text-blue-400 transition-colors")} />
       </div>
       <div className="flex flex-col">
-        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">{label}</span>
+        <span className="premium-label">{label}</span>
         <span className={cn("text-[11px] font-bold truncate max-w-[120px]", isLink && "text-blue-400")}>{value}</span>
       </div>
     </div>

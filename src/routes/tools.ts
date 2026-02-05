@@ -320,6 +320,73 @@ tools.get("/list", (c) => {
 });
 
 /**
+ * List tools with availability status
+ * Used by Settings UI to show which tools need configuration
+ */
+tools.get("/list/availability", (c) => {
+  const registry = getToolRegistry();
+  const toolList = registry.list();
+
+  interface ToolWithAvailability {
+    name: string;
+    description: string;
+    category: string;
+    securityLevel: string;
+    requiresApproval?: boolean;
+    availability: {
+      available: boolean;
+      reason?: string;
+    };
+  }
+
+  const toolsWithAvailability: ToolWithAvailability[] = toolList.map((t) => {
+    // Check if tool has isAvailable function
+    const availability = t.isAvailable
+      ? t.isAvailable()
+      : { available: true };
+
+    return {
+      name: t.name,
+      description: t.description,
+      category: t.category,
+      securityLevel: t.securityLevel,
+      requiresApproval: t.requiresApproval,
+      availability,
+    };
+  });
+
+  // Group by category for easier UI rendering
+  const byCategory = toolsWithAvailability.reduce(
+    (acc, tool) => {
+      if (!acc[tool.category]) {
+        acc[tool.category] = [];
+      }
+      acc[tool.category].push(tool);
+      return acc;
+    },
+    {} as Record<string, ToolWithAvailability[]>
+  );
+
+  // Summary statistics
+  const availableCount = toolsWithAvailability.filter(
+    (t) => t.availability.available
+  ).length;
+  const unavailableCount = toolsWithAvailability.filter(
+    (t) => !t.availability.available
+  ).length;
+
+  return c.json({
+    tools: toolsWithAvailability,
+    byCategory,
+    summary: {
+      total: toolsWithAvailability.length,
+      available: availableCount,
+      unavailable: unavailableCount,
+    },
+  });
+});
+
+/**
  * Get tools for AI (function calling format)
  */
 tools.get("/ai-schema", (c) => {

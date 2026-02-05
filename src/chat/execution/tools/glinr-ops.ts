@@ -7,11 +7,48 @@
 
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import type { ToolDefinition, ToolResult, ToolExecutionContext } from '../types.js';
+import type { ToolDefinition, ToolResult, ToolExecutionContext, ToolAvailability } from '../types.js';
 import { getDb } from '../../../storage/index.js';
 import { projects, tickets, sprints, ticketComments, ticketHistory } from '../../../storage/schema.js';
 import { eq, sql, desc, and, like, or } from 'drizzle-orm';
 import { logger } from '../../../utils/logger.js';
+
+// =============================================================================
+// Availability Check
+// =============================================================================
+
+/** Cache database availability to avoid repeated checks */
+let dbAvailabilityCache: ToolAvailability | null = null;
+let lastDbCheck = 0;
+const DB_CHECK_INTERVAL_MS = 30000; // Recheck every 30 seconds
+
+/**
+ * Check if database is available
+ * Rechecks periodically in case database becomes available after startup
+ */
+function checkDatabaseAvailability(): ToolAvailability {
+  const now = Date.now();
+
+  // Use cache if recent and was available
+  if (dbAvailabilityCache && dbAvailabilityCache.available && now - lastDbCheck < DB_CHECK_INTERVAL_MS) {
+    return dbAvailabilityCache;
+  }
+
+  try {
+    // This will throw if storage is not initialized
+    getDb();
+    dbAvailabilityCache = { available: true };
+    lastDbCheck = now;
+  } catch (error) {
+    dbAvailabilityCache = {
+      available: false,
+      reason: 'Database not initialized',
+    };
+    lastDbCheck = now;
+  }
+
+  return dbAvailabilityCache;
+}
 
 // =============================================================================
 // Schemas
@@ -212,6 +249,7 @@ DO NOT just list projects and stop - you must CREATE the ticket to complete the 
   securityLevel: 'safe',
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: CreateTicketParamsSchema,
+  isAvailable: checkDatabaseAvailability,
   examples: [
     {
       description: 'Create a bug ticket',
@@ -311,6 +349,7 @@ export const createProjectTool: ToolDefinition<CreateProjectParams, ProjectResul
   securityLevel: 'safe',
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: CreateProjectParamsSchema,
+  isAvailable: checkDatabaseAvailability,
   examples: [
     {
       description: 'Create a project',
@@ -393,6 +432,7 @@ export const listTicketsTool: ToolDefinition<ListTicketsParams, { tickets: Ticke
   securityLevel: 'safe',
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: ListTicketsParamsSchema,
+  isAvailable: checkDatabaseAvailability,
   examples: [
     { description: 'List all tickets', params: {} },
     { description: 'List bugs in a project', params: { projectKey: 'GLINR', type: 'bug' } },
@@ -525,6 +565,7 @@ Example: User says "create a bug ticket" →
   securityLevel: 'safe',
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: ListProjectsParamsSchema,
+  isAvailable: checkDatabaseAvailability,
   examples: [{ description: 'List active projects', params: { status: 'active' } }],
 
   async execute(
@@ -601,6 +642,7 @@ export const updateTicketTool: ToolDefinition<UpdateTicketParams, TicketResult> 
   securityLevel: 'safe',
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: UpdateTicketParamsSchema,
+  isAvailable: checkDatabaseAvailability,
   examples: [
     { description: 'Mark ticket done', params: { ticketKey: 'GLINR-123', status: 'done' } },
     { description: 'Update priority', params: { ticketKey: 'GLINR-123', priority: 'critical' } },
@@ -683,6 +725,7 @@ export const getTicketTool: ToolDefinition<GetTicketParams, TicketResult> = {
   securityLevel: 'safe',
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: GetTicketParamsSchema,
+  isAvailable: checkDatabaseAvailability,
   examples: [{ description: 'Get ticket details', params: { ticketKey: 'GLINR-123' } }],
 
   async execute(_context: ToolExecutionContext, params: GetTicketParams): Promise<ToolResult<TicketResult>> {

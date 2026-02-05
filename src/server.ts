@@ -30,6 +30,10 @@ import {
   cronRoutes,
   devicesRoutes,
   memoryRoutes,
+  skillsRoutes,
+  telegramRoutes,
+  whatsappRoutes,
+  discordRoutes,
 } from './routes/index.js';
 
 // Core imports
@@ -433,6 +437,10 @@ app.route('/api', labelsRoutes); // Labels routes mount at /api for /api/project
 app.route('/api/cron', cronRoutes);
 app.route('/api/devices', devicesRoutes);
 app.route('/api/memory', memoryRoutes);
+app.route('/api/skills', skillsRoutes);
+app.route('/api/telegram', telegramRoutes);
+app.route('/api/whatsapp', whatsappRoutes);
+app.route('/api/discord', discordRoutes);
 
 // Alias /api/plugins to /api/settings/plugins for backwards compat
 app.get('/api/plugins/health', async (c) => {
@@ -466,6 +474,17 @@ async function main() {
     const loadedProviders = await aiProvider.loadSavedConfigs(loadAllProviderConfigs);
     if (loadedProviders > 0) {
       console.log(`[OK] Loaded ${loadedProviders} saved AI provider configs`);
+    }
+
+    // Initialize skills registry
+    try {
+      const { initializeSkillsRegistry } = await import('./skills/index.js');
+      const skillsRegistry = await initializeSkillsRegistry({
+        workspaceDir: process.cwd(),
+      });
+      console.log(`[OK] Skills loaded: ${skillsRegistry.getLoadedSkillNames().length} skills`);
+    } catch (error) {
+      console.error('[WARN] Skills initialization failed:', error);
     }
   } catch (error) {
     console.error('[ERROR] Failed to initialize storage:', error);

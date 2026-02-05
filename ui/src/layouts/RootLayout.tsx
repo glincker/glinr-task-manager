@@ -17,6 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 import { api } from '@/core/api/client';
 import { UserMenu, useAuth } from '@/features/auth';
+import { FloatingChatbot } from '@/components/shared/FloatingChatbot';
 
 interface RootLayoutProps {
   children: ReactNode;
@@ -117,8 +118,8 @@ function NavGroupHeader({ label, collapsed, isOpen, onToggle, itemCount }: NavGr
   // Non-collapsible single-item groups just show the label
   if (!isCollapsible) {
     return (
-      <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]/50">
-        {label}
+      <div className="px-3 py-1.5">
+        <span className="nav-group-label">{label}</span>
       </div>
     );
   }
@@ -137,7 +138,7 @@ function NavGroupHeader({ label, collapsed, isOpen, onToggle, itemCount }: NavGr
         )}
         aria-hidden="true"
       />
-      <span>{label}</span>
+      <span className="nav-group-label">{label}</span>
     </button>
   );
 }
@@ -158,17 +159,18 @@ function NavItem({ item, isActive, collapsed, onClick, badge }: NavItemProps) {
       onClick={onClick}
       aria-label={collapsed ? item.name : undefined}
       className={cn(
-        "group relative flex items-center rounded-xl transition-all duration-200",
+        "group relative flex items-center rounded-xl transition-all duration-300",
         collapsed ? "justify-center h-10 w-10 mx-auto" : "gap-3 px-3 py-2.5 mx-1",
         isActive
-          ? "nav-item-active shadow-sm"
-          : "text-[var(--muted-foreground)] hover:nav-item-hover"
+          ? "bg-[#0a0a0b] text-white shadow-lg shadow-black/20 nav-item-active"
+          : "text-[var(--muted-foreground)]/70 hover:nav-item-hover hover:text-[var(--foreground)]"
       )}
     >
       <div className="relative flex items-center justify-center">
         <item.icon className={cn(
-          "shrink-0 transition-all duration-150",
-          collapsed ? "h-[18px] w-[18px]" : "h-4 w-4"
+          "shrink-0 transition-all duration-200",
+          collapsed ? "h-[18px] w-[18px]" : "h-4 w-4",
+          isActive ? "text-white" : "text-[var(--muted-foreground)]/70 group-hover:text-[var(--foreground)]"
         )} />
         {/* Badge indicator */}
         {badge !== undefined && badge > 0 && (
@@ -180,10 +182,7 @@ function NavItem({ item, isActive, collapsed, onClick, badge }: NavItemProps) {
             {badge > 99 ? '99+' : badge}
           </span>
         )}
-        {/* Active indicator */}
-        {isActive && (
-          <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-[var(--primary)]" />
-        )}
+        {/* Active indicator - Handled by CSS ::before on nav-item-active */}
       </div>
       {!collapsed && (
         <>
@@ -364,7 +363,7 @@ export function RootLayout({ children }: RootLayoutProps) {
   const canGoBack = window.history.length > 1;
 
   return (
-    <div className="flex min-h-screen bg-[var(--background)]">
+    <div className="flex min-h-screen bg-background">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:shadow-lg focus:outline-none"
@@ -388,18 +387,18 @@ export function RootLayout({ children }: RootLayoutProps) {
         collapsed ? "w-[72px]" : "w-64",
         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
-        <div className="sidebar-glass h-full rounded-2xl flex flex-col overflow-hidden">
+        <div className="glass h-full rounded-2xl flex flex-col overflow-hidden">
           {/* Logo Section */}
           <div className={cn(
             "flex items-center flex-shrink-0 transition-all h-14",
             collapsed ? "justify-center px-2" : "justify-between px-3"
           )}>
-            <Link to="/" className="flex items-center gap-2.5" aria-label="GLINR Home">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary)]/10">
-                <Logo className="h-5 w-5 text-[var(--primary)]" aria-hidden="true" />
+            <Link to="/" className="flex items-center gap-2.5 group/logo" aria-label="GLINR Home">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl glass-heavy shadow-lg shadow-primary/5 transition-transform group-hover/logo:scale-105">
+                <Logo className="h-5.5 w-5.5 text-primary" aria-hidden="true" />
               </div>
               {!collapsed && (
-                <span className="text-[15px] font-bold tracking-tight">GLINR</span>
+                <span className="logo-text-premium">GLINR</span>
               )}
             </Link>
 
@@ -621,8 +620,8 @@ export function RootLayout({ children }: RootLayoutProps) {
           <div className={cn(
             "flex h-14 items-center justify-between px-4 transition-all duration-300",
             scrolled
-              ? "header-glass-scrolled rounded-none rounded-b-[20px] shadow-lg"
-              : "header-glass rounded-[20px]"
+              ? "glass-heavy rounded-none rounded-b-2xl shadow-xl shadow-black/5"
+              : "glass rounded-2xl"
           )}>
             <div className="flex items-center gap-4">
               {/* Mobile Menu Button */}
@@ -687,9 +686,9 @@ export function RootLayout({ children }: RootLayoutProps) {
                 ) : (
                   <h1 className="text-[13px] font-semibold tracking-tight leading-tight">{currentPage.name}</h1>
                 )}
-                <div className="hidden sm:flex items-center gap-1.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-green-500 shadow-[0_0_8px_oklch(0.6_0.2_150)] animate-pulse" />
-                  <span className="text-[9px] text-[var(--muted-foreground)] font-bold uppercase tracking-widest">System Active</span>
+                <div className="hidden sm:flex items-center gap-2 mt-0.5">
+                  <div className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_10px_var(--primary-glow)] animate-pulse" />
+                  <span className="text-[9px] text-muted-foreground font-black uppercase tracking-widest opacity-80">Orchestrator Active</span>
                 </div>
               </div>
             </div>
@@ -706,15 +705,15 @@ export function RootLayout({ children }: RootLayoutProps) {
                       to={item.href}
                       title={item.name}
                       className={cn(
-                        "p-1.5 rounded-md transition-all relative group",
+                        "p-2 rounded-xl transition-all relative group",
                         isActive
-                          ? "bg-[var(--primary)] text-white shadow-sm"
-                          : "text-[var(--muted-foreground)] hover:bg-white/10 hover:text-[var(--foreground)]"
+                          ? "bg-primary text-primary-foreground shadow-[0_0_20px_-5px_var(--primary-glow)] scale-110"
+                          : "text-muted-foreground hover:bg-primary/15 hover:text-primary hover:scale-105"
                       )}
                     >
-                      <item.icon className="h-4 w-4" />
+                      <item.icon className={cn("h-4.5 w-4.5 transition-transform group-active:scale-90", isActive && "stroke-[2.5px]")} />
                       {/* Tooltip */}
-                      <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2 py-1 rounded-lg bg-black/90 text-[9px] font-bold text-white border border-white/10 whitespace-nowrap shadow-xl z-50">
+                      <div className="absolute top-full mt-3 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center px-2.5 py-1.5 rounded-xl glass-heavy text-[9px] font-black uppercase tracking-widest text-foreground shadow-2xl z-50">
                         {item.name}
                       </div>
                     </Link>
@@ -751,6 +750,7 @@ export function RootLayout({ children }: RootLayoutProps) {
         <main id="main-content" className="flex-1 p-4 sm:p-6 outline-none" tabIndex={-1}>
           {children}
         </main>
+        <FloatingChatbot />
       </div>
     </div>
   );

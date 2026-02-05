@@ -335,6 +335,23 @@ export function getChatTools(
     tools = tools.filter((t) => !exclude.includes(t.name));
   }
 
+  // Filter out tools that aren't available (missing config, API keys, etc.)
+  // Tools without isAvailable() are always included (assumed available)
+  const unavailable: string[] = [];
+  tools = tools.filter((t) => {
+    if (!t.isAvailable) return true;
+    const status = t.isAvailable();
+    if (!status.available) {
+      unavailable.push(`${t.name} (${status.reason || 'not configured'})`);
+      return false;
+    }
+    return true;
+  });
+
+  if (unavailable.length > 0) {
+    logger.info(`[ChatTools] Excluded unavailable tools: ${unavailable.join(', ')}`);
+  }
+
   return tools.map((tool) => ({
     name: tool.name,
     description: tool.description,

@@ -53,47 +53,42 @@ export function ThinkingBlock({
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           'flex items-center gap-3 w-full px-4 py-3 rounded-2xl transition-all duration-300 group text-left',
-          'bg-zinc-50 dark:bg-zinc-900',
-          'hover:bg-zinc-100 dark:hover:bg-zinc-800',
-          'border border-zinc-200 dark:border-zinc-800',
-          'shadow-sm hover:shadow-md hover:-translate-y-0.5',
-          isStreaming && 'ring-1 ring-blue-500/20 border-blue-500/30 bg-blue-50/50 dark:bg-blue-900/10'
+          'premium-card',
+          isStreaming && 'bg-primary/5'
         )}
         aria-expanded={isOpen}
         aria-label={isOpen ? 'Collapse thinking' : 'Expand thinking'}
       >
         {/* Brain Icon with streaming indicator */}
         <div className={cn(
-          "relative flex items-center justify-center h-8 w-8 rounded-xl shadow-inner transition-colors",
+          "relative flex items-center justify-center h-8 w-8 rounded-xl shadow-inner transition-all duration-300",
           isStreaming 
-            ? "bg-blue-100 dark:bg-blue-500/20" 
-            : "bg-zinc-100 dark:bg-zinc-800"
+            ? "bg-primary/20 shadow-[0_0_15px_-3px_var(--primary-glow)]" 
+            : "bg-muted shadow-sm"
         )}>
           <Brain
             className={cn(
               'h-4 w-4 transition-all duration-500',
               isStreaming 
-                ? "text-blue-600 dark:text-blue-400 animate-pulse" 
-                : "text-zinc-500 dark:text-zinc-400",
-              isOpen && !isStreaming ? 'text-zinc-700 dark:text-zinc-300' : '',
+                ? "text-primary animate-pulse" 
+                : "text-muted-foreground",
+              isOpen && !isStreaming ? 'text-foreground' : '',
               isOpen ? 'scale-110 rotate-[15deg]' : 'scale-100'
             )}
           />
           {isStreaming && (
-            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-blue-500 dark:bg-blue-400 animate-ping shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
+            <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-primary animate-ping shadow-[0_0_8px_var(--primary-glow)]" />
           )}
         </div>
 
         {/* Label */}
         <div className="flex-1 flex flex-col">
           <span className={cn(
-            "text-[13px] font-semibold tracking-tight transition-colors",
-            isStreaming 
-              ? "text-blue-700 dark:text-blue-300" 
-              : "text-zinc-700 dark:text-zinc-300"
+            "text-[13px] font-bold tracking-tight transition-colors",
+            isStreaming ? "text-primary" : "text-foreground/80"
           )}>
             {isStreaming ? (
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1.5 uppercase text-[10px] tracking-widest font-black">
                 Thinking
                 <span className="inline-flex gap-0.5">
                   <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
@@ -102,14 +97,14 @@ export function ThinkingBlock({
                 </span>
               </span>
             ) : isOpen ? (
-              'Thinking'
+              'Analytic Reasoning'
             ) : (
-              'View reasoning'
+              'View Process Trace'
             )}
           </span>
           {!isStreaming && (
-            <span className="text-[10px] uppercase font-bold tracking-widest text-zinc-400 dark:text-zinc-500">
-              {wordCount} words analyzed
+            <span className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground/60">
+              {wordCount} tokens distilled
             </span>
           )}
         </div>
@@ -135,11 +130,11 @@ export function ThinkingBlock({
         <div className="overflow-hidden">
           <div
             className={cn(
-              'px-5 py-4 rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-900/30',
-              'max-h-[32rem] overflow-y-auto scrollbar-thin'
+              'px-5 py-4 rounded-2xl glass',
+              'max-h-[32rem] overflow-y-auto scrollbar-glass'
             )}
           >
-            <pre className="whitespace-pre-wrap font-mono text-[13px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+            <pre className="whitespace-pre-wrap font-mono text-[12px] text-muted-foreground leading-relaxed">
               {thinking}
             </pre>
           </div>

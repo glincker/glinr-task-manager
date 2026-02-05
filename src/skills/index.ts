@@ -28,11 +28,13 @@ export {
 export {
   loadAllSkills,
   filterSkills,
-  shouldIncludeSkill,
-  checkSkillEligibility,
-  ensureManagedSkillsDir,
-  getProjectSkillsDir,
-  syncSkills,
+  parseSkillMd,
+  checkEligibility,
+  hasBinary,
+  clearBinaryCache,
+  buildSkillSnapshotSync,
+  buildSkillsStatus,
+  applySkillEnvOverrides,
 } from './loader.js';
 
 // Prompt building

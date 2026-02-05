@@ -84,14 +84,14 @@ export function ChatInput({
               <img
                 src={img}
                 alt={`Pending upload ${i + 1}`}
-                className="h-16 w-16 object-cover rounded-xl ring-2 ring-border/50 group-hover:ring-primary/50 transition-all"
+                className="h-16 w-16 object-cover rounded-xl shadow-md transition-all"
               />
               <button
                 onClick={() => onImageRemove(i)}
-                className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-destructive rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute -top-1.5 -right-1.5 h-6 w-6 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground hover:text-destructive transition-all shadow-md active:scale-90 z-10 opacity-0 group-hover:opacity-100"
                 aria-label="Remove image"
               >
-                <X className="h-3 w-3 text-white" aria-hidden="true" />
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </div>
           ))}
@@ -101,12 +101,9 @@ export function ChatInput({
       {/* Input Area */}
       <div
         className={cn(
-          'relative rounded-[1.5rem] px-2 py-1.5 flex items-end gap-2 transition-all duration-200',
-          'bg-zinc-100 dark:bg-zinc-900 border border-transparent',
-          'focus-within:border-zinc-200 dark:focus-within:border-zinc-700 focus-within:bg-white dark:focus-within:bg-black',
-          agentMode
-            ? 'ring-1 ring-sky-500/20'
-            : 'shadow-sm'
+          'relative rounded-[1.5rem] px-3 py-2 flex items-end gap-3 transition-all duration-300',
+          'field-recessed shadow-none',
+          agentMode && 'bg-primary/5 border-primary/20'
         )}
       >
 
@@ -128,10 +125,10 @@ export function ChatInput({
               variant="ghost"
               size="icon"
               className={cn(
-                'h-8 w-8 shrink-0 rounded-full transition-all',
+                'h-9 w-9 shrink-0 rounded-xl transition-all',
                 agentMode
-                  ? 'bg-sky-500/10 text-sky-500 hover:bg-sky-500/15'
-                  : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 hover:bg-zinc-200/50 dark:hover:bg-zinc-800'
+                  ? 'bg-primary/20 text-primary'
+                  : 'text-muted-foreground hover:bg-muted'
               )}
               onClick={onToggleAgentMode}
               disabled={isPending || disabled}
@@ -150,7 +147,7 @@ export function ChatInput({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 shrink-0 rounded-full text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 hover:bg-zinc-200/50 dark:hover:bg-zinc-800"
+            className="h-9 w-9 shrink-0 rounded-xl text-muted-foreground hover:bg-muted transition-all"
             onClick={() => fileInputRef.current?.click()}
             disabled={isPending || disabled}
             aria-label="Add image"
@@ -163,10 +160,10 @@ export function ChatInput({
             variant="ghost"
             size="icon"
             className={cn(
-              'h-8 w-8 shrink-0 rounded-full',
+              'h-9 w-9 shrink-0 rounded-xl transition-all',
               isRecording
-                ? 'text-red-500 bg-red-100 dark:bg-red-900/20 animate-pulse'
-                : 'text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 hover:bg-zinc-200/50 dark:hover:bg-zinc-800'
+                ? 'bg-destructive/10 text-destructive animate-pulse'
+                : 'text-muted-foreground hover:bg-muted'
             )}
             onClick={isRecording ? onStopRecording : onStartRecording}
             disabled={isPending || disabled}
@@ -190,9 +187,10 @@ export function ChatInput({
           placeholder={agentMode ? 'Give me a task to work on...' : placeholder}
           aria-label={agentMode ? 'Give me a task to work on' : placeholder}
           className={cn(
-            'min-h-[2.5rem] max-h-32 resize-none border-0 bg-transparent text-sm',
-            'focus-visible:ring-0 focus-visible:ring-offset-0 py-2.5 px-2 relative z-10 leading-relaxed',
-            agentMode && 'placeholder:text-sky-500/50'
+            'min-h-[3rem] max-h-48 resize-none border-0 bg-transparent text-[15px]',
+            'focus-visible:ring-0 focus-visible:ring-offset-0 py-3 px-2 relative z-10 leading-relaxed font-medium',
+            'placeholder:text-[var(--muted-foreground)]/50 transition-colors',
+            agentMode && 'placeholder:text-primary/40'
           )}
           disabled={isPending || disabled}
         />
@@ -203,11 +201,10 @@ export function ChatInput({
           disabled={!value.trim() || isPending || disabled}
           size="icon"
           aria-label="Send message"
+          variant="black"
           className={cn(
-            'h-8 w-8 shrink-0 rounded-full relative z-10 transition-all mb-1 mr-1',
-            'bg-blue-600 text-white hover:bg-blue-700 shadow-sm',
-            'disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600 disabled:shadow-none',
-            agentMode && 'bg-sky-500 hover:bg-sky-600'
+            'h-9 w-9 shrink-0 rounded-xl transition-all mb-0.5 mr-0.5',
+            'hover:scale-105 active:scale-95'
           )}
         >
           {isPending ? (

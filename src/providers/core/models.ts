@@ -12,9 +12,9 @@ import { ProviderType, type ModelInfo } from './types.js';
 
 export const MODEL_ALIASES: Record<string, { provider: ProviderType; model: string }> = {
   // Anthropic
-  opus: { provider: 'anthropic', model: 'claude-3-opus-20240229' },
-  sonnet: { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022' },
-  haiku: { provider: 'anthropic', model: 'claude-3-5-haiku-20241022' },
+  opus: { provider: 'anthropic', model: 'claude-opus-4-6' },
+  sonnet: { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929' },
+  haiku: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
 
   // OpenAI
   gpt: { provider: 'openai', model: 'gpt-4o' },
@@ -23,9 +23,9 @@ export const MODEL_ALIASES: Record<string, { provider: ProviderType; model: stri
   'o1-mini': { provider: 'openai', model: 'o1-mini' },
   'o3-mini': { provider: 'openai', model: 'o3-mini' },
 
-  // Azure OpenAI (deployment names - user configurable)
-  azure: { provider: 'azure', model: 'gpt-4' },
-  'azure-gpt': { provider: 'azure', model: 'gpt-4' },
+  // Azure OpenAI (uses configured deployment - not hardcoded)
+  azure: { provider: 'azure', model: 'default' },
+  'azure-gpt': { provider: 'azure', model: 'default' },
 
   // Google
   gemini: { provider: 'google', model: 'gemini-1.5-pro' },
@@ -88,20 +88,20 @@ export const MODEL_ALIASES: Record<string, { provider: ProviderType; model: stri
 export const MODEL_CATALOG: ModelInfo[] = [
   // Anthropic - All support native function calling
   {
-    id: 'claude-3-opus-20240229',
-    name: 'Claude 3 Opus',
+    id: 'claude-opus-4-6',
+    name: 'Claude Opus 4.6',
     provider: 'anthropic',
-    contextWindow: 200000,
+    contextWindow: 1000000,
     maxOutput: 32000,
     supportsVision: true,
     supportsStreaming: true,
     supportsTools: true,
-    costPer1MInput: 15,
-    costPer1MOutput: 75,
+    costPer1MInput: 5,
+    costPer1MOutput: 25,
   },
   {
-    id: 'claude-3-5-sonnet-20241022',
-    name: 'Claude 3.5 Sonnet',
+    id: 'claude-sonnet-4-5-20250929',
+    name: 'Claude Sonnet 4.5',
     provider: 'anthropic',
     contextWindow: 200000,
     maxOutput: 16000,
@@ -112,8 +112,8 @@ export const MODEL_CATALOG: ModelInfo[] = [
     costPer1MOutput: 15,
   },
   {
-    id: 'claude-3-5-haiku-20241022',
-    name: 'Claude 3.5 Haiku',
+    id: 'claude-haiku-4-5-20251001',
+    name: 'Claude Haiku 4.5',
     provider: 'anthropic',
     contextWindow: 200000,
     maxOutput: 8192,

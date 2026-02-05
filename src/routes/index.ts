@@ -24,3 +24,7 @@ export { labelsRoutes } from './labels.js';
 export { cronRoutes } from './cron.js';
 export { devicesRoutes } from './devices.js';
 export { memoryRoutes } from './memory.js';
+export { skillsRoutes } from './skills.js';
+export { telegramRoutes } from './telegram.js';
+export { whatsappRoutes } from './whatsapp.js';
+export { discordRoutes } from './discord.js';

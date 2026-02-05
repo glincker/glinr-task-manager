@@ -19,16 +19,17 @@ import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { logger } from '../utils/logger.js';
-import type {
-  SkillEntry,
-  SkillFrontmatter,
-  SkillMetadata,
-  SkillSource,
-  SkillsSystemConfig,
-  SkillCommandSpec,
-  SkillConfig,
-  SkillStatus,
-  SkillsStatus,
+import {
+  DEFAULT_SKILLS_CONFIG,
+  type SkillEntry,
+  type SkillFrontmatter,
+  type SkillMetadata,
+  type SkillSource,
+  type SkillsSystemConfig,
+  type SkillCommandSpec,
+  type SkillConfig,
+  type SkillStatus,
+  type SkillsStatus,
 } from './types.js';
 
 const execFileAsync = promisify(execFile);
@@ -60,7 +61,17 @@ export function parseSkillMd(content: string): {
   const [, yamlStr, instructions] = match;
 
   // Parse YAML frontmatter (simple key-value parser, no dependency needed)
-  const frontmatter = parseSimpleYaml(yamlStr) as SkillFrontmatter;
+  const rawFrontmatter = parseSimpleYaml(yamlStr);
+  const frontmatter: SkillFrontmatter = {
+    name: (rawFrontmatter.name as string) ?? 'unknown',
+    description: (rawFrontmatter.description as string) ?? '',
+    'user-invocable': rawFrontmatter['user-invocable'] as boolean | undefined,
+    'disable-model-invocation': rawFrontmatter['disable-model-invocation'] as boolean | undefined,
+    'command-dispatch': rawFrontmatter['command-dispatch'] as 'tool' | undefined,
+    'command-tool': rawFrontmatter['command-tool'] as string | undefined,
+    'command-arg-mode': rawFrontmatter['command-arg-mode'] as 'raw' | 'parsed' | undefined,
+    metadata: rawFrontmatter.metadata as string | undefined,
+  };
 
   // Parse extended metadata from JSON string
   let metadata: SkillMetadata | undefined;
@@ -158,7 +169,7 @@ async function loadSkillFromDir(
 
     const skillName = frontmatter.name || basename(dirPath);
     const skillKey = metadata?.skillKey || skillName;
-    const skillConfig = config.entries[skillKey];
+    const skillConfig = config?.entries?.[skillKey];
 
     // Build invocation policy
     const invocation = {
@@ -245,14 +256,19 @@ async function loadSkillsFromDir(
 /**
  * Load all skills from all sources with precedence ordering
  */
-export async function loadAllSkills(
-  workspacePath: string,
-  config: SkillsSystemConfig,
-): Promise<SkillEntry[]> {
+export async function loadAllSkills(params: {
+  workspaceDir?: string;
+  extraDirs?: string[];
+  config?: SkillsSystemConfig;
+}): Promise<SkillEntry[]> {
+  const { workspaceDir, extraDirs, config = DEFAULT_SKILLS_CONFIG } = params;
   const skillMap = new Map<string, SkillEntry>();
 
+  // Merge extraDirs from params with config
+  const allExtraDirs = [...(config.load?.extraDirs ?? []), ...(extraDirs ?? [])];
+
   // 1. Extra dirs (lowest precedence)
-  for (const dir of config.load.extraDirs) {
+  for (const dir of allExtraDirs) {
     const skills = await loadSkillsFromDir(dir, 'plugin', config);
     for (const skill of skills) {
       skillMap.set(skill.name, skill);
@@ -260,11 +276,13 @@ export async function loadAllSkills(
   }
 
   // 2. Bundled skills
-  const bundledDir = join(import.meta.dirname || __dirname, '..', '..', 'skills');
+  // Navigate relative to the project root
+  const bundledDir = join(process.cwd(), 'skills');
+
   const bundledSkills = await loadSkillsFromDir(bundledDir, 'bundled', config);
   for (const skill of bundledSkills) {
     // Check allowlist (empty = all allowed)
-    if (config.allowBundled.length === 0 || config.allowBundled.includes(skill.name)) {
+    if ((config.allowBundled?.length ?? 0) === 0 || config.allowBundled?.includes(skill.name)) {
       skillMap.set(skill.name, skill);
     }
   }
@@ -277,20 +295,44 @@ export async function loadAllSkills(
   }
 
   // 4. Workspace skills (highest precedence)
-  const workspaceDir = join(workspacePath, 'skills');
-  const workspaceSkills = await loadSkillsFromDir(workspaceDir, 'workspace', config);
-  for (const skill of workspaceSkills) {
-    skillMap.set(skill.name, skill);
+  if (workspaceDir) {
+    const workspaceSkillsDir = join(workspaceDir, 'skills');
+    const workspaceSkills = await loadSkillsFromDir(workspaceSkillsDir, 'workspace', config);
+    for (const skill of workspaceSkills) {
+      skillMap.set(skill.name, skill);
+    }
   }
 
   const allSkills = Array.from(skillMap.values());
   logger.info(
     `[Skills] Loaded ${allSkills.length} skills ` +
-    `(${bundledSkills.length} bundled, ${managedSkills.length} managed, ` +
-    `${workspaceSkills.length} workspace)`
+    `(${bundledSkills.length} bundled, ${managedSkills.length} managed)`
   );
 
   return allSkills;
+}
+
+/**
+ * Filter skills by eligibility and configuration
+ */
+export function filterSkills(
+  skills: SkillEntry[],
+  config?: SkillsSystemConfig,
+): SkillEntry[] {
+  return skills.filter((skill) => {
+    // Check if skill is enabled
+    if (!skill.enabled) return false;
+
+    // Check eligibility
+    if (!skill.eligible) return false;
+
+    // Check config-based disabling
+    const skillKey = skill.metadata?.skillKey ?? skill.name;
+    const skillConfig = config?.entries?.[skillKey];
+    if (skillConfig?.enabled === false) return false;
+
+    return true;
+  });
 }
 
 // =============================================================================
@@ -388,9 +430,10 @@ export async function checkEligibility(
 // =============================================================================
 
 /**
- * Build a skills snapshot with prompt for AI model
+ * Build a skills snapshot with prompt for AI model (synchronous version)
+ * Use this when you already have loaded skills.
  */
-export function buildSkillSnapshot(
+export function buildSkillSnapshotSync(
   skills: SkillEntry[],
   version: number,
 ): { prompt: string; snapshot: import('./types.js').SkillSnapshot } {

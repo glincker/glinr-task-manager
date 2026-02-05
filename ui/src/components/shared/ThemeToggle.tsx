@@ -54,7 +54,16 @@ export function ThemeToggle() {
           {theme === 'dark' && <Check className="h-4 w-4" />}
         </DropdownMenuItem>
 
-
+        <DropdownMenuItem
+          onClick={() => setTheme('midnight')}
+          className="flex items-center justify-between rounded-xl px-2 py-2.5 cursor-pointer hover:bg-white/5"
+        >
+          <div className="flex items-center gap-2">
+            <Moon className="h-4 w-4 text-purple-400" />
+            <span className="text-[13px]">Midnight</span>
+          </div>
+          {theme === 'midnight' && <Check className="h-4 w-4" />}
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator className="bg-white/5" />
 

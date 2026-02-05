@@ -11,7 +11,7 @@ export function ToastProvider() {
       toastOptions={{
         className: 'toast-glass',
         style: {
-          padding: '14px 16px',
+          padding: '12px 16px',
         },
       }}
     />

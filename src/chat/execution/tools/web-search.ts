@@ -76,6 +76,15 @@ Note: This tool requires a search API key to be configured in settings.`,
   securityLevel: 'safe',
   allowedHosts: ['gateway', 'local'],
   parameters: WebSearchParamsSchema,
+
+  isAvailable() {
+    const availability = isWebSearchAvailable(currentConfig);
+    return {
+      available: availability.available,
+      reason: availability.reason,
+    };
+  },
+
   examples: [
     { description: 'Search for recent news', params: { query: 'latest AI developments 2024' } },
     { description: 'Research a topic', params: { query: 'how to implement OAuth2 in Node.js', count: 5 } },

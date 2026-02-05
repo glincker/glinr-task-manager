@@ -981,10 +981,9 @@ async function handleAssignTicket(args: AssignTicketArgs): Promise<CallToolResul
 function calculateCost(input: number, output: number, model: string): number {
   // Pricing per 1M tokens (simplified)
   const pricing: Record<string, { input: number; output: number }> = {
-    'claude-opus-4-5-20251101': { input: 15, output: 75 },
-    'claude-sonnet-4-20250514': { input: 3, output: 15 },
-    'claude-3-5-sonnet-20241022': { input: 3, output: 15 },
-    'claude-3-5-haiku-20241022': { input: 0.8, output: 4 },
+    'claude-opus-4-6': { input: 5, output: 25 },
+    'claude-sonnet-4-5-20250929': { input: 3, output: 15 },
+    'claude-haiku-4-5-20251001': { input: 0.25, output: 1.25 },
     default: { input: 3, output: 15 },
   };
 

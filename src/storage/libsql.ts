@@ -1,14 +1,35 @@
-import { drizzle } from 'drizzle-orm/libsql';
-import { createClient } from '@libsql/client';
-import { eq, and, or, gte, lte, like, desc, asc, count, sql } from 'drizzle-orm';
-import { randomUUID } from 'crypto';
-import path from 'path';
-import fs from 'fs';
+import { drizzle } from "drizzle-orm/libsql";
+import { createClient } from "@libsql/client";
+import {
+  eq,
+  and,
+  or,
+  gte,
+  lte,
+  like,
+  desc,
+  asc,
+  count,
+  sql,
+} from "drizzle-orm";
+import { randomUUID } from "crypto";
+import path from "path";
+import fs from "fs";
 
-import type { StorageAdapter, TaskEventInput, TaskAnalytics, TaskFilterOptions } from './adapter.js';
-import * as schema from './schema.js';
-import type { Task, CreateTaskInput, TaskEvent } from '../types/task.js';
-import type { Summary, CreateSummaryInput, SummaryQuery, SummaryStats } from '../types/summary.js';
+import type {
+  StorageAdapter,
+  TaskEventInput,
+  TaskAnalytics,
+  TaskFilterOptions,
+} from "./adapter.js";
+import * as schema from "./schema.js";
+import type { Task, CreateTaskInput, TaskEvent } from "../types/task.js";
+import type {
+  Summary,
+  CreateSummaryInput,
+  SummaryQuery,
+  SummaryStats,
+} from "../types/summary.js";
 
 export class LibSQLAdapter implements StorageAdapter {
   private db: any;
@@ -16,14 +37,15 @@ export class LibSQLAdapter implements StorageAdapter {
   private readonly dbUrl: string;
 
   constructor(config: { dbPath?: string } = {}) {
-    const dbPath = config.dbPath || path.resolve(process.cwd(), 'data', 'glinr.db');
+    const dbPath =
+      config.dbPath || path.resolve(process.cwd(), "data", "glinr.db");
     this.dbUrl = `file:${dbPath}`;
   }
 
   async connect(): Promise<void> {
-    const dbPath = this.dbUrl.replace('file:', '');
+    const dbPath = this.dbUrl.replace("file:", "");
     const dir = path.dirname(dbPath);
-    if (!fs.existsSync(dir) && dbPath !== ':memory:') {
+    if (!fs.existsSync(dir) && dbPath !== ":memory:") {
       fs.mkdirSync(dir, { recursive: true });
     }
 
@@ -124,7 +146,9 @@ export class LibSQLAdapter implements StorageAdapter {
 
     // Add has_blob_output column to summaries if it doesn't exist
     try {
-      await this.client.execute(`ALTER TABLE summaries ADD COLUMN has_blob_output INTEGER DEFAULT 0`);
+      await this.client.execute(
+        `ALTER TABLE summaries ADD COLUMN has_blob_output INTEGER DEFAULT 0`,
+      );
     } catch (e) {
       // Column already exists, ignore
     }
@@ -228,6 +252,7 @@ export class LibSQLAdapter implements StorageAdapter {
         updated_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
         started_at INTEGER,
         completed_at INTEGER,
+        start_date INTEGER,
         due_date INTEGER,
         created_by TEXT NOT NULL DEFAULT 'human',
         ai_agent TEXT,
@@ -237,6 +262,15 @@ export class LibSQLAdapter implements StorageAdapter {
         estimate_unit TEXT
       )
     `);
+
+    // Add start_date column to tickets if it doesn't exist
+    try {
+      await this.client.execute(
+        `ALTER TABLE tickets ADD COLUMN start_date INTEGER`,
+      );
+    } catch {
+      // Column already exists - ignore
+    }
 
     await this.client.execute(`
       CREATE TABLE IF NOT EXISTS ticket_external_links (
@@ -293,6 +327,59 @@ export class LibSQLAdapter implements StorageAdapter {
         changed_by_name TEXT NOT NULL,
         changed_by_platform TEXT NOT NULL DEFAULT 'glinr',
         timestamp INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS ticket_watchers (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL REFERENCES tickets(id),
+        user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS ticket_assignees (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL REFERENCES tickets(id),
+        user_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS ticket_mentions (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL REFERENCES tickets(id),
+        user_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        source_id TEXT,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS ticket_attachments (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL REFERENCES tickets(id),
+        file_name TEXT NOT NULL,
+        file_type TEXT,
+        file_size INTEGER,
+        url TEXT NOT NULL,
+        storage_path TEXT,
+        uploaded_by TEXT,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS ticket_reactions (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL REFERENCES tickets(id),
+        user_id TEXT NOT NULL,
+        emoji TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -716,22 +803,30 @@ export class LibSQLAdapter implements StorageAdapter {
 
     // Add new columns to scheduled_jobs if they don't exist
     try {
-      await this.client.execute(`ALTER TABLE scheduled_jobs ADD COLUMN labels TEXT NOT NULL DEFAULT '[]'`);
+      await this.client.execute(
+        `ALTER TABLE scheduled_jobs ADD COLUMN labels TEXT NOT NULL DEFAULT '[]'`,
+      );
     } catch (e) {
       // Column already exists, ignore
     }
     try {
-      await this.client.execute(`ALTER TABLE scheduled_jobs ADD COLUMN archived_at INTEGER`);
+      await this.client.execute(
+        `ALTER TABLE scheduled_jobs ADD COLUMN archived_at INTEGER`,
+      );
     } catch (e) {
       // Column already exists, ignore
     }
     try {
-      await this.client.execute(`ALTER TABLE scheduled_jobs ADD COLUMN last_run_duration_ms INTEGER`);
+      await this.client.execute(
+        `ALTER TABLE scheduled_jobs ADD COLUMN last_run_duration_ms INTEGER`,
+      );
     } catch (e) {
       // Column already exists, ignore
     }
     try {
-      await this.client.execute(`ALTER TABLE scheduled_jobs ADD COLUMN retry_delay_ms INTEGER DEFAULT 60000`);
+      await this.client.execute(
+        `ALTER TABLE scheduled_jobs ADD COLUMN retry_delay_ms INTEGER DEFAULT 60000`,
+      );
     } catch (e) {
       // Column already exists, ignore
     }
@@ -827,7 +922,9 @@ export class LibSQLAdapter implements StorageAdapter {
 
     // Add project_id column to tickets table if it doesn't exist
     try {
-      await this.client.execute(`ALTER TABLE tickets ADD COLUMN project_id TEXT REFERENCES projects(id)`);
+      await this.client.execute(
+        `ALTER TABLE tickets ADD COLUMN project_id TEXT REFERENCES projects(id)`,
+      );
     } catch (e) {
       // Column already exists, ignore
     }
@@ -932,11 +1029,11 @@ export class LibSQLAdapter implements StorageAdapter {
   async createTask(input: CreateTaskInput): Promise<Task> {
     const id = (input as any).id || randomUUID();
     const now = new Date();
-    
+
     const newTask = {
       ...input,
       id,
-      status: 'pending' as const,
+      status: "pending" as const,
       createdAt: now,
       updatedAt: now,
       attempts: 0,
@@ -948,42 +1045,56 @@ export class LibSQLAdapter implements StorageAdapter {
   }
 
   async getTask(id: string): Promise<Task | null> {
-    const results = await this.db.select().from(schema.tasks).where(eq(schema.tasks.id, id));
+    const results = await this.db
+      .select()
+      .from(schema.tasks)
+      .where(eq(schema.tasks.id, id));
     return (results[0] as Task) || null;
   }
 
   async updateTask(id: string, updates: Partial<Task>): Promise<Task> {
     const now = new Date();
-    await this.db.update(schema.tasks)
+    await this.db
+      .update(schema.tasks)
       .set({ ...updates, updatedAt: now })
       .where(eq(schema.tasks.id, id));
-    
+
     const updated = await this.getTask(id);
     if (!updated) throw new Error(`Task ${id} not found after update`);
     return updated;
   }
 
   async deleteTask(id: string): Promise<boolean> {
-    const result = await this.db.delete(schema.tasks).where(eq(schema.tasks.id, id));
+    const result = await this.db
+      .delete(schema.tasks)
+      .where(eq(schema.tasks.id, id));
     // LibSQL results might be different from better-sqlite3
-    return true; 
+    return true;
   }
 
-  async getTasks(query?: { limit?: number; offset?: number; status?: string }): Promise<{ tasks: Task[]; total: number }> {
+  async getTasks(query?: {
+    limit?: number;
+    offset?: number;
+    status?: string;
+  }): Promise<{ tasks: Task[]; total: number }> {
     let whereClause = undefined;
     if (query?.status) {
       whereClause = eq(schema.tasks.status, query.status);
     }
 
-    const tasks = await this.db.select()
+    const tasks = await this.db
+      .select()
       .from(schema.tasks)
       .where(whereClause)
       .limit(query?.limit || 50)
       .offset(query?.offset || 0)
       .orderBy(desc(schema.tasks.createdAt));
 
-    const totalRes = await this.db.select({ value: count() }).from(schema.tasks).where(whereClause);
-    
+    const totalRes = await this.db
+      .select({ value: count() })
+      .from(schema.tasks)
+      .where(whereClause);
+
     return {
       tasks: tasks as Task[],
       total: totalRes[0].value,
@@ -1029,15 +1140,22 @@ export class LibSQLAdapter implements StorageAdapter {
     return { ...newSummary, createdAt: now, rawOutput: undefined } as Summary;
   }
 
-  async getSummary(id: string, includeRawOutput = false): Promise<Summary | null> {
-    const results = await this.db.select().from(schema.summaries).where(eq(schema.summaries.id, id));
+  async getSummary(
+    id: string,
+    includeRawOutput = false,
+  ): Promise<Summary | null> {
+    const results = await this.db
+      .select()
+      .from(schema.summaries)
+      .where(eq(schema.summaries.id, id));
     const summary = results[0] as Summary | undefined;
 
     if (!summary) return null;
 
     // Fetch raw output from blob table if requested
     if (includeRawOutput && summary.hasBlobOutput) {
-      const blob = await this.db.select()
+      const blob = await this.db
+        .select()
         .from(schema.summaryBlobs)
         .where(eq(schema.summaryBlobs.summaryId, id))
         .limit(1);
@@ -1060,7 +1178,8 @@ export class LibSQLAdapter implements StorageAdapter {
    */
   async getSummaryRawOutput(summaryId: string): Promise<string | null> {
     // First check blob table (new storage)
-    const blob = await this.db.select()
+    const blob = await this.db
+      .select()
       .from(schema.summaryBlobs)
       .where(eq(schema.summaryBlobs.summaryId, summaryId))
       .limit(1);
@@ -1070,7 +1189,8 @@ export class LibSQLAdapter implements StorageAdapter {
     }
 
     // Fallback to inline rawOutput for old summaries
-    const summary = await this.db.select({ rawOutput: schema.summaries.rawOutput })
+    const summary = await this.db
+      .select({ rawOutput: schema.summaries.rawOutput })
       .from(schema.summaries)
       .where(eq(schema.summaries.id, summaryId))
       .limit(1);
@@ -1079,35 +1199,46 @@ export class LibSQLAdapter implements StorageAdapter {
   }
 
   async getTaskSummaries(taskId: string): Promise<Summary[]> {
-    return await this.db.select()
+    return await this.db
+      .select()
       .from(schema.summaries)
       .where(eq(schema.summaries.taskId, taskId))
       .orderBy(desc(schema.summaries.createdAt));
   }
 
-  async querySummaries(query: Partial<SummaryQuery>): Promise<{ summaries: Summary[]; total: number }> {
+  async querySummaries(
+    query: Partial<SummaryQuery>,
+  ): Promise<{ summaries: Summary[]; total: number }> {
     const conditions = [];
 
-    if (query.taskId) conditions.push(eq(schema.summaries.taskId, query.taskId));
-    if (query.sessionId) conditions.push(eq(schema.summaries.sessionId, query.sessionId));
+    if (query.taskId)
+      conditions.push(eq(schema.summaries.taskId, query.taskId));
+    if (query.sessionId)
+      conditions.push(eq(schema.summaries.sessionId, query.sessionId));
     if (query.agent) conditions.push(eq(schema.summaries.agent, query.agent));
-    if (query.taskType) conditions.push(eq(schema.summaries.taskType, query.taskType));
-    if (query.component) conditions.push(eq(schema.summaries.component, query.component));
-    if (query.repository) conditions.push(eq(schema.summaries.repository, query.repository));
+    if (query.taskType)
+      conditions.push(eq(schema.summaries.taskType, query.taskType));
+    if (query.component)
+      conditions.push(eq(schema.summaries.component, query.component));
+    if (query.repository)
+      conditions.push(eq(schema.summaries.repository, query.repository));
 
-    if (query.from) conditions.push(gte(schema.summaries.createdAt, query.from));
+    if (query.from)
+      conditions.push(gte(schema.summaries.createdAt, query.from));
     if (query.to) conditions.push(lte(schema.summaries.createdAt, query.to));
 
     if (query.search) {
       const searchPattern = `%${query.search}%`;
-      conditions.push(sql`(${schema.summaries.title} LIKE ${searchPattern} OR ${schema.summaries.whatChanged} LIKE ${searchPattern} OR ${schema.summaries.whyChanged} LIKE ${searchPattern} OR ${schema.summaries.howChanged} LIKE ${searchPattern} OR ${schema.summaries.rawOutput} LIKE ${searchPattern})`);
+      conditions.push(
+        sql`(${schema.summaries.title} LIKE ${searchPattern} OR ${schema.summaries.whatChanged} LIKE ${searchPattern} OR ${schema.summaries.whyChanged} LIKE ${searchPattern} OR ${schema.summaries.howChanged} LIKE ${searchPattern} OR ${schema.summaries.rawOutput} LIKE ${searchPattern})`,
+      );
     }
 
     // Cursor-based pagination (Phase 17)
     if (query.cursorCreatedAt && query.cursorId) {
       const cursorTime = query.cursorCreatedAt;
       const cursorId = query.cursorId;
-      const isDesc = query.sortOrder !== 'asc';
+      const isDesc = query.sortOrder !== "asc";
 
       if (isDesc) {
         conditions.push(
@@ -1115,9 +1246,9 @@ export class LibSQLAdapter implements StorageAdapter {
             sql`${schema.summaries.createdAt} < ${cursorTime}`,
             and(
               sql`${schema.summaries.createdAt} = ${cursorTime}`,
-              sql`${schema.summaries.id} < ${cursorId}`
-            )
-          )
+              sql`${schema.summaries.id} < ${cursorId}`,
+            ),
+          ),
         );
       } else {
         conditions.push(
@@ -1125,9 +1256,9 @@ export class LibSQLAdapter implements StorageAdapter {
             sql`${schema.summaries.createdAt} > ${cursorTime}`,
             and(
               sql`${schema.summaries.createdAt} = ${cursorTime}`,
-              sql`${schema.summaries.id} > ${cursorId}`
-            )
-          )
+              sql`${schema.summaries.id} > ${cursorId}`,
+            ),
+          ),
         );
       }
     }
@@ -1137,19 +1268,32 @@ export class LibSQLAdapter implements StorageAdapter {
 
     // When using cursor, don't use offset (cursor already filters)
     const summaries = useCursor
-      ? await this.db.select()
+      ? await this.db
+          .select()
           .from(schema.summaries)
           .where(whereClause)
           .limit(query.limit || 50)
-          .orderBy(query.sortOrder === 'asc' ? asc(schema.summaries.createdAt) : desc(schema.summaries.createdAt))
-      : await this.db.select()
+          .orderBy(
+            query.sortOrder === "asc"
+              ? asc(schema.summaries.createdAt)
+              : desc(schema.summaries.createdAt),
+          )
+      : await this.db
+          .select()
           .from(schema.summaries)
           .where(whereClause)
           .limit(query.limit || 50)
           .offset(query.offset || 0)
-          .orderBy(query.sortOrder === 'asc' ? asc(schema.summaries.createdAt) : desc(schema.summaries.createdAt));
+          .orderBy(
+            query.sortOrder === "asc"
+              ? asc(schema.summaries.createdAt)
+              : desc(schema.summaries.createdAt),
+          );
 
-    const totalRes = await this.db.select({ value: count() }).from(schema.summaries).where(whereClause);
+    const totalRes = await this.db
+      .select({ value: count() })
+      .from(schema.summaries)
+      .where(whereClause);
 
     return {
       summaries: summaries as Summary[],
@@ -1164,41 +1308,60 @@ export class LibSQLAdapter implements StorageAdapter {
 
   async getSummaryStats(): Promise<SummaryStats> {
     // 1. Get totals and counts using SQL aggregation (Phase 17 optimization)
-    const [counts] = await this.db.select({
-      totalCount: count(),
-      totalTokens: sql<number>`SUM(CAST(json_extract(${schema.summaries.tokensUsed}, '$.total') AS INTEGER))`,
-      totalCost: sql<number>`SUM(CAST(json_extract(${schema.summaries.cost}, '$.amount') AS REAL))`,
-    }).from(schema.summaries);
+    const [counts] = await this.db
+      .select({
+        totalCount: count(),
+        totalTokens: sql<number>`SUM(CAST(json_extract(${schema.summaries.tokensUsed}, '$.total') AS INTEGER))`,
+        totalCost: sql<number>`SUM(CAST(json_extract(${schema.summaries.cost}, '$.amount') AS REAL))`,
+      })
+      .from(schema.summaries);
 
     // 2. Get distributions
-    const agentStats = await this.db.select({
-      agent: schema.summaries.agent,
-      count: count(),
-    }).from(schema.summaries).groupBy(schema.summaries.agent);
+    const agentStats = await this.db
+      .select({
+        agent: schema.summaries.agent,
+        count: count(),
+      })
+      .from(schema.summaries)
+      .groupBy(schema.summaries.agent);
 
-    const typeStats = await this.db.select({
-      type: schema.summaries.taskType,
-      count: count(),
-    }).from(schema.summaries).groupBy(schema.summaries.taskType);
+    const typeStats = await this.db
+      .select({
+        type: schema.summaries.taskType,
+        count: count(),
+      })
+      .from(schema.summaries)
+      .groupBy(schema.summaries.taskType);
 
-    const componentStats = await this.db.select({
-      component: schema.summaries.component,
-      count: count(),
-    }).from(schema.summaries).groupBy(schema.summaries.component);
+    const componentStats = await this.db
+      .select({
+        component: schema.summaries.component,
+        count: count(),
+      })
+      .from(schema.summaries)
+      .groupBy(schema.summaries.component);
 
     // 3. Get files changed count (requires custom SQL for JSON array length)
-    const [filesRes] = await this.db.select({
-      totalFiles: sql<number>`SUM(json_array_length(${schema.summaries.filesChanged}))`,
-    }).from(schema.summaries);
+    const [filesRes] = await this.db
+      .select({
+        totalFiles: sql<number>`SUM(json_array_length(${schema.summaries.filesChanged}))`,
+      })
+      .from(schema.summaries);
 
     const byAgent: Record<string, number> = {};
-    agentStats.forEach((s: { agent: string; count: number }) => { byAgent[s.agent] = s.count; });
+    agentStats.forEach((s: { agent: string; count: number }) => {
+      byAgent[s.agent] = s.count;
+    });
 
     const byTaskType: Record<string, number> = {};
-    typeStats.forEach((s: { type: string | null; count: number }) => { if (s.type) byTaskType[s.type] = s.count; });
+    typeStats.forEach((s: { type: string | null; count: number }) => {
+      if (s.type) byTaskType[s.type] = s.count;
+    });
 
     const byComponent: Record<string, number> = {};
-    componentStats.forEach((s: { component: string | null; count: number }) => { if (s.component) byComponent[s.component] = s.count; });
+    componentStats.forEach((s: { component: string | null; count: number }) => {
+      if (s.component) byComponent[s.component] = s.count;
+    });
 
     return {
       totalCount: counts.totalCount || 0,
@@ -1215,41 +1378,60 @@ export class LibSQLAdapter implements StorageAdapter {
   async healthCheck(): Promise<{ healthy: boolean; latencyMs: number }> {
     const start = Date.now();
     try {
-      await this.client.execute('SELECT 1');
+      await this.client.execute("SELECT 1");
       return { healthy: true, latencyMs: Date.now() - start };
     } catch (error) {
       return { healthy: false, latencyMs: Date.now() - start };
     }
   }
 
-  async getAgentStats(): Promise<Record<string, { completed: number; failed: number; avgDuration: number; lastActivity?: Date }>> {
-    const results = await this.db.select({
-      agent: schema.tasks.assignedAgent,
-      status: schema.tasks.status,
-      count: count(),
-      avgDuration: sql<number>`AVG(${schema.tasks.completedAt} - ${schema.tasks.startedAt})`,
-      lastActivity: sql<number>`MAX(${schema.tasks.updatedAt})`
-    })
-    .from(schema.tasks)
-    .where(sql`${schema.tasks.assignedAgent} IS NOT NULL`)
-    .groupBy(schema.tasks.assignedAgent, schema.tasks.status);
+  async getAgentStats(): Promise<
+    Record<
+      string,
+      {
+        completed: number;
+        failed: number;
+        avgDuration: number;
+        lastActivity?: Date;
+      }
+    >
+  > {
+    const results = await this.db
+      .select({
+        agent: schema.tasks.assignedAgent,
+        status: schema.tasks.status,
+        count: count(),
+        avgDuration: sql<number>`AVG(${schema.tasks.completedAt} - ${schema.tasks.startedAt})`,
+        lastActivity: sql<number>`MAX(${schema.tasks.updatedAt})`,
+      })
+      .from(schema.tasks)
+      .where(sql`${schema.tasks.assignedAgent} IS NOT NULL`)
+      .groupBy(schema.tasks.assignedAgent, schema.tasks.status);
 
     const stats: Record<string, any> = {};
     for (const row of results as any[]) {
       if (!row.agent) continue;
       if (!stats[row.agent]) {
-        stats[row.agent] = { completed: 0, failed: 0, avgDuration: 0, lastActivity: null };
+        stats[row.agent] = {
+          completed: 0,
+          failed: 0,
+          avgDuration: 0,
+          lastActivity: null,
+        };
       }
-      if (row.status === 'completed') {
+      if (row.status === "completed") {
         stats[row.agent].completed = row.count;
         stats[row.agent].avgDuration = row.avgDuration || 0;
-      } else if (row.status === 'failed') {
+      } else if (row.status === "failed") {
         stats[row.agent].failed = row.count;
       }
-      
+
       if (row.lastActivity) {
         const lastActivity = new Date(row.lastActivity);
-        if (!stats[row.agent].lastActivity || lastActivity > stats[row.agent].lastActivity) {
+        if (
+          !stats[row.agent].lastActivity ||
+          lastActivity > stats[row.agent].lastActivity
+        ) {
           stats[row.agent].lastActivity = lastActivity;
         }
       }
@@ -1273,10 +1455,10 @@ export class LibSQLAdapter implements StorageAdapter {
 
     for (const s of all) {
       if (!s.createdAt) continue;
-      
-      const date = s.createdAt.toISOString().split('T')[0];
-      const model = s.model || 'unknown';
-      const agent = s.agent || 'unknown';
+
+      const date = s.createdAt.toISOString().split("T")[0];
+      const model = s.model || "unknown";
+      const agent = s.agent || "unknown";
       const cost = (s.cost as any)?.amount || 0;
       const tokens = (s.tokensUsed as any)?.total || 0;
 
@@ -1311,7 +1493,13 @@ export class LibSQLAdapter implements StorageAdapter {
 
   // === Vector Search ===
 
-  async storeEmbedding(id: string, entityType: 'task' | 'summary', entityId: string, embedding: number[], model: string): Promise<void> {
+  async storeEmbedding(
+    id: string,
+    entityType: "task" | "summary",
+    entityId: string,
+    embedding: number[],
+    model: string,
+  ): Promise<void> {
     // Convert float array to Buffer/Uint8Array for blob storage
     const float32Array = new Float32Array(embedding);
     const buffer = Buffer.from(float32Array.buffer);
@@ -1326,19 +1514,28 @@ export class LibSQLAdapter implements StorageAdapter {
     });
   }
 
-  async searchSimilar(entityType: 'task' | 'summary', embedding: number[], limit = 5): Promise<Array<{ entityId: string; distance: number }>> {
+  async searchSimilar(
+    entityType: "task" | "summary",
+    embedding: number[],
+    limit = 5,
+  ): Promise<Array<{ entityId: string; distance: number }>> {
     // Basic implementation: fetch all embeddings of that type and compute cosine similarity in-memory
     // In Phase 10.3 we would use sqlite-vec or libsql vector search if available.
-    const allEmbeddings = await this.db.select()
+    const allEmbeddings = await this.db
+      .select()
       .from(schema.embeddings)
       .where(eq(schema.embeddings.entityType, entityType));
 
     if (allEmbeddings.length === 0) return [];
 
     const targetVector = new Float32Array(embedding);
-    
+
     const results = allEmbeddings.map((row: any) => {
-      const rowVector = new Float32Array(row.embedding.buffer, row.embedding.byteOffset, row.embedding.byteLength / 4);
+      const rowVector = new Float32Array(
+        row.embedding.buffer,
+        row.embedding.byteOffset,
+        row.embedding.byteLength / 4,
+      );
       const distance = this.cosineSimilarity(targetVector, rowVector);
       return {
         entityId: row.entityId,
@@ -1371,7 +1568,10 @@ export class LibSQLAdapter implements StorageAdapter {
 
   // === Generic SQL Operations ===
 
-  async query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]> {
+  async query<T = Record<string, unknown>>(
+    sql: string,
+    params?: unknown[],
+  ): Promise<T[]> {
     const result = await this.client.execute({
       sql,
       args: params || [],
@@ -1402,7 +1602,8 @@ export class LibSQLAdapter implements StorageAdapter {
   }
 
   async getTaskEvents(taskId: string): Promise<TaskEvent[]> {
-    const results = await this.db.select()
+    const results = await this.db
+      .select()
       .from(schema.taskEvents)
       .where(eq(schema.taskEvents.taskId, taskId))
       .orderBy(asc(schema.taskEvents.timestamp));
@@ -1427,8 +1628,19 @@ export class LibSQLAdapter implements StorageAdapter {
     const byStatus: Record<string, number> = {};
     const byPriority: Record<number, number> = {};
     const bySource: Record<string, number> = {};
-    const byAgent: Record<string, { count: number; completed: number; failed: number; totalDuration: number }> = {};
-    const daily: Record<string, { created: number; completed: number; failed: number }> = {};
+    const byAgent: Record<
+      string,
+      {
+        count: number;
+        completed: number;
+        failed: number;
+        totalDuration: number;
+      }
+    > = {};
+    const daily: Record<
+      string,
+      { created: number; completed: number; failed: number }
+    > = {};
 
     let totalDuration = 0;
     let durationCount = 0;
@@ -1454,16 +1666,28 @@ export class LibSQLAdapter implements StorageAdapter {
       // Agent stats
       if (task.assignedAgent) {
         if (!byAgent[task.assignedAgent]) {
-          byAgent[task.assignedAgent] = { count: 0, completed: 0, failed: 0, totalDuration: 0 };
+          byAgent[task.assignedAgent] = {
+            count: 0,
+            completed: 0,
+            failed: 0,
+            totalDuration: 0,
+          };
         }
         byAgent[task.assignedAgent].count++;
-        if (task.status === 'completed') byAgent[task.assignedAgent].completed++;
-        if (task.status === 'failed') byAgent[task.assignedAgent].failed++;
+        if (task.status === "completed")
+          byAgent[task.assignedAgent].completed++;
+        if (task.status === "failed") byAgent[task.assignedAgent].failed++;
 
         // Duration for this agent
         if (task.startedAt && task.completedAt) {
-          const startTime = task.startedAt instanceof Date ? task.startedAt.getTime() : new Date(task.startedAt).getTime();
-          const endTime = task.completedAt instanceof Date ? task.completedAt.getTime() : new Date(task.completedAt).getTime();
+          const startTime =
+            task.startedAt instanceof Date
+              ? task.startedAt.getTime()
+              : new Date(task.startedAt).getTime();
+          const endTime =
+            task.completedAt instanceof Date
+              ? task.completedAt.getTime()
+              : new Date(task.completedAt).getTime();
           const duration = endTime - startTime;
           if (duration > 0) {
             byAgent[task.assignedAgent].totalDuration += duration;
@@ -1473,8 +1697,14 @@ export class LibSQLAdapter implements StorageAdapter {
 
       // Duration stats
       if (task.startedAt && task.completedAt) {
-        const startTime = task.startedAt instanceof Date ? task.startedAt.getTime() : new Date(task.startedAt).getTime();
-        const endTime = task.completedAt instanceof Date ? task.completedAt.getTime() : new Date(task.completedAt).getTime();
+        const startTime =
+          task.startedAt instanceof Date
+            ? task.startedAt.getTime()
+            : new Date(task.startedAt).getTime();
+        const endTime =
+          task.completedAt instanceof Date
+            ? task.completedAt.getTime()
+            : new Date(task.completedAt).getTime();
         const duration = endTime - startTime;
         if (duration > 0) {
           totalDuration += duration;
@@ -1485,22 +1715,30 @@ export class LibSQLAdapter implements StorageAdapter {
       }
 
       // Daily stats (last 30 days)
-      const createdTime = task.createdAt instanceof Date ? task.createdAt.getTime() : new Date(task.createdAt).getTime();
+      const createdTime =
+        task.createdAt instanceof Date
+          ? task.createdAt.getTime()
+          : new Date(task.createdAt).getTime();
       if (createdTime >= thirtyDaysAgo) {
-        const dateStr = new Date(createdTime).toISOString().split('T')[0];
-        if (!daily[dateStr]) daily[dateStr] = { created: 0, completed: 0, failed: 0 };
+        const dateStr = new Date(createdTime).toISOString().split("T")[0];
+        if (!daily[dateStr])
+          daily[dateStr] = { created: 0, completed: 0, failed: 0 };
         daily[dateStr].created++;
       }
 
       if (task.completedAt) {
-        const completedTime = task.completedAt instanceof Date ? task.completedAt.getTime() : new Date(task.completedAt).getTime();
+        const completedTime =
+          task.completedAt instanceof Date
+            ? task.completedAt.getTime()
+            : new Date(task.completedAt).getTime();
         if (completedTime >= thirtyDaysAgo) {
-          const dateStr = new Date(completedTime).toISOString().split('T')[0];
-          if (!daily[dateStr]) daily[dateStr] = { created: 0, completed: 0, failed: 0 };
-          if (task.status === 'completed') {
+          const dateStr = new Date(completedTime).toISOString().split("T")[0];
+          if (!daily[dateStr])
+            daily[dateStr] = { created: 0, completed: 0, failed: 0 };
+          if (task.status === "completed") {
             daily[dateStr].completed++;
             if (completedTime >= oneDayAgo) recentCompletions++;
-          } else if (task.status === 'failed') {
+          } else if (task.status === "failed") {
             daily[dateStr].failed++;
             if (completedTime >= oneDayAgo) recentFailures++;
           }
@@ -1509,22 +1747,30 @@ export class LibSQLAdapter implements StorageAdapter {
     }
 
     const totalTasks = allTasks.length;
-    const completedTasks = byStatus['completed'] || 0;
-    const failedTasks = byStatus['failed'] || 0;
-    const pendingTasks = (byStatus['pending'] || 0) + (byStatus['queued'] || 0);
-    const inProgressTasks = (byStatus['in_progress'] || 0) + (byStatus['assigned'] || 0);
-    const cancelledTasks = byStatus['cancelled'] || 0;
+    const completedTasks = byStatus["completed"] || 0;
+    const failedTasks = byStatus["failed"] || 0;
+    const pendingTasks = (byStatus["pending"] || 0) + (byStatus["queued"] || 0);
+    const inProgressTasks =
+      (byStatus["in_progress"] || 0) + (byStatus["assigned"] || 0);
+    const cancelledTasks = byStatus["cancelled"] || 0;
 
-    const successRate = totalTasks > 0 ? (completedTasks / (completedTasks + failedTasks)) * 100 : 0;
+    const successRate =
+      totalTasks > 0
+        ? (completedTasks / (completedTasks + failedTasks)) * 100
+        : 0;
 
     // Convert byAgent to expected format
-    const byAgentFormatted: Record<string, { count: number; successRate: number; avgDurationMs: number }> = {};
+    const byAgentFormatted: Record<
+      string,
+      { count: number; successRate: number; avgDurationMs: number }
+    > = {};
     for (const [agent, stats] of Object.entries(byAgent)) {
       const total = stats.completed + stats.failed;
       byAgentFormatted[agent] = {
         count: stats.count,
         successRate: total > 0 ? (stats.completed / total) * 100 : 0,
-        avgDurationMs: stats.completed > 0 ? stats.totalDuration / stats.completed : 0,
+        avgDurationMs:
+          stats.completed > 0 ? stats.totalDuration / stats.completed : 0,
       };
     }
 
@@ -1540,8 +1786,11 @@ export class LibSQLAdapter implements StorageAdapter {
       pendingTasks,
       inProgressTasks,
       cancelledTasks,
-      successRate: Number.isNaN(successRate) ? 0 : Math.round(successRate * 100) / 100,
-      avgDurationMs: durationCount > 0 ? Math.round(totalDuration / durationCount) : 0,
+      successRate: Number.isNaN(successRate)
+        ? 0
+        : Math.round(successRate * 100) / 100,
+      avgDurationMs:
+        durationCount > 0 ? Math.round(totalDuration / durationCount) : 0,
       minDurationMs: minDuration === Infinity ? 0 : minDuration,
       maxDurationMs: maxDuration,
       byStatus,
@@ -1556,13 +1805,20 @@ export class LibSQLAdapter implements StorageAdapter {
 
   // === Advanced Task Filtering ===
 
-  async getTasksFiltered(options: TaskFilterOptions): Promise<{ tasks: Task[]; total: number }> {
+  async getTasksFiltered(
+    options: TaskFilterOptions,
+  ): Promise<{ tasks: Task[]; total: number }> {
     const conditions = [];
 
     // Status filter (supports array)
     if (options.status) {
       if (Array.isArray(options.status)) {
-        conditions.push(sql`${schema.tasks.status} IN (${sql.join(options.status.map(s => sql`${s}`), sql`, `)})`);
+        conditions.push(
+          sql`${schema.tasks.status} IN (${sql.join(
+            options.status.map((s) => sql`${s}`),
+            sql`, `,
+          )})`,
+        );
       } else {
         conditions.push(eq(schema.tasks.status, options.status));
       }
@@ -1571,7 +1827,12 @@ export class LibSQLAdapter implements StorageAdapter {
     // Priority filter (supports array)
     if (options.priority !== undefined) {
       if (Array.isArray(options.priority)) {
-        conditions.push(sql`${schema.tasks.priority} IN (${sql.join(options.priority.map(p => sql`${p}`), sql`, `)})`);
+        conditions.push(
+          sql`${schema.tasks.priority} IN (${sql.join(
+            options.priority.map((p) => sql`${p}`),
+            sql`, `,
+          )})`,
+        );
       } else {
         conditions.push(eq(schema.tasks.priority, options.priority));
       }
@@ -1580,7 +1841,12 @@ export class LibSQLAdapter implements StorageAdapter {
     // Source filter (supports array)
     if (options.source) {
       if (Array.isArray(options.source)) {
-        conditions.push(sql`${schema.tasks.source} IN (${sql.join(options.source.map(s => sql`${s}`), sql`, `)})`);
+        conditions.push(
+          sql`${schema.tasks.source} IN (${sql.join(
+            options.source.map((s) => sql`${s}`),
+            sql`, `,
+          )})`,
+        );
       } else {
         conditions.push(eq(schema.tasks.source, options.source));
       }
@@ -1620,7 +1886,9 @@ export class LibSQLAdapter implements StorageAdapter {
     // Text search
     if (options.searchQuery) {
       const searchPattern = `%${options.searchQuery}%`;
-      conditions.push(sql`(${schema.tasks.title} LIKE ${searchPattern} OR ${schema.tasks.description} LIKE ${searchPattern} OR ${schema.tasks.prompt} LIKE ${searchPattern})`);
+      conditions.push(
+        sql`(${schema.tasks.title} LIKE ${searchPattern} OR ${schema.tasks.description} LIKE ${searchPattern} OR ${schema.tasks.prompt} LIKE ${searchPattern})`,
+      );
     }
 
     // Cursor-based pagination (Phase 17)
@@ -1628,7 +1896,7 @@ export class LibSQLAdapter implements StorageAdapter {
     if (options.cursorCreatedAt && options.cursorId) {
       const cursorTime = options.cursorCreatedAt;
       const cursorId = options.cursorId;
-      const isDesc = options.sortOrder !== 'asc';
+      const isDesc = options.sortOrder !== "asc";
 
       if (isDesc) {
         conditions.push(
@@ -1636,9 +1904,9 @@ export class LibSQLAdapter implements StorageAdapter {
             sql`${schema.tasks.createdAt} < ${cursorTime}`,
             and(
               sql`${schema.tasks.createdAt} = ${cursorTime}`,
-              sql`${schema.tasks.id} < ${cursorId}`
-            )
-          )
+              sql`${schema.tasks.id} < ${cursorId}`,
+            ),
+          ),
         );
       } else {
         conditions.push(
@@ -1646,9 +1914,9 @@ export class LibSQLAdapter implements StorageAdapter {
             sql`${schema.tasks.createdAt} > ${cursorTime}`,
             and(
               sql`${schema.tasks.createdAt} = ${cursorTime}`,
-              sql`${schema.tasks.id} > ${cursorId}`
-            )
-          )
+              sql`${schema.tasks.id} > ${cursorId}`,
+            ),
+          ),
         );
       }
     }
@@ -1657,28 +1925,35 @@ export class LibSQLAdapter implements StorageAdapter {
 
     // Determine sort column and order
     let orderByColumn: any = schema.tasks.createdAt;
-    if (options.sortBy === 'updatedAt') orderByColumn = schema.tasks.updatedAt;
-    else if (options.sortBy === 'priority') orderByColumn = schema.tasks.priority;
-    else if (options.sortBy === 'completedAt') orderByColumn = schema.tasks.completedAt;
+    if (options.sortBy === "updatedAt") orderByColumn = schema.tasks.updatedAt;
+    else if (options.sortBy === "priority")
+      orderByColumn = schema.tasks.priority;
+    else if (options.sortBy === "completedAt")
+      orderByColumn = schema.tasks.completedAt;
 
-    const orderFn = options.sortOrder === 'asc' ? asc : desc;
+    const orderFn = options.sortOrder === "asc" ? asc : desc;
     const useCursor = !!(options.cursorCreatedAt && options.cursorId);
 
     // When using cursor, don't use offset (cursor already filters)
     const tasks = useCursor
-      ? await this.db.select()
+      ? await this.db
+          .select()
           .from(schema.tasks)
           .where(whereClause)
           .limit(options.limit || 50)
           .orderBy(orderFn(orderByColumn))
-      : await this.db.select()
+      : await this.db
+          .select()
           .from(schema.tasks)
           .where(whereClause)
           .limit(options.limit || 50)
           .offset(options.offset || 0)
           .orderBy(orderFn(orderByColumn));
 
-    const totalRes = await this.db.select({ value: count() }).from(schema.tasks).where(whereClause);
+    const totalRes = await this.db
+      .select({ value: count() })
+      .from(schema.tasks)
+      .where(whereClause);
 
     return {
       tasks: tasks as Task[],
@@ -1693,12 +1968,15 @@ export class LibSQLAdapter implements StorageAdapter {
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
     // Find tasks to archive (completed or failed, older than cutoff)
-    const tasksToArchive = await this.db.select()
+    const tasksToArchive = await this.db
+      .select()
       .from(schema.tasks)
-      .where(and(
-        sql`${schema.tasks.status} IN ('completed', 'failed', 'cancelled')`,
-        lte(schema.tasks.completedAt, cutoffDate)
-      ));
+      .where(
+        and(
+          sql`${schema.tasks.status} IN ('completed', 'failed', 'cancelled')`,
+          lte(schema.tasks.completedAt, cutoffDate),
+        ),
+      );
 
     let archived = 0;
 
@@ -1706,8 +1984,14 @@ export class LibSQLAdapter implements StorageAdapter {
       // Calculate duration
       let durationMs: number | null = null;
       if (task.startedAt && task.completedAt) {
-        const startTime = task.startedAt instanceof Date ? task.startedAt.getTime() : new Date(task.startedAt as any).getTime();
-        const endTime = task.completedAt instanceof Date ? task.completedAt.getTime() : new Date(task.completedAt as any).getTime();
+        const startTime =
+          task.startedAt instanceof Date
+            ? task.startedAt.getTime()
+            : new Date(task.startedAt as any).getTime();
+        const endTime =
+          task.completedAt instanceof Date
+            ? task.completedAt.getTime()
+            : new Date(task.completedAt as any).getTime();
         durationMs = endTime - startTime;
       }
 
@@ -1745,14 +2029,20 @@ export class LibSQLAdapter implements StorageAdapter {
     return { archived };
   }
 
-  async getArchivedTasks(options: { limit?: number; offset?: number }): Promise<{ tasks: Task[]; total: number }> {
-    const archived = await this.db.select()
+  async getArchivedTasks(options: {
+    limit?: number;
+    offset?: number;
+  }): Promise<{ tasks: Task[]; total: number }> {
+    const archived = await this.db
+      .select()
       .from(schema.taskArchives)
       .limit(options.limit || 50)
       .offset(options.offset || 0)
       .orderBy(desc(schema.taskArchives.archivedAt));
 
-    const totalRes = await this.db.select({ value: count() }).from(schema.taskArchives);
+    const totalRes = await this.db
+      .select({ value: count() })
+      .from(schema.taskArchives);
 
     // Map archived tasks back to Task format
     const tasks = archived.map((a: any) => ({

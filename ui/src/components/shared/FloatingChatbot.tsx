@@ -940,9 +940,8 @@ export function FloatingChatbot() {
             // Responsive positioning
             "bottom-24 right-4 sm:right-6",
             // Clean panel styling
-            "bg-white dark:bg-zinc-900",
-            "border border-border",
-            "rounded-2xl",
+            "glass-heavy",
+            "rounded-[2rem] shadow-2xl shadow-primary/10",
             // Responsive sizes - larger on desktop
             isExpanded
               ? "w-[calc(100vw-2rem)] sm:w-130 md:w-150 lg:w-170 h-[72vh] sm:h-155 md:h-180"
@@ -950,19 +949,19 @@ export function FloatingChatbot() {
           )}
         >
           {/* Header - Glass effect */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-white dark:bg-zinc-900">
+          <div className="flex items-center justify-between px-5 py-4 bg-primary/5">
             <div className="flex items-center gap-3">
-              <div className="relative h-8 w-8 rounded-lg bg-sky-500/10 flex items-center justify-center">
-                <Sparkles className="h-4 w-4 text-sky-500" />
-                <span className="absolute -top-1.5 -right-1.5 px-1 py-0.5 text-[7px] font-bold uppercase rounded bg-amber-500/90 text-white leading-none">
+              <div className="relative h-9 w-9 rounded-xl glass-heavy flex items-center justify-center shadow-lg shadow-primary/5">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 text-[8px] font-black uppercase rounded-lg bg-primary text-primary-foreground leading-none shadow-sm">
                   Beta
                 </span>
               </div>
               <div>
-                <h3 className="text-sm font-semibold">GLINR Assistant</h3>
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <h3 className="text-sm font-black tracking-tight uppercase tracking-[0.1em]">GLINR Assistant</h3>
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-semibold">
                   <PageIcon className="h-3 w-3" />
-                  <span>{pageContext.name}</span>
+                  <span className="uppercase tracking-widest">{pageContext.name}</span>
                   {entityId && ticketData && (
                     <span className="text-sky-600 dark:text-sky-400">
                       • GLINR-{(ticketData as { sequence?: number }).sequence}
@@ -980,7 +979,7 @@ export function FloatingChatbot() {
             {sortedModels.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-medium bg-muted/40 hover:bg-muted/60 border border-border/30 transition-colors mr-2">
+                  <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-bold bg-primary/10 hover:bg-primary/20 transition-all shadow-sm">
                     <span
                       className={cn(
                         "h-1.5 w-1.5 rounded-full",
@@ -992,20 +991,20 @@ export function FloatingChatbot() {
                                 a.alias === selectedModel,
                             )?.provider,
                         )?.healthy
-                          ? "bg-green-500"
-                          : "bg-amber-400",
+                          ? "bg-emerald-500 shadow-[0_0_8px_var(--success)]"
+                          : "bg-amber-400 shadow-[0_0_8px_var(--warning)]",
                       )}
                     />
-                    <Cpu className="h-3 w-3 text-muted-foreground" />
-                    <span className="capitalize max-w-16 truncate">
+                    <Cpu className="h-3.5 w-3.5 text-primary" />
+                    <span className="capitalize max-w-20 truncate text-primary font-black">
                       {selectedModel || currentModel || "Model"}
                     </span>
-                    <ChevronDown className="h-2.5 w-2.5 text-muted-foreground" />
+                    <ChevronDown className="h-3 w-3 text-primary opacity-50" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-44 glass-dropdown"
+                  className="w-52 glass-heavy shadow-2xl"
                 >
                   <div className="px-2 py-1.5 text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
                     Select Model
@@ -1024,21 +1023,21 @@ export function FloatingChatbot() {
                         key={alias.alias}
                         onClick={() => handleModelChange(alias.alias)}
                         className={cn(
-                          "flex items-center justify-between cursor-pointer text-xs",
-                          isSelected && "bg-sky-500/10",
+                          "flex items-center justify-between cursor-pointer text-xs py-2",
+                          isSelected && "bg-primary/20",
                         )}
                       >
                         <div className="flex items-center gap-2">
                           <span
                             className={cn(
                               "h-1.5 w-1.5 rounded-full",
-                              isHealthy ? "bg-green-500" : "bg-amber-400",
+                              isHealthy ? "bg-emerald-500" : "bg-amber-400",
                             )}
                           />
                           <span
                             className={cn(
-                              "capitalize font-medium",
-                              isSelected && "text-sky-600 dark:text-sky-400",
+                              "capitalize font-bold",
+                              isSelected && "text-primary",
                             )}
                           >
                             {alias.alias}
@@ -1171,10 +1170,10 @@ export function FloatingChatbot() {
                   )}
                   <div
                     className={cn(
-                      "max-w-[80%] rounded-[1.25rem] px-5 py-3 text-[13px] leading-relaxed shadow-sm transition-all",
+                      "max-w-[85%] rounded-[1.5rem] px-5 py-3.5 text-[14px] leading-relaxed shadow-lg transition-all",
                       message.role === "user"
-                        ? "bg-blue-600 text-white rounded-tr-sm ml-auto"
-                        : "bg-zinc-100 dark:bg-zinc-800/80 text-foreground rounded-tl-sm border border-zinc-200/50 dark:border-transparent",
+                        ? "bg-primary text-primary-foreground rounded-tr-sm ml-auto shadow-primary/10"
+                        : "glass text-foreground rounded-tl-sm shadow-sm",
                       message.role === "assistant" && "mr-auto"
                     )}
                   >
@@ -1201,8 +1200,8 @@ export function FloatingChatbot() {
                     )}
                   </div>
                   {message.role === "user" && (
-                    <div className="h-7 w-7 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0">
-                      <User className="h-4 w-4 text-blue-600" />
+                    <div className="h-8 w-8 rounded-xl glass-heavy flex items-center justify-center shrink-0 shadow-lg">
+                      <User className="h-4.5 w-4.5 text-primary" />
                     </div>
                   )}
                 </div>
@@ -1212,7 +1211,7 @@ export function FloatingChatbot() {
           </div>
 
           {/* Input - Glass effect */}
-          <div className="p-3 border-t border-border bg-white dark:bg-zinc-900">
+          <div className="p-4 bg-primary/5">
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
@@ -1222,7 +1221,7 @@ export function FloatingChatbot() {
                 placeholder={`Ask about ${pageContext.name.toLowerCase()}...`}
                 rows={1}
                 disabled={isLoadingHistory}
-                className="flex-1 px-3 py-2.5 text-sm bg-zinc-100 dark:bg-zinc-800 border-transparent rounded-[1.25rem] resize-none focus:outline-none focus:ring-1 focus:ring-zinc-300 dark:focus:ring-zinc-600 focus:bg-white dark:focus:bg-black min-h-10 max-h-32 placeholder:text-muted-foreground/60 disabled:opacity-50 transition-all font-normal"
+                className="flex-1 px-4 py-3 text-sm glass rounded-[1.5rem] resize-none focus:outline-none focus:ring-1 focus:ring-primary/20 focus:bg-white/50 dark:focus:bg-black/50 min-h-11 max-h-32 placeholder:text-muted-foreground/50 disabled:opacity-50 transition-all font-medium"
                 style={{
                   height: "auto",
                   overflow: input.split("\n").length > 3 ? "auto" : "hidden",
@@ -1242,7 +1241,7 @@ export function FloatingChatbot() {
                   isLoadingHistory
                 }
                 size="sm"
-                className="h-10 w-10 p-0 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm disabled:bg-zinc-200 dark:disabled:bg-zinc-800 disabled:text-zinc-400"
+                className="h-11 w-11 p-0 rounded-2xl bg-primary hover:bg-primary-hover text-primary-foreground shadow-xl shadow-primary/20 hover:scale-110 active:scale-95 transition-all"
               >
                 {sendMessageMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1263,10 +1262,10 @@ export function FloatingChatbot() {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full flex items-center justify-center transition-all duration-300 ease-out hover:scale-105 shadow-lg",
+          "fixed bottom-6 right-6 z-50 h-[60px] w-[60px] rounded-[1.5rem] flex items-center justify-center transition-all duration-300 ease-out hover:scale-110 active:scale-90 shadow-2xl",
           isOpen
-            ? "bg-white dark:bg-zinc-900 text-muted-foreground border border-zinc-200 dark:border-zinc-800"
-            : "bg-blue-600 text-white border border-blue-700 hover:bg-blue-700",
+            ? "glass-heavy text-primary shadow-primary/10"
+            : "bg-primary text-primary-foreground shadow-primary/30",
         )}
         title={
           isOpen ? "Close chat" : `Open GLINR Assistant (${pageContext.name})`

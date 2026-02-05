@@ -11,7 +11,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Github, LogIn, AlertCircle, Eye, EyeOff, ArrowRight, Settings, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -28,7 +27,6 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
   const [lastUser, setLastUser] = useState<LastUser | null>(null);
 
   // Load last logged-in user
@@ -113,23 +111,23 @@ export function LoginPage() {
       {/* Background gradient */}
       <div className="fixed inset-0 bg-gradient-to-br from-[var(--primary)]/5 via-transparent to-pink-500/5 pointer-events-none" />
 
-      <Card className="w-full max-w-md relative z-10 border-[var(--border)] shadow-2xl">
-        <CardHeader className="text-center pb-2">
+      <div className="w-full max-w-md relative z-10 glass-heavy rounded-[2.5rem] shadow-float overflow-hidden">
+        <div className="text-center pb-2 px-8 pt-8">
           {/* Logo */}
-          <div className="flex justify-center mb-4">
-            <div className="p-3 rounded-2xl bg-[var(--primary)]/10 shadow-[0_0_30px_var(--primary-glow)]">
-              <Logo className="h-10 w-10 text-[var(--primary)]" aria-label="GLINR Logo" />
+          <div className="flex justify-center mb-6">
+            <div className="p-4 rounded-[2rem] glass-heavy shadow-2xl shadow-primary/10 transition-transform hover:scale-110">
+              <Logo className="h-12 w-12 text-[var(--primary)]" aria-label="GLINR Logo" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">Welcome back</CardTitle>
-          <CardDescription className="text-[var(--muted-foreground)]">
+          <h1 className="text-3xl font-black tracking-tighter uppercase tracking-[0.1em]">Welcome back</h1>
+          <p className="text-sm text-[var(--muted-foreground)] font-semibold mt-1">
             Sign in to your GLINR account
-          </CardDescription>
-        </CardHeader>
+          </p>
+        </div>
 
-        <CardContent className="space-y-5 pt-2">
+        <div className="space-y-6 px-8 pb-8 pt-4">
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive text-sm rounded-xl border border-destructive/20">
+            <div className="flex items-center gap-3 p-4 bg-destructive/5 text-destructive text-sm font-bold rounded-2xl shadow-inner animate-in fade-in slide-in-from-top-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
               {error}
             </div>
@@ -147,30 +145,30 @@ export function LoginPage() {
                     document.getElementById('password')?.focus();
                   }, 100);
                 }}
-                className="w-full flex items-center gap-3 p-3 bg-[var(--accent)]/50 hover:bg-[var(--accent)] rounded-xl border border-[var(--border)] transition-colors text-left group"
+                className="w-full flex items-center gap-3 p-4 glass hover:bg-white/10 dark:hover:bg-black/20 rounded-2xl transition-all text-left group shadow-lg"
               >
                 {lastUser.avatarUrl ? (
                   <img
                     src={lastUser.avatarUrl}
                     alt={lastUser.name}
-                    className="h-10 w-10 rounded-full object-cover ring-2 ring-[var(--primary)]/20"
+                    className="h-12 w-12 rounded-2xl object-cover shadow-md"
                   />
                 ) : (
-                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[var(--primary)] to-pink-500 flex items-center justify-center ring-2 ring-[var(--primary)]/20">
-                    <span className="text-sm font-semibold text-white">
+                  <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-[var(--primary)] to-pink-500 flex items-center justify-center shadow-md">
+                    <span className="text-lg font-black text-white">
                       {lastUser.name?.charAt(0).toUpperCase() || 'U'}
                     </span>
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-[var(--foreground)] truncate">
+                  <p className="font-black text-[var(--foreground)] truncate uppercase tracking-wider text-xs">
                     Continue as {lastUser.name}
                   </p>
-                  <p className="text-sm text-[var(--muted-foreground)] truncate">
+                  <p className="text-xs text-[var(--muted-foreground)] truncate font-medium">
                     {lastUser.email}
                   </p>
                 </div>
-                <ArrowRight className="h-4 w-4 text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-colors" />
+                <ArrowRight className="h-4.5 w-4.5 text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-all group-hover:translate-x-1" />
               </button>
               <button
                 type="button"
@@ -179,7 +177,7 @@ export function LoginPage() {
                   clearLastUser();
                   setLastUser(null);
                 }}
-                className="absolute -top-2 -right-2 p-1.5 rounded-full bg-[var(--muted)] hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors shadow-sm"
+                className="absolute -top-1.5 -right-1.5 h-6 w-6 rounded-full bg-[var(--background)] border border-[var(--border)] flex items-center justify-center text-[var(--muted-foreground)] hover:text-destructive transition-all shadow-md active:scale-90 z-10"
                 title="Dismiss"
                 aria-label="Dismiss last user"
               >
@@ -189,15 +187,15 @@ export function LoginPage() {
           )}
 
           {/* GitHub OAuth - Primary CTA */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Button
               type="button"
               variant="outline"
               className={cn(
-                "w-full gap-3 h-12 text-base font-medium transition-all",
+                "w-full gap-3 h-14 rounded-2xl glass-heavy text-base font-black uppercase tracking-widest text-[12px] transition-all border-none shadow-xl",
                 githubConfigured
-                  ? "hover:bg-[var(--accent)] hover:border-[var(--primary)]/50"
-                  : "opacity-60 cursor-not-allowed"
+                  ? "hover:bg-[var(--primary)]/10 hover:shadow-primary/5 active:scale-95"
+                  : "opacity-40 cursor-not-allowed"
               )}
               onClick={handleGitHubClick}
               disabled={!githubConfigured}
@@ -209,31 +207,31 @@ export function LoginPage() {
             {!githubConfigured && (
               <button
                 onClick={() => navigate('/setup')}
-                className="w-full text-xs text-center text-[var(--muted-foreground)] flex items-center justify-center gap-1.5 py-1.5 hover:text-[var(--primary)] transition-colors group"
+                className="w-full text-[10px] text-center text-[var(--muted-foreground)] flex items-center justify-center gap-1.5 py-1 hover:text-[var(--primary)] transition-colors group font-black uppercase tracking-widest"
                 aria-label="GitHub OAuth not configured. Click to configure now."
               >
                 <Settings className="h-3 w-3 group-hover:animate-spin" />
                 <span>GitHub OAuth not configured.</span>
-                <span className="text-[var(--primary)] underline underline-offset-2">Configure now</span>
+                <span className="text-[var(--primary)] underline-offset-4 decoration-2">Configure now</span>
               </button>
             )}
           </div>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-[var(--border)]" />
+              <span className="w-full h-px bg-gradient-to-r from-transparent via-[var(--border)]/20 to-transparent" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-[var(--card)] px-3 text-[var(--muted-foreground)] font-medium">
+            <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-black">
+              <span className="bg-[var(--card)] px-4 text-[var(--muted-foreground)]/60">
                 Or continue with email
               </span>
             </div>
           </div>
 
           {/* Email/Password Form */}
-          <form onSubmit={handleEmailLogin} className="space-y-4">
+          <form onSubmit={handleEmailLogin} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium">
+              <Label htmlFor="email" className="premium-label">
                 Email
               </Label>
               <Input
@@ -241,26 +239,18 @@ export function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                onFocus={() => setFocusedField('email')}
-                onBlur={() => setFocusedField(null)}
-                placeholder="you@example.com"
+                placeholder="you@glinr.ai"
                 required
                 autoComplete="email"
-                className={cn(
-                  "h-11 transition-all",
-                  focusedField === 'email' && "ring-2 ring-[var(--primary)]/20 border-[var(--primary)]"
-                )}
               />
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sm font-medium">
-                  Password
-                </Label>
+              <div className="flex items-center justify-between px-1">
+                <Label htmlFor="password" className="premium-label">Password</Label>
                 <Link
                   to="/forgot-password"
-                  className="text-xs text-[var(--primary)] hover:underline"
+                  className="text-[10px] font-black uppercase tracking-widest text-[var(--primary)] hover:opacity-80 transition-opacity"
                 >
                   Forgot password?
                 </Link>
@@ -271,26 +261,21 @@ export function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  onFocus={() => setFocusedField('password')}
-                  onBlur={() => setFocusedField(null)}
-                  placeholder="Enter your password"
+                  placeholder="••••••••"
                   required
                   autoComplete="current-password"
-                  className={cn(
-                    "h-11 pr-10 transition-all",
-                    focusedField === 'password' && "ring-2 ring-[var(--primary)]/20 border-[var(--primary)]"
-                  )}
+                  className="pr-12"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
+                    <EyeOff className="h-5 w-5" />
                   ) : (
-                    <Eye className="h-4 w-4" />
+                    <Eye className="h-5 w-5" />
                   )}
                 </button>
               </div>
@@ -298,38 +283,43 @@ export function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full h-11 gap-2 text-base font-medium"
+              variant="black"
+              className="w-full mt-2"
               disabled={isLoading}
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <LogIn className="h-4 w-4" />
+                <>
+                  <LogIn className="h-4 w-4" />
+                  Sign in
+                </>
               )}
-              Sign in
             </Button>
           </form>
 
-          <p className="text-center text-sm text-[var(--muted-foreground)]">
+          <p className="text-center text-[10px] font-black uppercase tracking-widest text-[var(--muted-foreground)]/60">
             Don't have an account?{' '}
-            <Link to="/signup" className="text-[var(--primary)] hover:underline font-medium">
+            <Link to="/signup" className="text-[var(--primary)] hover:opacity-80 transition-opacity">
               Sign up
             </Link>
           </p>
 
           {/* Legal Links */}
-          <p className="text-center text-xs text-[var(--muted-foreground)] pt-2 border-t border-[var(--border)]">
-            By signing in, you agree to our{' '}
-            <Link to="/terms" className="text-[var(--primary)] hover:underline">
-              Terms of Service
-            </Link>{' '}
-            and{' '}
-            <Link to="/privacy" className="text-[var(--primary)] hover:underline">
-              Privacy Policy
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
+          <div className="pt-6 border-t border-[var(--border)]/10 text-center space-y-2">
+            <p className="text-[9px] font-black uppercase tracking-[0.15em] text-[var(--muted-foreground)]/40 leading-relaxed">
+              By signing in, you agree to our{' '}
+              <Link to="/terms" className="text-[var(--primary)] hover:opacity-80">
+                Terms
+              </Link>{' '}
+              and{' '}
+              <Link to="/privacy" className="text-[var(--primary)] hover:opacity-80">
+                Privacy
+              </Link>
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

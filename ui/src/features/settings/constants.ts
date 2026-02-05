@@ -15,6 +15,9 @@ import {
   Tag,
   Smartphone,
   Brain,
+  Puzzle,
+  Wrench,
+  MessageCircle,
 } from 'lucide-react';
 import {
   AnthropicLogo,
@@ -74,6 +77,12 @@ export const SETTINGS_SECTIONS = [
     description: 'API keys and services',
   },
   {
+    id: 'messaging',
+    label: 'Messaging',
+    icon: MessageCircle,
+    description: 'Telegram, Discord, WhatsApp',
+  },
+  {
     id: 'devices',
     label: 'Devices',
     icon: Smartphone,
@@ -84,6 +93,18 @@ export const SETTINGS_SECTIONS = [
     label: 'Memory',
     icon: Brain,
     description: 'Semantic memory system',
+  },
+  {
+    id: 'skills',
+    label: 'Skills',
+    icon: Puzzle,
+    description: 'Modular AI capabilities',
+  },
+  {
+    id: 'tools',
+    label: 'Tools',
+    icon: Wrench,
+    description: 'AI tool configuration',
   },
   {
     id: 'security',

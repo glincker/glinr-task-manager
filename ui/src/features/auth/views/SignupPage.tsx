@@ -10,7 +10,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Github, AlertCircle, Check, Eye, EyeOff, ArrowRight, Sparkles, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -106,38 +105,38 @@ export function SignupPage() {
       {/* Background gradient */}
       <div className="fixed inset-0 bg-gradient-to-br from-[var(--primary)]/5 via-transparent to-pink-500/5 pointer-events-none" />
 
-      <Card className="w-full max-w-md relative z-10 border-[var(--border)] shadow-2xl">
-        <CardHeader className="text-center pb-2">
+      <div className="w-full max-w-md relative z-10 glass-heavy rounded-[2.5rem] shadow-float overflow-hidden">
+        <div className="text-center pb-2 px-8 pt-8">
           {/* Logo */}
-          <div className="flex justify-center mb-4">
-            <div className="p-3 rounded-2xl bg-[var(--primary)]/10 shadow-[0_0_30px_var(--primary-glow)]">
-              <Logo className="h-10 w-10 text-[var(--primary)]" aria-label="GLINR Logo" />
+          <div className="flex justify-center mb-6">
+            <div className="p-4 rounded-[2rem] glass-heavy shadow-2xl shadow-primary/10 transition-transform hover:scale-110">
+              <Logo className="h-12 w-12 text-[var(--primary)]" aria-label="GLINR Logo" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">Create your account</CardTitle>
-          <CardDescription className="text-[var(--muted-foreground)]">
+          <h1 className="text-3xl font-black tracking-tighter uppercase tracking-[0.1em]">Create account</h1>
+          <p className="text-sm text-[var(--muted-foreground)] font-semibold mt-1">
             Get started with GLINR for free
-          </CardDescription>
-        </CardHeader>
+          </p>
+        </div>
 
-        <CardContent className="space-y-5 pt-2">
+        <div className="space-y-6 px-8 pb-8 pt-4">
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive text-sm rounded-xl border border-destructive/20">
+            <div className="flex items-center gap-3 p-4 bg-destructive/5 text-destructive text-sm font-bold rounded-2xl shadow-inner animate-in fade-in slide-in-from-top-2">
               <AlertCircle className="h-4 w-4 shrink-0" />
               {error}
             </div>
           )}
 
           {/* GitHub OAuth - Primary CTA */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Button
               type="button"
               variant="outline"
               className={cn(
-                "w-full gap-3 h-12 text-base font-medium transition-all",
+                "w-full gap-3 h-14 rounded-2xl glass-heavy text-base font-black uppercase tracking-widest text-[12px] transition-all border-none shadow-xl",
                 githubConfigured
-                  ? "hover:bg-[var(--accent)] hover:border-[var(--primary)]/50"
-                  : "opacity-60 cursor-not-allowed"
+                  ? "hover:bg-[var(--primary)]/10 hover:shadow-primary/5 active:scale-95"
+                  : "opacity-40 cursor-not-allowed"
               )}
               onClick={handleGitHubClick}
               disabled={!githubConfigured}
@@ -149,31 +148,31 @@ export function SignupPage() {
             {!githubConfigured && (
               <button
                 onClick={() => navigate('/setup')}
-                className="w-full text-xs text-center text-[var(--muted-foreground)] flex items-center justify-center gap-1.5 py-1.5 hover:text-[var(--primary)] transition-colors group"
+                className="w-full text-[10px] text-center text-[var(--muted-foreground)] flex items-center justify-center gap-1.5 py-1 hover:text-[var(--primary)] transition-colors group font-black uppercase tracking-widest"
                 aria-label="GitHub OAuth not configured. Click to configure now."
               >
                 <Settings className="h-3 w-3 group-hover:animate-spin" />
                 <span>GitHub OAuth not configured.</span>
-                <span className="text-[var(--primary)] underline underline-offset-2">Configure now</span>
+                <span className="text-[var(--primary)] underline-offset-4 decoration-2">Configure now</span>
               </button>
             )}
           </div>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-[var(--border)]" />
+              <span className="w-full h-px bg-gradient-to-r from-transparent via-[var(--border)]/20 to-transparent" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-[var(--card)] px-3 text-[var(--muted-foreground)] font-medium">
+            <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-black">
+              <span className="bg-[var(--card)] px-4 text-[var(--muted-foreground)]/60">
                 Or continue with email
               </span>
             </div>
           </div>
 
           {/* Email/Password Form */}
-          <form onSubmit={handleSignup} className="space-y-4">
+          <form onSubmit={handleSignup} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="name" className="text-sm font-medium">
+              <Label htmlFor="name" className="text-[10px] font-black uppercase tracking-widest text-[var(--muted-foreground)] px-1">
                 Full Name
               </Label>
               <Input
@@ -187,14 +186,14 @@ export function SignupPage() {
                 required
                 autoComplete="name"
                 className={cn(
-                  "h-11 transition-all",
-                  focusedField === 'name' && "ring-2 ring-[var(--primary)]/20 border-[var(--primary)]"
+                  "h-12 border-none glass-heavy rounded-2xl shadow-inner transition-all px-4 font-bold focus:shadow-xl focus:shadow-primary/5 focus:scale-[1.01]",
+                  focusedField === 'name' && "bg-white/50 dark:bg-black/50"
                 )}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium">
+              <Label htmlFor="email" className="text-[10px] font-black uppercase tracking-widest text-[var(--muted-foreground)] px-1">
                 Email
               </Label>
               <Input
@@ -204,18 +203,18 @@ export function SignupPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 onFocus={() => setFocusedField('email')}
                 onBlur={() => setFocusedField(null)}
-                placeholder="you@example.com"
+                placeholder="you@glinr.ai"
                 required
                 autoComplete="email"
                 className={cn(
-                  "h-11 transition-all",
-                  focusedField === 'email' && "ring-2 ring-[var(--primary)]/20 border-[var(--primary)]"
+                  "h-12 border-none glass-heavy rounded-2xl shadow-inner transition-all px-4 font-bold focus:shadow-xl focus:shadow-primary/5 focus:scale-[1.01]",
+                  focusedField === 'email' && "bg-white/50 dark:bg-black/50"
                 )}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium">
+              <Label htmlFor="password" className="text-[10px] font-black uppercase tracking-widest text-[var(--muted-foreground)] px-1">
                 Password
               </Label>
               <div className="relative">
@@ -226,24 +225,24 @@ export function SignupPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => setFocusedField(null)}
-                  placeholder="Create a strong password"
+                  placeholder="••••••••"
                   required
                   autoComplete="new-password"
                   className={cn(
-                    "h-11 pr-10 transition-all",
-                    focusedField === 'password' && "ring-2 ring-[var(--primary)]/20 border-[var(--primary)]"
+                    "h-12 border-none glass-heavy rounded-2xl shadow-inner transition-all px-4 font-bold pr-12 focus:shadow-xl focus:shadow-primary/5 focus:scale-[1.01]",
+                    focusedField === 'password' && "bg-white/50 dark:bg-black/50"
                   )}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
+                    <EyeOff className="h-5 w-5" />
                   ) : (
-                    <Eye className="h-4 w-4" />
+                    <Eye className="h-5 w-5" />
                   )}
                 </button>
               </div>
@@ -251,13 +250,13 @@ export function SignupPage() {
               {/* Password strength bar */}
               {password.length > 0 && (
                 <div className="space-y-2 mt-3">
-                  <div className="h-1.5 bg-[var(--muted)] rounded-full overflow-hidden">
+                  <div className="h-1 bg-[var(--muted)]/50 rounded-full overflow-hidden shadow-inner">
                     <div
                       className={cn(
-                        "h-full transition-all duration-300 rounded-full",
+                        "h-full transition-all duration-700 rounded-full shadow-[0_0_10px_rgba(0,0,0,0.1)]",
                         passwordStrengthPercent < 50 && "bg-red-500",
                         passwordStrengthPercent >= 50 && passwordStrengthPercent < 100 && "bg-yellow-500",
-                        passwordStrengthPercent === 100 && "bg-green-500"
+                        passwordStrengthPercent === 100 && "bg-emerald-500 shadow-[0_0_15px_var(--success-glow)]"
                       )}
                       style={{ width: `${passwordStrengthPercent}%` }}
                     />
@@ -292,33 +291,38 @@ export function SignupPage() {
 
             <Button
               type="submit"
-              className="w-full h-11 gap-2 text-base font-medium mt-2"
+              variant="black"
+              className="w-full mt-4"
               disabled={isLoading || passwordStrengthPercent < 100}
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Sparkles className="h-4 w-4" />
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Create Account
+                </>
               )}
-              Create Account
             </Button>
           </form>
 
-          <p className="text-center text-sm text-[var(--muted-foreground)]">
+          <p className="text-center text-[10px] font-black uppercase tracking-widest text-[var(--muted-foreground)]/60 pt-2 text-center">
             Already have an account?{' '}
-            <Link to="/login" className="text-[var(--primary)] hover:underline font-medium">
+            <Link to="/login" className="text-[var(--primary)] hover:opacity-80 transition-opacity">
               Sign in
             </Link>
           </p>
 
-          <p className="text-center text-[11px] text-[var(--muted-foreground)]/70">
-            By signing up, you agree to our{' '}
-            <Link to="/terms" className="underline hover:text-[var(--foreground)]">Terms of Service</Link>
-            {' '}and{' '}
-            <Link to="/privacy" className="underline hover:text-[var(--foreground)]">Privacy Policy</Link>
-          </p>
-        </CardContent>
-      </Card>
+          <div className="pt-6 border-t border-[var(--border)]/10 text-center space-y-2">
+            <p className="text-[9px] font-black uppercase tracking-[0.15em] text-[var(--muted-foreground)]/40 leading-relaxed">
+              By signing up, you agree to our{' '}
+              <Link to="/terms" className="text-[var(--primary)] hover:opacity-80">Terms</Link>
+              {' '}and{' '}
+              <Link to="/privacy" className="text-[var(--primary)] hover:opacity-80">Privacy</Link>
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

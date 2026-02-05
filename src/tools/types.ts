@@ -50,6 +50,13 @@ export interface ToolDefinition<TParams = unknown, TResult = unknown> {
   /** Zod schema for parameters */
   parameters: z.ZodType<TParams, z.ZodTypeDef, unknown>;
 
+  /**
+   * Optional availability check. If defined, the tool is only included in the
+   * tool list when `available` is true. Tools that require external dependencies
+   * (API keys, services, binaries) should implement this.
+   */
+  isAvailable?: () => ToolAvailability;
+
   /** Execute the tool */
   execute: (params: TParams) => Promise<ToolResult<TResult>>;
 
@@ -61,6 +68,14 @@ export interface ToolDefinition<TParams = unknown, TResult = unknown> {
     maxCalls: number;
     windowMs: number;
   };
+}
+
+/**
+ * Tool availability check result
+ */
+export interface ToolAvailability {
+  available: boolean;
+  reason?: string;
 }
 
 /**

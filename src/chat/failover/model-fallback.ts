@@ -131,7 +131,7 @@ interface ModelCandidate {
 const DEFAULT_MODELS: Record<ProviderType, string> = {
   anthropic: 'claude-sonnet-4-5-20251014',
   openai: 'gpt-4.1',
-  azure: 'gpt-4o',
+  azure: 'default', // Uses configured deployment - not hardcoded
   google: 'gemini-2.5-pro-preview-05-06',
   groq: 'llama-3.3-70b-versatile',
   ollama: 'llama3.2',

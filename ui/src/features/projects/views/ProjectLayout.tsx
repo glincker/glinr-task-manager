@@ -144,14 +144,14 @@ export function ProjectLayout() {
               aria-label="Search in project"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 bg-white/5 border-white/5 focus:border-primary/30 focus:ring-primary/10 rounded-xl text-xs transition-all"
+              className="pl-9 h-9"
             />
           </div>
 
           <div className="w-px h-6 bg-white/10 mx-1" />
 
           <div className="flex items-center gap-2">
-            <Button variant="default" size="sm" className="h-9 gap-2 btn-primary-filled rounded-xl">
+            <Button variant="black" size="sm" className="h-9 gap-2 rounded-xl">
               <Plus className="h-4 w-4" />
               <span className="hidden sm:inline text-xs font-bold uppercase tracking-wider">Issue</span>
             </Button>

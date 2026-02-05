@@ -25,6 +25,8 @@ const UNSUPPORTED_SCHEMA_KEYWORDS = new Set([
   'if',
   'then',
   'else',
+  // Default values not supported in tool schemas
+  'default',
   // Constraint keywords that can cause issues
   'minLength',
   'maxLength',
@@ -376,8 +378,82 @@ export function cleanSchema(schema: unknown): unknown {
 }
 
 /**
+ * Ensure a cleaned schema has valid type for its structure
+ * Azure is strict about having explicit types on all schema objects
+ */
+function ensureValidType(schema: Record<string, unknown>): Record<string, unknown> {
+  // If it has properties or additionalProperties, it's an object
+  if ('properties' in schema || 'additionalProperties' in schema) {
+    return { ...schema, type: 'object' };
+  }
+  // If it has items, it's an array
+  if ('items' in schema) {
+    return { ...schema, type: 'array' };
+  }
+  // If it has enum with values, infer type from first value
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) {
+    const firstValue = schema.enum[0];
+    const inferredType = typeof firstValue;
+    if (['string', 'number', 'boolean'].includes(inferredType)) {
+      return { ...schema, type: inferredType };
+    }
+  }
+  // Default to string if no type can be inferred
+  if (!schema.type) {
+    return { ...schema, type: 'string' };
+  }
+  return schema;
+}
+
+/**
+ * Recursively ensure all nested schemas have valid types
+ */
+function ensureNestedTypes(schema: unknown): unknown {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
+    return schema;
+  }
+
+  const obj = schema as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === 'properties' && value && typeof value === 'object' && !Array.isArray(value)) {
+      // Recursively fix property schemas
+      const props = value as Record<string, unknown>;
+      result[key] = Object.fromEntries(
+        Object.entries(props).map(([k, v]) => {
+          if (v && typeof v === 'object' && !Array.isArray(v)) {
+            const fixed = ensureNestedTypes(v) as Record<string, unknown>;
+            return [k, ensureValidType(fixed)];
+          }
+          return [k, v];
+        })
+      );
+    } else if (key === 'items' && value && typeof value === 'object') {
+      if (Array.isArray(value)) {
+        result[key] = value.map((item) => {
+          if (item && typeof item === 'object' && !Array.isArray(item)) {
+            const fixed = ensureNestedTypes(item) as Record<string, unknown>;
+            return ensureValidType(fixed);
+          }
+          return item;
+        });
+      } else {
+        const fixed = ensureNestedTypes(value) as Record<string, unknown>;
+        result[key] = ensureValidType(fixed);
+      }
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+/**
  * Normalize tool parameters for provider compatibility
  * Ensures top-level type: "object" and cleans the schema
+ * Guarantees Azure-compatible output
  */
 export function normalizeToolSchema(schema: unknown): Record<string, unknown> {
   if (!schema || typeof schema !== 'object') {
@@ -388,7 +464,14 @@ export function normalizeToolSchema(schema: unknown): Record<string, unknown> {
 
   // If already has type + properties without top-level anyOf, just clean it
   if ('type' in obj && 'properties' in obj && !Array.isArray(obj.anyOf)) {
-    return cleanSchema(obj) as Record<string, unknown>;
+    const cleaned = cleanSchema(obj) as Record<string, unknown>;
+    const withTypes = ensureNestedTypes(cleaned) as Record<string, unknown>;
+    // Ensure top-level always has type: object and properties
+    return {
+      type: 'object',
+      ...withTypes,
+      properties: withTypes.properties ?? {},
+    };
   }
 
   // Force type: "object" if missing but has object-like fields
@@ -398,7 +481,13 @@ export function normalizeToolSchema(schema: unknown): Record<string, unknown> {
     !Array.isArray(obj.anyOf) &&
     !Array.isArray(obj.oneOf)
   ) {
-    return cleanSchema({ ...obj, type: 'object' }) as Record<string, unknown>;
+    const cleaned = cleanSchema({ ...obj, type: 'object' }) as Record<string, unknown>;
+    const withTypes = ensureNestedTypes(cleaned) as Record<string, unknown>;
+    return {
+      type: 'object',
+      ...withTypes,
+      properties: withTypes.properties ?? {},
+    };
   }
 
   // Handle union schemas (anyOf/oneOf) by flattening
@@ -406,11 +495,13 @@ export function normalizeToolSchema(schema: unknown): Record<string, unknown> {
   if (!variantKey) {
     // No union, just clean
     const cleaned = cleanSchema(obj) as Record<string, unknown>;
-    // Ensure type: object
-    if (!cleaned.type && cleaned.properties) {
-      cleaned.type = 'object';
-    }
-    return cleaned;
+    const withTypes = ensureNestedTypes(cleaned) as Record<string, unknown>;
+    // Always ensure type: object and properties for tool parameters
+    return {
+      type: 'object',
+      ...withTypes,
+      properties: withTypes.properties ?? {},
+    };
   }
 
   // Flatten union variants
@@ -451,11 +542,18 @@ export function normalizeToolSchema(schema: unknown): Record<string, unknown> {
           .map(([key]) => key)
       : undefined;
 
-  return cleanSchema({
+  const cleaned = cleanSchema({
     type: 'object',
     ...(typeof obj.title === 'string' ? { title: obj.title } : {}),
     ...(typeof obj.description === 'string' ? { description: obj.description } : {}),
     properties: Object.keys(mergedProperties).length > 0 ? mergedProperties : (obj.properties ?? {}),
     ...(mergedRequired && mergedRequired.length > 0 ? { required: mergedRequired } : {}),
   }) as Record<string, unknown>;
+
+  const withTypes = ensureNestedTypes(cleaned) as Record<string, unknown>;
+  return {
+    type: 'object',
+    ...withTypes,
+    properties: withTypes.properties ?? {},
+  };
 }

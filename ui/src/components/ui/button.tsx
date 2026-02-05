@@ -9,12 +9,13 @@ const buttonVariants = cva(
       variant: {
         default: 'btn-primary',
         destructive: 'btn-destructive',
-        outline: 'btn-secondary',
+        outline: 'btn-primary-outline',
         secondary: 'btn-secondary',
         ghost: 'btn-ghost',
         link: 'text-[var(--primary)] underline-offset-4 hover:underline bg-transparent border-none shadow-none',
         success: 'btn-success',
-        glass: 'bg-white/10 backdrop-blur-sm border border-white/20 text-[var(--foreground)] hover:bg-white/20 hover:border-white/30 shadow-lg',
+        black: 'btn-primary',
+        glass: 'bg-white/10 backdrop-blur-sm text-[var(--foreground)] hover:bg-white/20 shadow-xl transition-all',
       },
       size: {
         default: 'h-10 px-4 py-2 rounded-xl',

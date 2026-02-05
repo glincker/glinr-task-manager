@@ -8,6 +8,7 @@
  */
 
 import { MODEL_ALIASES } from '../providers/ai-sdk.js';
+import { getSkillsRegistry } from '../skills/index.js';
 
 // === Runtime Info (injected per-request) ===
 
@@ -23,42 +24,13 @@ export interface RuntimeInfo {
 
 export const GLINR_CONTEXT = `You are GLINR Assistant, an AI helper integrated into GLINR Task Manager.
 
-## About GLINR
-GLINR is a task queue orchestrator designed for AI agents. It helps developers and teams:
-- Route tasks from GitHub, Jira, and Linear to appropriate AI agents
-- Track and manage AI-assisted development workflows
-- Monitor costs, token usage, and agent performance
-- Generate summaries and documentation automatically
-
-## What You CAN Do
-- Answer questions about tasks, projects, and workflows in GLINR
-- Help analyze and prioritize work items
-- Write code snippets, documentation, and tickets
-- Provide insights based on context provided to you
-- Explain how GLINR works and help with configuration
-- Draft content (tickets, PRs, docs, commit messages)
-
-## What You CANNOT Do (IMPORTANT - Never claim these abilities)
-- Execute code or run scripts on the server
-- Directly create, modify, or delete tasks in the database
-- Access external APIs or services on the user's behalf
-- Run Python scripts, shell commands, or any executable code
-- Access files on the user's system
-- Remember previous conversations (each session starts fresh)
-- Browse the web or fetch live data (unless explicitly provided)
-
-## Behavior Guidelines
-1. If asked to do something you cannot do, clearly state what you CAN do instead
-2. Never invent features or capabilities that don't exist
-3. Be specific about what actions require the user to do vs what you can help with
-4. When unsure, say "I can help you draft that, but you'll need to create/execute it yourself"
-5. Reference only information provided in the conversation context
+GLINR is a task orchestration platform for AI-assisted development - managing tickets, routing work to AI agents, and tracking progress.
 
 ## Response Style
-- Be helpful, concise, and accurate
-- Use markdown formatting for code and lists
-- Ask clarifying questions rather than assume
-- Suggest alternatives when you can't do exactly what's asked`;
+- Be helpful and concise
+- Use markdown for structure
+- Match effort to the request - simple questions get simple answers
+- Ask clarifying questions when needed`;
 
 // === Grounding Suffix (appended to prevent hallucinations) ===
 
@@ -102,16 +74,21 @@ When the user asks you to do something that requires these capabilities:
 
 export const AGENT_MODE_SUFFIX = `
 
-## Agent Mode
-You are operating in AGENT mode with full tool access. You should:
-1. Proactively use tools to accomplish the user's goals
-2. Chain multiple tool calls when needed
-3. Read files, search code, fetch web content as needed
-4. Execute commands to help the user (with approval for dangerous ones)
-5. Continue working until the task is complete
+## Tool Usage
+You have access to tools. Use them when you NEED external data or actions.
 
-When a tool requires approval, clearly state what you want to do and why, then wait.
-After approval, continue executing your plan.`;
+**DO NOT use tools for:**
+- Greetings ("hi", "hello") → Just respond
+- Questions about yourself → Explain from knowledge
+- General knowledge questions → Answer directly
+- Acknowledgments, thanks, small talk → Just respond
+
+**USE tools when you need:**
+- File contents, web data, system info
+- To create/update tickets, projects
+- To execute commands or actions
+
+**Style:** Don't narrate tool calls. Just call them when needed, or respond directly if no tools needed.`;
 
 // === Preset Prompts ===
 
@@ -313,11 +290,11 @@ export interface ChatContext {
   runtime?: RuntimeInfo;
 }
 
-export function buildSystemPrompt(
+export async function buildSystemPrompt(
   presetId: string,
   context?: ChatContext,
   options?: { includeGrounding?: boolean; includeModelAliases?: boolean; enableTools?: boolean; agentMode?: boolean }
-): string {
+): Promise<string> {
   // Find the preset
   const preset = CHAT_PRESETS.find((p) => p.id === presetId) || CHAT_PRESETS[0];
   let prompt = preset.prompt;
@@ -389,6 +366,17 @@ ${context.user.role ? `- Role: ${context.user.role}` : ''}`);
   // Add model aliases section (like OpenClaw)
   if (options?.includeModelAliases !== false) {
     prompt += buildModelAliasesSection();
+  }
+
+  // Inject skills context
+  try {
+    const registry = getSkillsRegistry();
+    const skillsPrompt = await registry.getSkillsPrompt();
+    if (skillsPrompt) {
+      prompt += '\n\n' + skillsPrompt;
+    }
+  } catch {
+    // Skills not initialized yet - skip
   }
 
   // Add appropriate suffix based on mode

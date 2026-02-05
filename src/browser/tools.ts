@@ -14,7 +14,38 @@ import {
   formatSnapshotResponse,
   formatSearchResponse,
 } from './index.js';
-import type { ToolDefinition, ToolResult } from '../tools/types.js';
+import type { ToolDefinition, ToolResult, ToolAvailability } from '../tools/types.js';
+
+// =============================================================================
+// Availability Check
+// =============================================================================
+
+/** Cache browser availability to avoid repeated checks */
+let browserAvailabilityCache: ToolAvailability | null = null;
+
+/**
+ * Check if Playwright browser is available
+ * Caches result to avoid repeated expensive checks
+ */
+function checkBrowserAvailability(): ToolAvailability {
+  if (browserAvailabilityCache) {
+    return browserAvailabilityCache;
+  }
+
+  try {
+    // Try to dynamically import playwright-core to check if it's installed
+    // The actual browser launch happens lazily in the service
+    require.resolve('playwright-core');
+    browserAvailabilityCache = { available: true };
+  } catch {
+    browserAvailabilityCache = {
+      available: false,
+      reason: 'Playwright is not installed. Run: pnpm add playwright-core',
+    };
+  }
+
+  return browserAvailabilityCache;
+}
 
 // Re-export for backwards compatibility
 export type BrowserToolDefinition<TParams = unknown, TResult = unknown> = ToolDefinition<TParams, TResult>;
@@ -152,6 +183,7 @@ Use for: Loading web pages, following links, web scraping setup.
 Element refs (e1, e2...) in the snapshot can be used with browser_click and browser_type.`,
   securityLevel: 'moderate',
   parameters: NavigateParamsSchema,
+  isAvailable: checkBrowserAvailability,
   examples: [
     { description: 'Navigate to GitHub', params: { url: 'https://github.com' } },
     { description: 'Load with network idle', params: { url: 'https://example.com', waitUntil: 'networkidle' } },
@@ -195,6 +227,7 @@ export const browserSnapshotTool: BrowserToolDefinition<SnapshotParams, Snapshot
 Use compress=true (default) to reduce token usage. Use interactive=true to only show clickable elements.`,
   securityLevel: 'safe',
   parameters: SnapshotParamsSchema,
+  isAvailable: checkBrowserAvailability,
   examples: [
     { description: 'Get full snapshot', params: {} },
     { description: 'Interactive elements only', params: { interactive: true } },
@@ -239,6 +272,7 @@ export const browserClickTool: BrowserToolDefinition<ClickParams, ClickResult> =
 Supports left/right/middle click, double-click, and modifier keys.`,
   securityLevel: 'moderate',
   parameters: ClickParamsSchema,
+  isAvailable: checkBrowserAvailability,
   examples: [
     { description: 'Click element', params: { ref: 'e3' } },
     { description: 'Double click', params: { ref: 'e5', doubleClick: true } },
@@ -286,6 +320,7 @@ export const browserTypeTool: BrowserToolDefinition<TypeParams, TypeResult> = {
 Can clear existing text first and press Enter after typing to submit forms.`,
   securityLevel: 'moderate',
   parameters: TypeParamsSchema,
+  isAvailable: checkBrowserAvailability,
   examples: [
     { description: 'Type in search', params: { ref: 'e4', text: 'hello world' } },
     { description: 'Clear and type', params: { ref: 'e6', text: 'new value', clear: true } },
@@ -333,6 +368,7 @@ export const browserSearchTool: BrowserToolDefinition<SearchParams, SearchResult
 Use to find specific buttons, links, or text content on the page.`,
   securityLevel: 'safe',
   parameters: SearchParamsSchema,
+  isAvailable: checkBrowserAvailability,
   examples: [
     { description: 'Find sign in', params: { pattern: 'Sign in' } },
     { description: 'Find all buttons', params: { pattern: 'button', ignoreCase: true } },
@@ -381,6 +417,7 @@ export const browserScreenshotTool: BrowserToolDefinition<ScreenshotParams, Scre
 Use for visual verification or capturing page state.`,
   securityLevel: 'safe',
   parameters: ScreenshotParamsSchema,
+  isAvailable: checkBrowserAvailability,
   examples: [
     { description: 'Current viewport', params: {} },
     { description: 'Full page', params: { fullPage: true } },
@@ -425,6 +462,7 @@ export const browserPagesTool: BrowserToolDefinition<PagesParams, PagesResult> =
 Use to see what pages are currently open and get their pageIds.`,
   securityLevel: 'safe',
   parameters: PagesParamsSchema,
+  isAvailable: checkBrowserAvailability,
   examples: [{ description: 'List pages', params: {} }],
   async execute(_params) {
     try {
@@ -471,6 +509,7 @@ export const browserCloseTool: BrowserToolDefinition<CloseParams, CloseResult> =
 Use to clean up browser resources after completing tasks.`,
   securityLevel: 'safe',
   parameters: CloseParamsSchema,
+  isAvailable: checkBrowserAvailability,
   examples: [
     { description: 'Close all', params: {} },
     { description: 'Close specific page', params: { pageId: 'page-1' } },

@@ -260,7 +260,7 @@ export function ChatSidebar({
             aria-label="Search chat history"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 pl-10 pr-10 text-sm bg-white/[0.03] dark:bg-white/[0.05] border-white/10 rounded-xl focus:bg-white/[0.05] focus:ring-2 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/30 shadow-inner"
+            className="h-9 pl-10 pr-10 text-xs"
           />
           {searchQuery && (
             <button
@@ -311,7 +311,7 @@ export function ChatSidebar({
                     )}>
                       <ChevronDown className="h-3 w-3" aria-hidden="true" />
                     </div>
-                    <span>{TIME_GROUP_LABELS[group]}</span>
+                    <span className="nav-group-label">{TIME_GROUP_LABELS[group]}</span>
                     <div className="flex-1 h-px bg-white/[0.03] mx-2" />
                     <span className="text-[10px] tabular-nums opacity-60">
                       {groupConvs.length}
@@ -414,7 +414,7 @@ function ConversationItem({
       className={cn(
         'group relative flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-300 cursor-pointer mx-1',
         isActive
-          ? 'nav-item-active shadow-md'
+          ? 'bg-[#0a0a0b] text-white shadow-lg shadow-black/20 nav-item-active z-10'
           : 'text-muted-foreground hover:nav-item-hover'
       )}
       onClick={onSelect}
@@ -422,7 +422,7 @@ function ConversationItem({
       <div className={cn(
         'w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm border transition-all duration-300',
         isActive 
-          ? 'bg-blue-600 border-blue-500 shadow-md text-white' 
+          ? 'bg-white/10 border-white/20 shadow-md text-white' 
           : 'bg-white/[0.03] border-white/5'
       )}>
         <MessageSquarePlus className={cn(
@@ -433,12 +433,12 @@ function ConversationItem({
       <div className="flex-1 min-w-0">
         <p className={cn(
           'text-[13px] font-semibold truncate leading-tight tracking-tight',
-          isActive ? 'text-blue-600 dark:text-blue-400' : 'text-foreground/80'
+          isActive ? 'text-white' : 'text-foreground/80'
         )}>{conversation.title}</p>
         <div className="flex items-center gap-2 mt-1 text-[10px] font-medium tracking-wide">
-          <span className={cn(isActive ? "text-blue-600/70 dark:text-blue-400/70" : "text-muted-foreground/40")}>{conversation.messageCount} messages</span>
+          <span className={cn(isActive ? "text-white/70" : "text-muted-foreground/40")}>{conversation.messageCount} messages</span>
           <span className="h-0.5 w-0.5 rounded-full bg-current opacity-20" />
-          <span className={cn(isActive ? "text-blue-600/70 dark:text-blue-400/70" : "text-muted-foreground/40")}>{relativeTime}</span>
+          <span className={cn(isActive ? "text-white/70" : "text-muted-foreground/40")}>{relativeTime}</span>
         </div>
       </div>
 

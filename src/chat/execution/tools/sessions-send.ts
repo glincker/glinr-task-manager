@@ -98,7 +98,7 @@ without waiting (useful for fire-and-forget tasks).`,
       params: {
         sessionId: 'ghi789...',
         message: 'Analyze this error log and suggest fixes',
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5-20250929',
       }
     },
   ],
@@ -172,7 +172,7 @@ without waiting (useful for fire-and-forget tasks).`,
       };
 
       // Build system prompt
-      const systemPrompt = buildSystemPrompt(conversation.presetId, chatContext);
+      const systemPrompt = await buildSystemPrompt(conversation.presetId, chatContext);
 
       // Send to AI
       const response = await aiProvider.chat({

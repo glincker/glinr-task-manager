@@ -5,9 +5,49 @@
  */
 
 import { z } from 'zod';
-import { spawn } from 'child_process';
-import type { ToolDefinition, ToolResult, ToolExecutionContext } from '../types.js';
+import { spawn, spawnSync } from 'child_process';
+import type { ToolDefinition, ToolResult, ToolExecutionContext, ToolAvailability } from '../types.js';
 import { logger } from '../../../utils/logger.js';
+
+// =============================================================================
+// Availability Check
+// =============================================================================
+
+/** Cache git availability to avoid repeated system calls */
+let gitAvailabilityCache: ToolAvailability | null = null;
+
+/**
+ * Check if git is available on the system
+ * Caches result since git installation doesn't change during runtime
+ */
+function checkGitAvailability(): ToolAvailability {
+  if (gitAvailabilityCache) {
+    return gitAvailabilityCache;
+  }
+
+  try {
+    const result = spawnSync('git', ['--version'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 5000,
+    });
+
+    if (result.status === 0) {
+      gitAvailabilityCache = { available: true };
+    } else {
+      gitAvailabilityCache = {
+        available: false,
+        reason: 'Git command failed',
+      };
+    }
+  } catch {
+    gitAvailabilityCache = {
+      available: false,
+      reason: 'Git is not installed',
+    };
+  }
+
+  return gitAvailabilityCache;
+}
 
 // =============================================================================
 // Schemas
@@ -132,6 +172,7 @@ export const gitStatusTool: ToolDefinition<GitStatusParams, GitResult> = {
   securityLevel: 'safe',
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: GitStatusParamsSchema,
+  isAvailable: checkGitAvailability,
   examples: [
     { description: 'Check status', params: {} },
     { description: 'Short format', params: { short: true } },
@@ -173,6 +214,7 @@ export const gitDiffTool: ToolDefinition<GitDiffParams, GitResult> = {
   securityLevel: 'safe',
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: GitDiffParamsSchema,
+  isAvailable: checkGitAvailability,
   examples: [
     { description: 'Show unstaged changes', params: {} },
     { description: 'Show staged changes', params: { staged: true } },
@@ -215,6 +257,7 @@ export const gitLogTool: ToolDefinition<GitLogParams, GitResult> = {
   securityLevel: 'safe',
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: GitLogParamsSchema,
+  isAvailable: checkGitAvailability,
   examples: [
     { description: 'Recent commits', params: { count: 10 } },
     { description: 'By author', params: { author: 'john', count: 20 } },
@@ -257,6 +300,7 @@ export const gitCommitTool: ToolDefinition<GitCommitParams, GitResult> = {
   requiresApproval: true,
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: GitCommitParamsSchema,
+  isAvailable: checkGitAvailability,
   examples: [
     { description: 'Simple commit', params: { message: 'Fix bug' } },
     { description: 'Commit all', params: { message: 'Update files', all: true } },
@@ -298,6 +342,7 @@ export const gitBranchTool: ToolDefinition<GitBranchParams, GitResult> = {
   securityLevel: 'moderate',
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: GitBranchParamsSchema,
+  isAvailable: checkGitAvailability,
   examples: [
     { description: 'List branches', params: { list: true } },
     { description: 'Create branch', params: { create: 'feature/new' } },
@@ -347,6 +392,7 @@ export const gitStashTool: ToolDefinition<GitStashParams, GitResult> = {
   securityLevel: 'safe',
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: GitStashParamsSchema,
+  isAvailable: checkGitAvailability,
   examples: [
     { description: 'List stashes', params: { action: 'list' } },
     { description: 'Stash changes', params: { action: 'push', message: 'WIP' } },
@@ -394,6 +440,7 @@ export const gitRemoteTool: ToolDefinition<GitRemoteParams, GitResult> = {
   requiresApproval: true,
   allowedHosts: ['sandbox', 'gateway', 'local'],
   parameters: GitRemoteParamsSchema,
+  isAvailable: checkGitAvailability,
   examples: [
     { description: 'Fetch updates', params: { action: 'fetch' } },
     { description: 'Pull changes', params: { action: 'pull' } },

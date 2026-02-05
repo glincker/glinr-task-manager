@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/popover';
 import { CreateTicketModal } from '../components/CreateTicketModal';
 import { ViewSwitcher } from '../components/ViewSwitcher';
+import { EstimateBadge } from '../components/EstimateSelect';
 
 const STATUS_OPTIONS: Array<{ value: TicketStatus | 'all'; label: string; icon: typeof CheckCircle2 }> = [
   { value: 'all', label: 'All Status', icon: TicketIcon },
@@ -216,7 +217,7 @@ export function TicketList() {
 
   if (error) {
     return (
-      <div className="glass rounded-[28px] p-12 text-center">
+      <div className="premium-card rounded-[24px] p-12 text-center">
         <AlertCircle className="h-12 w-12 mx-auto text-red-400 mb-4" />
         <p className="text-lg font-bold text-red-400">Error loading tickets</p>
         <p className="text-sm text-muted-foreground mt-1">{(error as Error).message}</p>
@@ -248,7 +249,7 @@ export function TicketList() {
       </header>
 
       {/* Filters Bar */}
-      <div className="glass rounded-[20px] p-4">
+      <div className="premium-card rounded-[20px] p-4 bg-muted/20">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           {/* Search */}
           <div className="relative flex-1">
@@ -260,14 +261,14 @@ export function TicketList() {
                 setSearchQuery(e.target.value);
                 updateFilter('q', e.target.value);
               }}
-              className="pl-10 bg-white/5 border-white/10 rounded-xl h-10"
+              className="pl-10 h-10"
             />
           </div>
 
           {/* Filter Dropdowns */}
           <div className="flex flex-wrap gap-2">
             <Select value={statusFilter} onValueChange={(v) => updateFilter('status', v)}>
-              <SelectTrigger className="w-[140px] bg-white/5 border-white/10 rounded-xl">
+              <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent className="glass-heavy rounded-xl border-white/10">
@@ -283,7 +284,7 @@ export function TicketList() {
             </Select>
 
             <Select value={typeFilter} onValueChange={(v) => updateFilter('type', v)}>
-              <SelectTrigger className="w-[130px] bg-white/5 border-white/10 rounded-xl">
+              <SelectTrigger className="w-[130px]">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
               <SelectContent className="glass-heavy rounded-xl border-white/10">
@@ -299,7 +300,7 @@ export function TicketList() {
             </Select>
 
             <Select value={priorityFilter} onValueChange={(v) => updateFilter('priority', v)}>
-              <SelectTrigger className="w-[140px] bg-white/5 border-white/10 rounded-xl">
+              <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="Priority" />
               </SelectTrigger>
               <SelectContent className="glass-heavy rounded-xl border-white/10">
@@ -315,7 +316,7 @@ export function TicketList() {
 
             {/* Project Filter */}
             <Select value={projectFilter} onValueChange={(v) => updateFilter('project', v)}>
-              <SelectTrigger className="w-[150px] bg-white/5 border-white/10 rounded-xl">
+              <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="Project" />
               </SelectTrigger>
               <SelectContent className="glass-heavy rounded-xl border-white/10">
@@ -338,7 +339,7 @@ export function TicketList() {
 
             {/* Created By Filter */}
             <Select value={createdByFilter} onValueChange={(v) => updateFilter('createdBy', v)}>
-              <SelectTrigger className="w-[130px] bg-white/5 border-white/10 rounded-xl">
+              <SelectTrigger className="w-[130px]">
                 <SelectValue placeholder="Author" />
               </SelectTrigger>
               <SelectContent className="glass-heavy rounded-xl border-white/10">
@@ -359,7 +360,7 @@ export function TicketList() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className={`w-[130px] justify-start bg-white/5 border-white/10 rounded-xl ${labelFilter ? 'text-primary' : ''}`}
+                  className={`w-[130px] justify-start ${labelFilter ? 'text-primary' : ''}`}
                 >
                   <Tag className="h-3.5 w-3.5 mr-2" />
                   {labelFilter || 'Label'}
@@ -476,11 +477,11 @@ export function TicketList() {
 
       {/* Ticket List */}
       {isLoading ? (
-        <div className="glass rounded-[28px] p-12 flex items-center justify-center">
+        <div className="premium-card rounded-[28px] p-12 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : tickets.length === 0 ? (
-        <div className="glass rounded-[28px] p-12 text-center">
+        <div className="premium-card rounded-[24px] p-12 text-center">
           <TicketIcon className="h-12 w-12 mx-auto text-muted-foreground/40 mb-4" />
           <p className="text-lg font-bold text-muted-foreground">No tickets found</p>
           <p className="text-sm text-muted-foreground/60 mt-1">
@@ -493,7 +494,7 @@ export function TicketList() {
             <Link
               key={ticket.id}
               to={`/tickets/${ticket.id}`}
-              className="block glass rounded-[16px] p-4 hover-lift transition-liquid group"
+              className="block premium-card border-none hover:bg-muted/30 transition-all group"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -540,6 +541,9 @@ export function TicketList() {
                           {label}
                         </Badge>
                       ))}
+                      {ticket.estimate != null && (
+                        <EstimateBadge value={ticket.estimate} />
+                      )}
                       <span className="text-[10px] text-muted-foreground/50 ml-auto">
                         {new Date(ticket.createdAt).toLocaleDateString()}
                       </span>

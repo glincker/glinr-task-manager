@@ -25,6 +25,7 @@ import type {
   TicketQueryParams,
   TicketChecklist,
   TicketChecklistItem,
+  TicketRelation,
 } from '../../types';
 
 export const ticketsApi = {
@@ -223,4 +224,16 @@ export const ticketsApi = {
         body: JSON.stringify({ itemIds }),
       }),
   },
+
+  // Relations
+  addRelation: (ticketId: string, targetTicketId: string, relationType: string) =>
+    request<{ message: string; relation: TicketRelation }>(`/tickets/${ticketId}/relations`, {
+      method: 'POST',
+      body: JSON.stringify({ targetTicketId, relationType }),
+    }),
+
+  removeRelation: (ticketId: string, relationId: string) =>
+    request<{ message: string }>(`/tickets/${ticketId}/relations/${relationId}`, {
+      method: 'DELETE',
+    }),
 };

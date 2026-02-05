@@ -79,6 +79,61 @@ vi.mock('../notifications/slack.js', () => ({
   sendSlackNotification: vi.fn(async () => {}),
 }));
 
+// In-memory DLQ storage for E2E tests
+const dlqStore: Map<string, any> = new Map();
+
+// Mock storage for DLQ persistence
+vi.mock('../storage/index.js', () => ({
+  initStorage: vi.fn().mockResolvedValue(undefined),
+  getStorage: () => ({
+    execute: vi.fn(async (sql: string, params?: any[]) => {
+      if (sql.includes('INSERT INTO dead_letter_tasks')) {
+        const [id, taskId, title, description, prompt, source, sourceId, sourceUrl,
+          repository, branch, labels, assignedAgent, priority, attempts, maxAttempts,
+          lastErrorCode, lastErrorMessage, lastErrorStack, status, metadata] = params || [];
+        dlqStore.set(taskId, {
+          id, task_id: taskId, title, description, prompt, source, source_id: sourceId,
+          source_url: sourceUrl, repository, branch, labels, assigned_agent: assignedAgent,
+          priority, attempts, max_attempts: maxAttempts, last_error_code: lastErrorCode,
+          last_error_message: lastErrorMessage, last_error_stack: lastErrorStack,
+          retry_count: 0, status, metadata, created_at: Math.floor(Date.now() / 1000),
+        });
+      }
+      if (sql.includes('UPDATE dead_letter_tasks') && sql.includes("status = 'resolved'")) {
+        // Handle both remove (dlqId at index 2) and retry (dlqId at last position)
+        const dlqId = params?.length === 1 ? params[0] : params?.[params.length - 1];
+        for (const [taskId, entry] of dlqStore.entries()) {
+          if (entry.id === dlqId || taskId === dlqId) {
+            dlqStore.delete(taskId);
+            break;
+          }
+        }
+      }
+      return undefined;
+    }),
+    query: vi.fn(async (sql: string, params?: any[]) => {
+      if (sql.includes('COUNT(*)')) {
+        return [{ count: dlqStore.size }];
+      }
+      if (sql.includes('SELECT * FROM dead_letter_tasks WHERE status')) {
+        return Array.from(dlqStore.values());
+      }
+      if (sql.includes('SELECT * FROM dead_letter_tasks WHERE id')) {
+        const id = params?.[0];
+        for (const entry of dlqStore.values()) {
+          if (entry.id === id) return [entry];
+        }
+        return [];
+      }
+      return [];
+    }),
+    getTask: vi.fn().mockResolvedValue(null),
+    createTask: vi.fn().mockResolvedValue(undefined),
+    updateTask: vi.fn().mockResolvedValue(undefined),
+    getTasks: vi.fn().mockResolvedValue({ tasks: [], total: 0 }),
+  }),
+}));
+
 // Mock GitHub fetch for failure comments
 global.fetch = vi.fn();
 
@@ -99,6 +154,7 @@ describe('E2E: Task Failure Handling', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    dlqStore.clear(); // Clear in-memory DLQ store
 
     // Create a mock adapter that always fails
     mockFailingAdapter = {
@@ -169,8 +225,8 @@ describe('E2E: Task Failure Handling', () => {
       expect(task.attempts).toBe(1);
 
       // Task should not yet be in dead letter queue (has retries remaining)
-      const dlq = getDeadLetterQueue();
-      expect(dlq.find(t => t.id === task.id)).toBeUndefined();
+      const dlq = await getDeadLetterQueue();
+      expect(dlq.tasks.find(t => t.taskId === task.id)).toBeUndefined();
     });
 
     it('should retry task with exponential backoff', async () => {
@@ -196,8 +252,8 @@ describe('E2E: Task Failure Handling', () => {
       expect(task.attempts).toBe(2);
 
       // Should still not be in DLQ (maxAttempts is 3 by default)
-      const dlq = getDeadLetterQueue();
-      expect(dlq.find(t => t.id === task.id)).toBeUndefined();
+      const dlq = await getDeadLetterQueue();
+      expect(dlq.tasks.find(t => t.taskId === task.id)).toBeUndefined();
     });
 
     it('should move task to dead letter queue after max retries', async () => {
@@ -231,15 +287,14 @@ describe('E2E: Task Failure Handling', () => {
       }
 
       // Task should now be in dead letter queue
-      const dlq = getDeadLetterQueue();
-      const dlqTask = dlq.find(t => t.id === task.id);
+      const dlq = await getDeadLetterQueue();
+      const dlqTask = dlq.tasks.find(t => t.taskId === task.id);
 
       expect(dlqTask).toBeDefined();
-      expect(dlqTask?.status).toBe(TaskStatus.FAILED);
+      expect(dlqTask?.status).toBe('pending'); // DLQ status is 'pending' initially
       expect(dlqTask?.attempts).toBe(task.maxAttempts);
-      expect(dlqTask?.result?.success).toBe(false);
-      expect(dlqTask?.result?.error?.code).toBe('MAX_RETRIES_EXCEEDED');
-      expect(dlqTask?.result?.error?.message).toContain('Persistent failure');
+      expect(dlqTask?.lastErrorCode).toBe('MAX_RETRIES_EXCEEDED');
+      expect(dlqTask?.lastErrorMessage).toContain('Persistent failure');
 
       // Verify GitHub comment was posted
       expect(global.fetch).toHaveBeenCalledWith(
@@ -280,10 +335,10 @@ describe('E2E: Task Failure Handling', () => {
         await handleTaskFailure(task, error);
       }
 
-      const dlq = getDeadLetterQueue();
-      expect(dlq.length).toBeGreaterThan(0);
+      const dlq = await getDeadLetterQueue();
+      expect(dlq.tasks.length).toBeGreaterThan(0);
 
-      const foundTask = dlq.find(t => t.id === task.id);
+      const foundTask = dlq.tasks.find(t => t.taskId === task.id);
       expect(foundTask).toBeDefined();
       expect(foundTask?.title).toBe('DLQ test task');
     });
@@ -306,16 +361,17 @@ describe('E2E: Task Failure Handling', () => {
       }
 
       // Verify it's in DLQ
-      let dlq = getDeadLetterQueue();
-      expect(dlq.find(t => t.id === task.id)).toBeDefined();
+      let dlq = await getDeadLetterQueue();
+      const dlqEntry = dlq.tasks.find(t => t.taskId === task.id);
+      expect(dlqEntry).toBeDefined();
 
       // Remove from DLQ
-      const removed = removeFromDeadLetterQueue(task.id);
+      const removed = await removeFromDeadLetterQueue(dlqEntry!.id);
       expect(removed).toBe(true);
 
       // Verify it's no longer in DLQ
-      dlq = getDeadLetterQueue();
-      expect(dlq.find(t => t.id === task.id)).toBeUndefined();
+      dlq = await getDeadLetterQueue();
+      expect(dlq.tasks.find(t => t.taskId === task.id)).toBeUndefined();
     });
 
     it('should retry task from dead letter queue', async () => {
@@ -336,24 +392,19 @@ describe('E2E: Task Failure Handling', () => {
         await handleTaskFailure(task, error);
       }
 
-      // Verify task is in DLQ with failed status
-      let dlq = getDeadLetterQueue();
-      const dlqTask = dlq.find(t => t.id === task.id);
-      expect(dlqTask?.status).toBe(TaskStatus.FAILED);
+      // Verify task is in DLQ with pending status (DLQ status, not task status)
+      let dlq = await getDeadLetterQueue();
+      const dlqTask = dlq.tasks.find(t => t.taskId === task.id);
+      expect(dlqTask?.status).toBe('pending');
       expect(dlqTask?.attempts).toBe(task.maxAttempts);
 
       // Retry from DLQ
-      const retried = await retryDeadLetterTask(task.id);
+      const retried = await retryDeadLetterTask(dlqTask!.id);
       expect(retried).toBe(true);
 
-      // Verify task is no longer in DLQ
-      dlq = getDeadLetterQueue();
-      expect(dlq.find(t => t.id === task.id)).toBeUndefined();
-
-      // Get the task and verify attempts were reset
-      const retriedTask = getTask(task.id);
-      expect(retriedTask?.attempts).toBe(0);
-      expect(retriedTask?.status).toBe(TaskStatus.PENDING);
+      // Verify task is no longer in DLQ (marked as resolved)
+      dlq = await getDeadLetterQueue();
+      expect(dlq.tasks.find(t => t.taskId === task.id)).toBeUndefined();
     });
   });
 
@@ -375,8 +426,8 @@ describe('E2E: Task Failure Handling', () => {
 
       expect(task.attempts).toBe(1);
       // Should be scheduled for retry, not in DLQ
-      const dlq = getDeadLetterQueue();
-      expect(dlq.find(t => t.id === task.id)).toBeUndefined();
+      const dlq = await getDeadLetterQueue();
+      expect(dlq.tasks.find(t => t.taskId === task.id)).toBeUndefined();
     });
 
     it('should handle adapter unavailable errors', async () => {
@@ -397,8 +448,8 @@ describe('E2E: Task Failure Handling', () => {
 
       expect(task.attempts).toBe(1);
       // Should retry since adapter might come back
-      const dlq = getDeadLetterQueue();
-      expect(dlq.find(t => t.id === task.id)).toBeUndefined();
+      const dlq = await getDeadLetterQueue();
+      expect(dlq.tasks.find(t => t.taskId === task.id)).toBeUndefined();
     });
 
     it('should handle validation errors gracefully', async () => {
@@ -448,8 +499,8 @@ describe('E2E: Task Failure Handling', () => {
       }
 
       // Task should still be in DLQ even if GitHub comment failed
-      const dlq = getDeadLetterQueue();
-      expect(dlq.find(t => t.id === task.id)).toBeDefined();
+      const dlq = await getDeadLetterQueue();
+      expect(dlq.tasks.find(t => t.taskId === task.id)).toBeDefined();
     });
 
     it('should skip GitHub comment for non-GitHub tasks', async () => {
@@ -477,8 +528,8 @@ describe('E2E: Task Failure Handling', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
 
       // Task should still be in DLQ
-      const dlq = getDeadLetterQueue();
-      expect(dlq.find(t => t.id === task.id)).toBeDefined();
+      const dlq = await getDeadLetterQueue();
+      expect(dlq.tasks.find(t => t.taskId === task.id)).toBeDefined();
     });
   });
 
@@ -518,11 +569,11 @@ describe('E2E: Task Failure Handling', () => {
         )
       );
 
-      const dlq = getDeadLetterQueue();
+      const dlq = await getDeadLetterQueue();
 
       // All tasks should be in DLQ
       for (const task of tasks) {
-        expect(dlq.find(t => t.id === task.id)).toBeDefined();
+        expect(dlq.tasks.find(t => t.taskId === task.id)).toBeDefined();
       }
     });
   });

@@ -35,7 +35,7 @@ import {
   MoreVertical,
   Copy,
 } from 'lucide-react';
-import { api, type Ticket, type TicketStatus, type TicketType, type TicketComment, type TicketHistoryEntry, type TicketExternalLink } from '@/core/api/client';
+import { api, type Ticket, type TicketStatus, type TicketType, type TicketComment, type TicketHistoryEntry, type TicketExternalLink, type TicketRelation } from '@/core/api/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -75,6 +75,8 @@ import {
 import { toast } from 'sonner';
 import type { TicketPriority as TPriority, TicketType as TType } from '@/core/types';
 import { LabelPicker } from '../components/LabelPicker';
+import { EstimateSelect } from '../components/EstimateSelect';
+import { RelationsWidget } from '../components/RelationsWidget';
 
 const STATUS_OPTIONS: Array<{ value: TicketStatus; label: string; icon: typeof CheckCircle2 }> = [
   { value: 'backlog', label: 'Backlog', icon: Inbox },
@@ -100,6 +102,7 @@ export function TicketDetail() {
     description: '',
     priority: 'medium' as TPriority,
     type: 'task' as TType,
+    estimate: null as number | null,
   });
 
   const { data: ticket, isLoading, error } = useQuery({
@@ -152,7 +155,7 @@ export function TicketDetail() {
 
   // Edit ticket mutation
   const editMutation = useMutation({
-    mutationFn: (data: Partial<{ title: string; description: string; priority: TPriority; type: TType; projectId: string }>) =>
+    mutationFn: (data: Partial<{ title: string; description: string; priority: TPriority; type: TType; projectId: string; estimate: number; estimateUnit: string }>) =>
       api.tickets.update(id!, data as any),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ticket', id] });
@@ -247,13 +250,18 @@ export function TicketDetail() {
         description: ticket.description || '',
         priority: ticket.priority,
         type: ticket.type,
+        estimate: ticket.estimate ?? null,
       });
       setIsEditOpen(true);
     }
   };
 
   const handleSaveEdit = () => {
-    editMutation.mutate(editForm);
+    editMutation.mutate({
+      ...editForm,
+      estimate: editForm.estimate ?? undefined,
+      estimateUnit: editForm.estimate !== null ? 'points' : undefined,
+    });
   };
 
   const handleMoveToProject = (projectId: string) => {
@@ -361,6 +369,7 @@ export function TicketDetail() {
     comments?: TicketComment[];
     history?: TicketHistoryEntry[];
     externalLinks?: TicketExternalLink[];
+    relations?: TicketRelation[];
     children?: Ticket[];
     parent?: Ticket;
   };
@@ -477,7 +486,7 @@ export function TicketDetail() {
                 rows={4}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Priority</label>
                 <Select
@@ -515,6 +524,14 @@ export function TicketDetail() {
                     <SelectItem value="subtask">Subtask</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Estimate</label>
+                <EstimateSelect
+                  value={editForm.estimate}
+                  onChange={(v) => setEditForm(prev => ({ ...prev, estimate: v }))}
+                  placeholder="Points"
+                />
               </div>
             </div>
           </div>
@@ -645,7 +662,7 @@ export function TicketDetail() {
                         placeholder="Add a comment..."
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}
-                        className="min-h-20 bg-white/5 border-white/10 rounded-xl resize-none"
+                        className="min-h-20"
                       />
                       <div className="flex justify-end mt-2 gap-2">
                         {isAiAvailable && ticketData.comments && ticketData.comments.length > 0 && (
@@ -654,7 +671,7 @@ export function TicketDetail() {
                             variant="outline"
                             onClick={() => aiRespondMutation.mutate({})}
                             disabled={aiRespondMutation.isPending}
-                            className="gap-2 rounded-xl border-white/10"
+                            className="gap-2"
                           >
                             {aiRespondMutation.isPending ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -666,9 +683,10 @@ export function TicketDetail() {
                         )}
                         <Button
                           size="sm"
+                          variant="black"
                           onClick={handleAddComment}
                           disabled={!newComment.trim() || addCommentMutation.isPending}
-                          className="gap-2 rounded-xl"
+                          className="gap-2"
                         >
                           {addCommentMutation.isPending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -950,12 +968,21 @@ export function TicketDetail() {
                 </div>
               )}
 
-              {ticketData.estimate && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Estimate</span>
-                  <span className="text-sm">{ticketData.estimate} {ticketData.estimateUnit || 'points'}</span>
-                </div>
-              )}
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Estimate</span>
+                <EstimateSelect
+                  value={ticketData.estimate ?? null}
+                  onChange={(value) => {
+                    editMutation.mutate({
+                      estimate: value ?? undefined,
+                      estimateUnit: value !== null ? 'points' : undefined,
+                    });
+                  }}
+                  compact
+                  placeholder="—"
+                  className="w-[90px] h-8 text-xs"
+                />
+              </div>
 
               {ticketData.dueDate && (
                 <div className="flex justify-between items-center">
@@ -1014,6 +1041,12 @@ export function TicketDetail() {
               </div>
             )}
           </div>
+
+          {/* Relations Widget */}
+          <RelationsWidget
+            ticketId={ticketData.id}
+            relations={ticketData.relations || []}
+          />
 
           {/* Parent Ticket (if this is a child/subtask) */}
           {ticketData.parent && (

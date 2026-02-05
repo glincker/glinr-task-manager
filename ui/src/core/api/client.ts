@@ -58,6 +58,8 @@ export type {
   TicketQueryParams,
   TicketChecklist,
   TicketChecklistItem,
+  TicketRelation,
+  TicketRelationType,
   State,
   StateGroup,
   // Projects & Sprints

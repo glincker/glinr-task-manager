@@ -21,7 +21,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       attribute="class"
       defaultTheme="system"
       enableSystem
-      themes={['light', 'dark']}
+      themes={['light', 'dark', 'midnight']}
       disableTransitionOnChange
     >
       {children}

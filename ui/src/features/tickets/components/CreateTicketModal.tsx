@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { Plus, Loader2, Bug, Sparkles, Layers, BookOpen, CheckCircle2, Circle, Wand2, Brain, Lightbulb, Check, X, FolderOpen, Link2 } from 'lucide-react';
+import { Plus, Loader2, Bug, Sparkles, Layers, BookOpen, CheckCircle2, Circle, Wand2, Brain, Lightbulb, Check, X, FolderOpen, Link2, Hash } from 'lucide-react';
 import { api, type TicketType, type TicketPriority, type CreateTicketInput, type TicketCategorization, type TicketSuggestion } from '@/core/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { EstimateSelect } from './EstimateSelect';
 
 const TYPE_OPTIONS: Array<{ value: TicketType; label: string; icon: typeof Bug }> = [
   { value: 'task', label: 'Task', icon: CheckCircle2 },
@@ -55,6 +56,7 @@ export function CreateTicketModal({ defaultProjectId, defaultParentId }: CreateT
   const [type, setType] = useState<TicketType>('task');
   const [priority, setPriority] = useState<TicketPriority>('medium');
   const [labels, setLabels] = useState('');
+  const [estimate, setEstimate] = useState<number | null>(null);
   const [projectId, setProjectId] = useState<string | undefined>(defaultProjectId);
   const [parentId, setParentId] = useState<string | undefined>(defaultParentId);
   const [aiCategorization, setAiCategorization] = useState<TicketCategorization | null>(null);
@@ -169,6 +171,7 @@ export function CreateTicketModal({ defaultProjectId, defaultParentId }: CreateT
     setType('task');
     setPriority('medium');
     setLabels('');
+    setEstimate(null);
     setProjectId(defaultProjectId);
     setParentId(defaultParentId);
     setAiCategorization(null);
@@ -194,6 +197,8 @@ export function CreateTicketModal({ defaultProjectId, defaultParentId }: CreateT
       type,
       priority,
       labels: labelArray.length > 0 ? labelArray : undefined,
+      estimate: estimate ?? undefined,
+      estimateUnit: estimate !== null ? 'points' : undefined,
       projectId: projectId || undefined,
       parentId: parentId || undefined,
       createdBy: 'human',
@@ -383,19 +388,29 @@ export function CreateTicketModal({ defaultProjectId, defaultParentId }: CreateT
               </div>
             </div>
 
-            {/* Labels */}
-            <div className="grid gap-2">
-              <Label htmlFor="labels">Labels</Label>
-              <Input
-                id="labels"
-                placeholder="Comma-separated labels (e.g., frontend, urgent, auth)"
-                value={labels}
-                onChange={(e) => setLabels(e.target.value)}
-                className="bg-white/5 border-white/10 rounded-xl"
-              />
-              <p className="text-xs text-muted-foreground">
-                Separate multiple labels with commas
-              </p>
+            {/* Labels and Estimate Row */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2 grid gap-2">
+                <Label htmlFor="labels">Labels</Label>
+                <Input
+                  id="labels"
+                  placeholder="Comma-separated labels (e.g., frontend, auth)"
+                  value={labels}
+                  onChange={(e) => setLabels(e.target.value)}
+                  className="bg-white/5 border-white/10 rounded-xl"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label className="flex items-center gap-1.5">
+                  <Hash className="h-3.5 w-3.5 text-muted-foreground" />
+                  Estimate
+                </Label>
+                <EstimateSelect
+                  value={estimate}
+                  onChange={setEstimate}
+                  placeholder="Points"
+                />
+              </div>
             </div>
 
             {/* AI Actions */}
