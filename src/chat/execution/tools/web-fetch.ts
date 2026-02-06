@@ -217,7 +217,7 @@ function isPrivateIP(hostname: string): boolean {
 
 function extractTextFromHtml(html: string): string {
   // Simple HTML to text extraction
-  let text = html
+  const text = html
     // Remove scripts and styles
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')

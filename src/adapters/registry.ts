@@ -96,7 +96,7 @@ export class DefaultAgentRegistry implements AgentRegistry {
     // If explicitly assigned, use that adapter
     if (task.assignedAgent) {
       // Check by ID first
-      let adapter = this.adapters.get(task.assignedAgent);
+      const adapter = this.adapters.get(task.assignedAgent);
       if (adapter) return adapter;
 
       // Check by type

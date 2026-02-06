@@ -85,6 +85,23 @@ export async function initApiTokensTable(): Promise<void> {
       enabled INTEGER NOT NULL DEFAULT 1
     )
   `);
+
+  // Migration for existing tables
+  try {
+    await storage.execute(`ALTER TABLE api_tokens ADD COLUMN token_prefix TEXT`);
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    await storage.execute(`ALTER TABLE api_tokens ADD COLUMN rate_limit INTEGER DEFAULT 60`);
+  } catch (e) {
+    // Column already exists
+  }
+  try {
+    await storage.execute(`ALTER TABLE api_tokens ADD COLUMN enabled INTEGER DEFAULT 1`);
+  } catch (e) {
+    // Column already exists
+  }
 }
 
 /**

@@ -1221,6 +1221,26 @@ export const agentSessions = sqliteTable("agent_sessions", {
  * Session Messages Table - Mailbox pattern for inter-session communication
  * Supports parent/child/sibling messaging with priority and status tracking.
  */
+// =============================================================================
+// INVITE CODES (Invite-Only Registration)
+// =============================================================================
+
+/**
+ * Invite Codes Table - One-time-use codes for invite-only registration
+ */
+export const inviteCodes = sqliteTable("invite_codes", {
+  id: text("id").primaryKey(),
+  codeHash: text("code_hash").notNull().unique(),
+  createdBy: text("created_by").notNull(),
+  usedBy: text("used_by"),
+  usedAt: integer("used_at", { mode: "timestamp" }),
+  expiresAt: integer("expires_at", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
+  label: text("label"),
+});
+
 export const sessionMessages = sqliteTable("session_messages", {
   id: text("id").primaryKey(),
   fromSessionId: text("from_session_id")

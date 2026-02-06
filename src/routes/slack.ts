@@ -145,7 +145,7 @@ function parseCommand(text: string): ParsedCommand {
   // Parse named args like --title="My Task" or key=value
   const args: Record<string, string> = {};
   let currentKey = "";
-  let currentValue = "";
+  const currentValue = "";
 
   for (const part of rawArgs) {
     if (part.startsWith("--")) {

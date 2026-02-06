@@ -10,6 +10,7 @@ import { configCommands } from './commands/config.js';
 import { costCommands } from './commands/cost.js';
 import { serveCommand } from './commands/serve.js';
 import { toolsCommands } from './commands/tools.js';
+import { authCommands } from './commands/auth.js';
 
 const VERSION = '0.1.0';
 
@@ -44,6 +45,7 @@ program.addCommand(configCommands());
 program.addCommand(costCommands());
 program.addCommand(serveCommand());
 program.addCommand(toolsCommands());
+program.addCommand(authCommands());
 
 // Default action (no command) - show banner and help
 program.action(() => {
@@ -54,6 +56,11 @@ program.action(() => {
   console.log('  glinr ticket list      List AI-native tickets');
   console.log('  glinr ticket create    Create a new ticket');
   console.log('  glinr config get       View current settings');
+  console.log('');
+  console.log(chalk.yellow('Auth & Users:'));
+  console.log('  glinr auth invite      Generate invite codes');
+  console.log('  glinr auth list-users  List all users');
+  console.log('  glinr auth set-mode    Set registration mode');
   console.log('');
   console.log(chalk.yellow('Tool Testing:'));
   console.log('  glinr tools list       List all execution tools');

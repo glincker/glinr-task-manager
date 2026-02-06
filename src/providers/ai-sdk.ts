@@ -1088,7 +1088,6 @@ class AIProviderManager {
    * NOTE: If the model doesn't support native tool calling, tools will be
    * skipped and a warning will be included in the response.
    */
-  // @ts-ignore - Types defined at end of file
   async chatWithNativeTools(request: any): Promise<any> {
     const startTime = Date.now();
 
@@ -1113,7 +1112,6 @@ class AIProviderManager {
     }
 
     // Convert messages to AI SDK format
-    // @ts-ignore - msg type from request
     const messages: AIMessage[] = request.messages.map((msg: any) => ({
       role: msg.role,
       content: msg.content,
@@ -1294,7 +1292,6 @@ class AIProviderManager {
   /**
    * Stream chat with native tool calling
    */
-  // @ts-ignore - Types defined at end of file
   async streamWithNativeTools(
     request: any,
     onChunk: (chunk: string) => void,
@@ -1311,7 +1308,6 @@ class AIProviderManager {
     const model = this.getModel(modelRef.provider, modelRef.model);
 
     // Convert messages
-    // @ts-ignore - msg type from request
     const messages: AIMessage[] = request.messages.map((msg: any) => ({
       role: msg.role,
       content: msg.content,

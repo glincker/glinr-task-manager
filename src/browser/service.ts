@@ -194,7 +194,7 @@ class BrowserService {
     }
 
     // Get locator based on role and name
-    let locator = page.getByRole(element.role as Parameters<typeof page.getByRole>[0], {
+    const locator = page.getByRole(element.role as Parameters<typeof page.getByRole>[0], {
       name: element.name,
     });
 
@@ -243,7 +243,7 @@ class BrowserService {
     }
 
     // Get locator
-    let locator = page.getByRole(element.role as Parameters<typeof page.getByRole>[0], {
+    const locator = page.getByRole(element.role as Parameters<typeof page.getByRole>[0], {
       name: element.name,
     });
 

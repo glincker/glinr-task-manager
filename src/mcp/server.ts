@@ -493,7 +493,7 @@ interface AssignTicketArgs {
 }
 
 // Tool handlers
-async function handleLogTask(args: LogTaskArgs): Promise<CallToolResult> {
+export async function handleLogTask(args: LogTaskArgs): Promise<CallToolResult> {
   // Update session state
   if (args.filesChanged) {
     for (const file of args.filesChanged) {
@@ -542,7 +542,7 @@ async function handleLogTask(args: LogTaskArgs): Promise<CallToolResult> {
   };
 }
 
-async function handleCompleteTask(args: CompleteTaskArgs): Promise<CallToolResult> {
+export async function handleCompleteTask(args: CompleteTaskArgs): Promise<CallToolResult> {
   // Update session state
   if (args.filesChanged) {
     for (const file of args.filesChanged) {
@@ -978,7 +978,7 @@ async function handleAssignTicket(args: AssignTicketArgs): Promise<CallToolResul
 }
 
 // Cost calculation (simplified)
-function calculateCost(input: number, output: number, model: string): number {
+export function calculateCost(input: number, output: number, model: string): number {
   // Pricing per 1M tokens (simplified)
   const pricing: Record<string, { input: number; output: number }> = {
     'claude-opus-4-6': { input: 5, output: 25 },

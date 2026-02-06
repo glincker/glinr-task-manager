@@ -124,7 +124,7 @@ export interface AgenticChatResponse {
  * Convert tool definitions (with Zod parameters) to AI SDK format.
  * Handles Azure schema normalization automatically.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function convertToolsToAiSdk(
   toolDefs: Array<{ name: string; description: string; parameters: unknown }>,
   provider: string,
@@ -165,14 +165,14 @@ function convertToolsToAiSdk(
         if (!normalized.properties) {
           normalized.properties = {};
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         aiSdkTools[toolDef.name] = createTool({
           description: toolDef.description,
           inputSchema: jsonSchema(normalized as any, { validate: passthroughValidate }),
           execute,
         } as any);
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         aiSdkTools[toolDef.name] = createTool({
           description: toolDef.description,
           inputSchema: jsonSchema(rawJsonSchema as any, { validate: passthroughValidate }),
@@ -188,7 +188,7 @@ function convertToolsToAiSdk(
         ? async (args: Record<string, unknown>) => onToolExecute(toolDef.name, args)
         : undefined;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       aiSdkTools[toolDef.name] = createTool({
         description: toolDef.description,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -74,6 +74,7 @@ export const SettingsSchema = z.object({
     telemetry: z.boolean().default(true),
     debugMode: z.boolean().default(false),
     maxConcurrentTasks: z.number().min(1).max(10).default(3),
+    registrationMode: z.enum(['open', 'invite']).default('invite'),
   }).default({}),
 });
 
@@ -103,6 +104,7 @@ const DEFAULT_SETTINGS: Settings = {
     telemetry: true,
     debugMode: false,
     maxConcurrentTasks: 3,
+    registrationMode: 'invite' as const,
   },
 };
 

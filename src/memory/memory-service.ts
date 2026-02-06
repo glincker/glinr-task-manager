@@ -303,7 +303,7 @@ export function chunkText(
 
       // Calculate overlap: keep last N tokens worth of lines
       let overlapTokens = 0;
-      let overlapLines: string[] = [];
+      const overlapLines: string[] = [];
       for (let j = currentChunk.length - 1; j >= 0 && overlapTokens < overlap; j--) {
         overlapLines.unshift(currentChunk[j]);
         overlapTokens += estimateTokens(currentChunk[j]);

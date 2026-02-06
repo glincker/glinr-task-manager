@@ -801,6 +801,20 @@ export class LibSQLAdapter implements StorageAdapter {
       )
     `);
 
+    // Invite codes table (invite-only registration)
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS invite_codes (
+        id TEXT PRIMARY KEY,
+        code_hash TEXT NOT NULL UNIQUE,
+        created_by TEXT NOT NULL,
+        used_by TEXT,
+        used_at INTEGER,
+        expires_at INTEGER,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        label TEXT
+      )
+    `);
+
     // In-app notifications table
     await this.client.execute(`
       CREATE TABLE IF NOT EXISTS notifications (
