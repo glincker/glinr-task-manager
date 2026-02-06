@@ -28,3 +28,5 @@ export { skillsRoutes } from './skills.js';
 export { telegramRoutes } from './telegram.js';
 export { whatsappRoutes } from './whatsapp.js';
 export { discordRoutes } from './discord.js';
+export { openApiRoutes } from './openapi.js';
+export { notificationsRoutes } from './notifications.js';

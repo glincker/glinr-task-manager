@@ -14,7 +14,7 @@ import type {
 } from '../types/summary.js';
 import type { TaskResult, TaskArtifact } from '../types/task.js';
 import type { SessionAggregate, HookInference } from '../hooks/types.js';
-import { loadConfig } from '../utils/config-loader.js';
+import { getSettings } from '../settings/index.js';
 import { getOllamaService } from '../intelligence/ollama.js';
 
 // ============================================================================
@@ -81,10 +81,8 @@ export async function extractFromTaskResult(
     startedAt?: Date;
   }
 ): Promise<CreateSummaryInput> {
-  const config = loadConfig<any>('settings.yml');
-  const aiConfig = config?.ai;
-  
-  if (aiConfig?.defaultSummaryProvider === 'ollama') {
+  const settings = await getSettings();
+  if (settings.aiProvider?.defaultProvider === 'ollama') {
       const ollama = getOllamaService();
       const summary = await ollama.generateSummary(result, { taskId: context?.taskId, agent: context?.agent, model: context?.model });
       return {

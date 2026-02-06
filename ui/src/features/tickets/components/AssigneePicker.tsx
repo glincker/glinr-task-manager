@@ -27,16 +27,15 @@ export function AssigneePicker({
   currentAssignee,
   currentAgent,
   compact = false,
-}: AssigneePickerProps): JSX.Element {
+}: AssigneePickerProps) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const updateAssigneeMutation = useMutation({
     mutationFn: async (assigneeAgent: string | null) => {
-      const response = await api.patch(`/api/tickets/${ticketId}`, {
-        assigneeAgent,
-      });
-      return response;
+      return api.tickets.update(ticketId, {
+        assigneeAgent: assigneeAgent ?? undefined,
+      } as Record<string, unknown>);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });

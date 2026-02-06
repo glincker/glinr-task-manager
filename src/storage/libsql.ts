@@ -801,6 +801,28 @@ export class LibSQLAdapter implements StorageAdapter {
       )
     `);
 
+    // In-app notifications table
+    await this.client.execute(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        title TEXT NOT NULL,
+        description TEXT,
+        type TEXT NOT NULL DEFAULT 'info',
+        category TEXT NOT NULL DEFAULT 'system',
+        entity_type TEXT,
+        entity_id TEXT,
+        read INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)
+    `);
+    await this.client.execute(`
+      CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read)
+    `);
+
     // Add new columns to scheduled_jobs if they don't exist
     try {
       await this.client.execute(

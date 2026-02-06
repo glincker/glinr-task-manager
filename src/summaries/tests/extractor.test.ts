@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { extractFromTaskResult, inferTaskType, inferComponent, extractFromRawOutput, extractFromSession } from '../extractor.js';
-import { loadConfig } from '../../utils/config-loader.js';
+import { getSettings } from '../../settings/index.js';
 import { getOllamaService } from '../../intelligence/ollama.js';
 
-// Mock config-loader and ollama
-vi.mock('../../utils/config-loader.js', () => ({
-  loadConfig: vi.fn().mockReturnValue({
-    ai: { defaultSummaryProvider: 'pattern' }
+// Mock settings and ollama
+vi.mock('../../settings/index.js', () => ({
+  getSettings: vi.fn().mockResolvedValue({
+    aiProvider: { defaultProvider: 'pattern' }
   })
 }));
 
@@ -24,13 +24,13 @@ vi.mock('../../intelligence/ollama.js', () => ({
   }))
 }));
 
-const mockLoadConfig = vi.mocked(loadConfig);
+const mockGetSettings = vi.mocked(getSettings);
 
 describe('Summary Extractor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default to pattern extraction
-    mockLoadConfig.mockReturnValue({ ai: { defaultSummaryProvider: 'pattern' } } as any);
+    mockGetSettings.mockResolvedValue({ aiProvider: { defaultProvider: 'pattern' } } as any);
   });
 
   describe('Pattern Extraction', () => {
@@ -147,7 +147,7 @@ describe('Summary Extractor', () => {
 
   describe('Ollama Provider', () => {
     it('should use Ollama if configured', async () => {
-      mockLoadConfig.mockReturnValue({ ai: { defaultSummaryProvider: 'ollama' } } as any);
+      mockGetSettings.mockResolvedValue({ aiProvider: { defaultProvider: 'ollama' } } as any);
 
       const result = { success: true, output: 'test' } as any;
       const summary = await extractFromTaskResult(result);

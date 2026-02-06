@@ -31,6 +31,15 @@ import {
   redirectToLinear,
   handleLinearCallback,
 } from '../auth/linear-oauth.js';
+import { rateLimit } from '../middleware/rate-limit.js';
+import { validatePasswordStrength } from '../auth/password.js';
+
+// =============================================================================
+// RATE LIMITERS
+// =============================================================================
+
+const loginLimiter = rateLimit({ windowMs: 60_000, max: 10, message: 'Too many login attempts. Try again in a minute.' });
+const signupLimiter = rateLimit({ windowMs: 60_000, max: 5, message: 'Too many signup attempts. Try again in a minute.' });
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -38,7 +47,10 @@ import {
 
 const signupSchema = z.object({
   email: z.string().email('Invalid email address').max(255),
-  password: z.string().min(8, 'Password must be at least 8 characters').max(128),
+  password: z.string().min(8, 'Password must be at least 8 characters').max(128)
+    .refine((p) => validatePasswordStrength(p) === null, {
+      message: 'Password must contain at least one letter and one number',
+    }),
   name: z.string().min(1, 'Name is required').max(100).trim(),
 });
 
@@ -74,7 +86,7 @@ const COOKIE_OPTIONS = {
  * POST /api/auth/signup
  * Create new account with email/password
  */
-authRoutes.post('/signup', async (c) => {
+authRoutes.post('/signup', signupLimiter, async (c) => {
   try {
     const body = await c.req.json();
     const parsed = signupSchema.safeParse(body);
@@ -108,7 +120,7 @@ authRoutes.post('/signup', async (c) => {
  * POST /api/auth/login
  * Sign in with email/password
  */
-authRoutes.post('/login', async (c) => {
+authRoutes.post('/login', loginLimiter, async (c) => {
   try {
     const body = await c.req.json();
     const parsed = loginSchema.safeParse(body);

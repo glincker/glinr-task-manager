@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, Trash2, ArrowRight, Tag, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Trash2, ArrowRight, Tag, Loader2 } from 'lucide-react';
 import { api } from '@/core/api/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +20,7 @@ export function BulkActionBar({ selectedIds, onClear, onComplete }: BulkActionBa
   const updateStatusMutation = useMutation({
     mutationFn: async (status: TicketStatus) => {
       const results = await Promise.allSettled(
-        selectedIds.map((id) => api.patch(`/api/tickets/${id}`, { status }))
+        selectedIds.map((id) => api.tickets.update(id, { status } as Record<string, unknown>))
       );
 
       const failed = results.filter((r) => r.status === 'rejected').length;
@@ -44,7 +44,7 @@ export function BulkActionBar({ selectedIds, onClear, onComplete }: BulkActionBa
   const updatePriorityMutation = useMutation({
     mutationFn: async (priority: TicketPriority) => {
       const results = await Promise.allSettled(
-        selectedIds.map((id) => api.patch(`/api/tickets/${id}`, { priority }))
+        selectedIds.map((id) => api.tickets.update(id, { priority } as Record<string, unknown>))
       );
 
       const failed = results.filter((r) => r.status === 'rejected').length;

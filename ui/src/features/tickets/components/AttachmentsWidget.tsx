@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Paperclip, Upload, X, File, Image, FileText, Download, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Paperclip, Upload, X, File, Image, FileText, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -38,7 +38,7 @@ function getFileIcon(type: string): React.ReactNode {
   return <File className="h-4 w-4 text-zinc-500" />;
 }
 
-export function AttachmentsWidget({ ticketId, attachments = [], readOnly = false }: AttachmentsWidgetProps): JSX.Element {
+export function AttachmentsWidget({ ticketId, attachments = [], readOnly = false }: AttachmentsWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [localAttachments, setLocalAttachments] = useState<Attachment[]>(attachments);

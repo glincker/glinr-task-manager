@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Eye, EyeOff, Plus, X, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -12,7 +12,7 @@ interface WatchersWidgetProps {
   currentUser?: string;
 }
 
-export function WatchersWidget({ ticketId, watchers = [], currentUser }: WatchersWidgetProps) {
+export function WatchersWidget({ watchers = [], currentUser }: WatchersWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [localWatchers, setLocalWatchers] = useState<string[]>(watchers);
   const [isWatching, setIsWatching] = useState(

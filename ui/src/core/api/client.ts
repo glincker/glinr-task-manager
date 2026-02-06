@@ -91,6 +91,7 @@ import { chatApi } from './domains/chat';
 import { projectsApi, labelsApi } from './domains/projects';
 import { importApi } from './domains/import';
 import { cronApi } from './domains/cron';
+import { notificationsApi } from './domains/notifications';
 import {
   healthApi,
   statsApi,
@@ -142,6 +143,12 @@ export type {
   GitHubProjectItem,
   FieldMappings,
 } from './domains/import';
+
+export type {
+  Notification,
+  NotificationsResponse,
+  CreateNotificationInput,
+} from './domains/notifications';
 
 // Unified API Client
 // Maps the modular APIs to the original structure for backwards compatibility
@@ -202,6 +209,9 @@ export const api = {
 
   // Search
   search: searchApi,
+
+  // Notifications
+  notifications: notificationsApi,
 };
 
 // Also export individual APIs for tree-shaking
@@ -225,4 +235,5 @@ export {
   syncApi,
   statesApi,
   searchApi,
+  notificationsApi,
 };

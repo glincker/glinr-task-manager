@@ -15,12 +15,19 @@ import { getSettings, updateSettings, isGitHubOAuthConfigured } from '../setting
 import { createSession } from '../auth/auth-service.js';
 import {
   hashPassword,
+  validatePasswordStrength,
   generateRecoveryCodes,
   hashRecoveryCodes,
   hashRecoveryCode,
 } from '../auth/password.js';
+import { rateLimit } from '../middleware/rate-limit.js';
 
 const setup = new Hono();
+
+// Rate limiters for sensitive setup endpoints
+const adminCreateLimiter = rateLimit({ windowMs: 60_000, max: 3, message: 'Too many admin creation attempts. Try again in a minute.' });
+const recoveryLimiter = rateLimit({ windowMs: 60_000, max: 5, message: 'Too many recovery attempts. Try again in a minute.' });
+const resetLimiter = rateLimit({ windowMs: 60_000, max: 5, message: 'Too many reset attempts. Try again in a minute.' });
 
 // =============================================================================
 // ROUTES
@@ -252,7 +259,7 @@ setup.post('/github-oauth', async (c) => {
  * Create the first admin user
  * Only works if no admin exists yet
  */
-setup.post('/admin', async (c) => {
+setup.post('/admin', adminCreateLimiter, async (c) => {
   try {
     const db = getDb();
     if (!db) {
@@ -286,9 +293,10 @@ setup.post('/admin', async (c) => {
       return c.json({ error: 'Invalid email format' }, 400);
     }
 
-    // Validate password
-    if (password.length < 8) {
-      return c.json({ error: 'Password must be at least 8 characters' }, 400);
+    // Validate password strength
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      return c.json({ error: passwordError }, 400);
     }
 
     // Check if email already exists
@@ -367,7 +375,7 @@ setup.post('/admin', async (c) => {
  * POST /api/setup/verify-recovery-code
  * Verify a recovery code (for password reset)
  */
-setup.post('/verify-recovery-code', async (c) => {
+setup.post('/verify-recovery-code', recoveryLimiter, async (c) => {
   try {
     const db = getDb();
     if (!db) {
@@ -444,7 +452,7 @@ setup.post('/verify-recovery-code', async (c) => {
  * POST /api/setup/reset-password
  * Reset password using reset token
  */
-setup.post('/reset-password', async (c) => {
+setup.post('/reset-password', resetLimiter, async (c) => {
   try {
     const db = getDb();
     if (!db) {
@@ -458,8 +466,9 @@ setup.post('/reset-password', async (c) => {
       return c.json({ error: 'Reset token and new password are required' }, 400);
     }
 
-    if (newPassword.length < 8) {
-      return c.json({ error: 'Password must be at least 8 characters' }, 400);
+    const passwordError = validatePasswordStrength(newPassword);
+    if (passwordError) {
+      return c.json({ error: passwordError }, 400);
     }
 
     // Find user with valid reset token

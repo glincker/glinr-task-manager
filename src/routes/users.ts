@@ -14,6 +14,7 @@ import { validateSession, getUserById, getUserConnectedAccounts, type User } fro
 import {
   hashPassword,
   verifyPassword,
+  validatePasswordStrength,
   generateRecoveryCodes,
   hashRecoveryCodes,
   hashRecoveryCode,
@@ -204,9 +205,13 @@ userRoutes.put('/me/password', async (c) => {
   const body = await c.req.json();
   const { currentPassword, newPassword } = body;
 
-  // Validate new password
-  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
-    return c.json({ error: 'New password must be at least 8 characters' }, 400);
+  // Validate new password strength
+  if (!newPassword || typeof newPassword !== 'string') {
+    return c.json({ error: 'New password is required' }, 400);
+  }
+  const passwordError = validatePasswordStrength(newPassword);
+  if (passwordError) {
+    return c.json({ error: passwordError }, 400);
   }
 
   // Get current user with password hash

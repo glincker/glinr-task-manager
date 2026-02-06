@@ -73,6 +73,19 @@ export function verifyPassword(
 }
 
 /**
+ * Validate password strength.
+ * Requires: 8+ chars, at least 1 letter, at least 1 number.
+ * Returns null if valid, or an error message string.
+ */
+export function validatePasswordStrength(password: string): string | null {
+  if (password.length < 8) return 'Password must be at least 8 characters';
+  if (password.length > 128) return 'Password must be at most 128 characters';
+  if (!/[a-zA-Z]/.test(password)) return 'Password must contain at least one letter';
+  if (!/[0-9]/.test(password)) return 'Password must contain at least one number';
+  return null;
+}
+
+/**
  * Deterministic hash for recovery codes.
  * SHA256 is acceptable here since recovery codes are random, high-entropy strings.
  */

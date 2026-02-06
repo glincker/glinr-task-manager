@@ -34,6 +34,8 @@ import {
   telegramRoutes,
   whatsappRoutes,
   discordRoutes,
+  openApiRoutes,
+  notificationsRoutes,
 } from './routes/index.js';
 
 // Core imports
@@ -467,6 +469,8 @@ app.route('/api/skills', skillsRoutes);
 app.route('/api/telegram', telegramRoutes);
 app.route('/api/whatsapp', whatsappRoutes);
 app.route('/api/discord', discordRoutes);
+app.route('/api/docs', openApiRoutes);
+app.route('/api/notifications', notificationsRoutes);
 
 // Alias /api/plugins to /api/settings/plugins for backwards compat
 app.get('/api/plugins/health', async (c) => {

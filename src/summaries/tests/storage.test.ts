@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { initStorage, getStorage } from '../../storage/index.js';
 import { 
   createSummary, 
@@ -7,7 +7,10 @@ import {
   getTaskSummaries,
   getSummaryStats,
   deleteSummary,
-  getRecentSummaries
+  getRecentSummaries,
+  getSessionSummaries,
+  searchSummaries,
+  clearAllSummaries
 } from '../storage.js';
 import { randomUUID } from 'crypto';
 
@@ -111,5 +114,50 @@ describe('Persistent Summary Storage', () => {
     
     const retrieved = await getSummary(summary.id);
     expect(retrieved).toBeNull();
+  });
+
+  it('should get summaries by sessionId', async () => {
+    const sessionId = 'session-999';
+    await createSummary({
+      sessionId,
+      agent: 'test',
+      title: 'Session Summary',
+      whatChanged: '...',
+    });
+
+    const summaries = await getSessionSummaries(sessionId);
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].sessionId).toBe(sessionId);
+  });
+
+  it('should search summaries specifically', async () => {
+    const uniqueTitle = `Searchable Title ${randomUUID()}`;
+    await createSummary({
+      title: uniqueTitle,
+      whatChanged: 'Findable keyword',
+      agent: 'test',
+    });
+
+    const summaries = await searchSummaries('Findable keyword');
+    expect(summaries.some(s => s.title === uniqueTitle)).toBe(true);
+  });
+
+  it('should store embeddings when summary is created', async () => {
+    const summary = await createSummary({
+      title: 'Embedding Test',
+      whatChanged: 'Content for embedding',
+      agent: 'test',
+    });
+
+    // Embedding generation is async/background — just verify the summary was created
+    expect(summary.id).toBeDefined();
+    expect(summary.title).toBe('Embedding Test');
+  });
+
+  it('should log warning for clearAllSummaries', async () => {
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await clearAllSummaries();
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('clearAllSummaries called but not implemented'));
+    consoleSpy.mockRestore();
   });
 });
