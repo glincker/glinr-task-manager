@@ -669,6 +669,7 @@ export interface Settings {
     taskFailed: boolean;
     budgetAlerts: boolean;
     dailyDigest: boolean;
+    browserNotifications: boolean;
   };
   plugins: {
     mcpServer: { enabled: boolean; allowRead: boolean; allowWrite: boolean };

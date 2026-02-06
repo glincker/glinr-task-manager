@@ -234,6 +234,42 @@ h2 { font-weight: 700; letter-spacing: -0.025em; }
     var(--shadow-elevated);
 }
 
+@utility field {
+  background: hsl(var(--muted) / 0.4);
+  border: none;
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: hsl(var(--foreground));
+  outline: none;
+  transition: box-shadow 0.15s ease;
+  &::placeholder {
+    color: hsl(var(--muted-foreground) / 0.5);
+  }
+  &:focus {
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.3);
+  }
+}
+
+@utility field-lg {
+  background: hsl(var(--muted) / 0.4);
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: hsl(var(--foreground));
+  outline: none;
+  transition: box-shadow 0.15s ease;
+  &::placeholder {
+    color: hsl(var(--muted-foreground) / 0.5);
+  }
+  &:focus {
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.3);
+  }
+}
+
 @utility modal-glass {
   background: color-mix(in srgb, hsl(var(--card)), transparent 10%);
   backdrop-filter: blur(40px) saturate(200%);

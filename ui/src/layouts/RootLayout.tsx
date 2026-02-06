@@ -1,6 +1,6 @@
 import { type ReactNode, useState, useMemo, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ListTodo, FileText, Settings, Bot, Search, Coins, Menu, X, ChevronLeft, ChevronRight, Webhook, AlertTriangle, PanelLeftClose, PanelLeft, Command, Zap, Ticket, Sparkles, FolderKanban, Users, Clock, ChevronDown, LogOut, CreditCard } from 'lucide-react';
+import { LayoutDashboard, ListTodo, FileText, Settings, Bot, Search, Coins, Menu, X, ChevronLeft, ChevronRight, Webhook, AlertTriangle, PanelLeftClose, PanelLeft, Command, Zap, Ticket, Sparkles, FolderKanban, Users, Clock, ChevronDown, LogOut, CreditCard, KeyRound, Bell } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
 import { CommandPalette, openCommandPalette } from '@/components/shared/CommandPalette';
@@ -55,6 +55,7 @@ const navGroups = [
     id: 'insights',
     label: 'Insights',
     items: [
+      { name: 'Activity', href: '/activity', icon: Bell },
       { name: 'Summaries', href: '/summaries', icon: FileText, shortcut: '⌘7' },
       { name: 'Costs', href: '/costs', icon: Coins, shortcut: '⌘8' },
     ],
@@ -81,6 +82,7 @@ const adminNav = {
   label: 'Admin',
   items: [
     { name: 'Users', href: '/admin/users', icon: Users },
+    { name: 'Invite Codes', href: '/admin/invite-codes', icon: KeyRound },
   ],
 };
 

@@ -740,7 +740,7 @@ export function ImportWizard({ open, onOpenChange, onSuccess }: ImportWizardProp
               {/* Sample Items */}
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Sample Items</h4>
-                <div className="border border-border rounded-lg divide-y divide-border max-h-48 overflow-y-auto">
+                <div className="bg-muted/30 rounded-lg divide-y divide-border max-h-48 overflow-y-auto">
                   {preview.items.slice(0, 5).map((item) => (
                     <div key={item.id} className="p-3 flex items-start gap-3">
                       <div className="flex-1 min-w-0">
@@ -790,7 +790,7 @@ export function ImportWizard({ open, onOpenChange, onSuccess }: ImportWizardProp
                     </div>
                   </div>
                   {importIterations && (
-                    <div className="border border-border rounded-lg p-3 space-y-2">
+                    <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                       {preview.iterations.map((iter) => (
                         <div key={iter.id} className="flex items-center gap-2 text-sm">
                           <Target className="h-4 w-4 text-muted-foreground" />
@@ -903,7 +903,7 @@ export function ImportWizard({ open, onOpenChange, onSuccess }: ImportWizardProp
                 </div>
 
                 {/* Sync Options */}
-                <div className="flex items-center justify-between p-4 border border-border rounded-lg">
+                <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
                   <div>
                     <p className="font-medium flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-primary" />

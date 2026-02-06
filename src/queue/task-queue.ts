@@ -8,6 +8,7 @@ import type {
 import { getAgentRegistry } from "../adapters/registry.js";
 import { randomUUID } from "crypto";
 import { postResultToSource } from "./notifications.js";
+import { createTaskNotification } from "../notifications/in-app.js";
 import { extractFromTaskResult, createSummary } from "../summaries/index.js";
 import { logger } from "../utils/logger.js";
 import { getStorage, initStorage } from "../storage/index.js";
@@ -523,6 +524,13 @@ function emitEvent(event: TaskEvent): void {
     } catch (error) {
       console.error("[Queue] Error broadcasting SSE event:", error);
     }
+  }
+
+  // Write to notifications DB for bell dropdown
+  if (event.type === 'completed' || event.type === 'failed') {
+    createTaskNotification(event).then((id: string | null) => {
+      if (id && sseBroadcaster) sseBroadcaster('notification:new', { id });
+    }).catch(console.error);
   }
 }
 

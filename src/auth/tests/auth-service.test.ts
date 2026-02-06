@@ -20,7 +20,10 @@ vi.mock('../../settings/index.js', () => ({
     clientId: 'test-client-id',
     clientSecret: 'test-client-secret',
     redirectUri: 'http://localhost/callback'
-  }))
+  })),
+  getSettingsRaw: vi.fn(() => Promise.resolve({
+    system: { registrationMode: 'open' },
+  })),
 }));
 
 // Mock fetch for GitHub OAuth

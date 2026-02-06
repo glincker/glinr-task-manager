@@ -156,7 +156,7 @@ export function ImportSummaryCard({
 
       {/* Skipped items */}
       {summary.itemsToSkip > 0 && (
-        <div className="flex items-center gap-3 p-3 border border-border rounded-lg">
+        <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
           <AlertTriangle className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="text-sm">

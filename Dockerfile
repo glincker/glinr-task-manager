@@ -24,12 +24,12 @@ COPY ui/package.json ui/pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
 
 # ====================
-# Stage 4: Build Backend
+# Stage 4: Build Backend (tsc only — UI is built in stage 5)
 # ====================
 FROM base AS build-backend
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm build
+RUN ./node_modules/.bin/tsc --project tsconfig.json
 
 # ====================
 # Stage 5: Build UI
@@ -45,7 +45,7 @@ RUN pnpm build
 # ====================
 FROM node:22-alpine AS production
 
-# Install Chromium for Playwright browser automation
+# Install Chromium for Playwright, git for agent sandbox, dev tools
 RUN apk add --no-cache \
     chromium \
     nss \
@@ -54,7 +54,11 @@ RUN apk add --no-cache \
     ca-certificates \
     ttf-freefont \
     curl \
+    git \
     && rm -rf /var/cache/apk/*
+
+# Enable pnpm via corepack (for agent sandbox: clone, build, lint)
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Set Playwright to use system Chromium
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
@@ -66,21 +70,22 @@ RUN addgroup -g 1001 -S glinr && \
 
 WORKDIR /app
 
-# Copy pnpm
-COPY --from=base /root/.local/share/pnpm /root/.local/share/pnpm
-ENV PNPM_HOME=/root/.local/share/pnpm
-ENV PATH="$PNPM_HOME:$PATH"
-
 # Copy backend artifacts
 COPY --from=build-backend /app/dist ./dist
 COPY --from=build-backend /app/node_modules ./node_modules
 COPY --from=build-backend /app/package.json ./
 
+# Copy runtime config (settings.yml for storage tier, queue, etc.)
+COPY --from=build-backend /app/config ./config
+
 # Copy UI build artifacts
 COPY --from=build-ui /app/ui/dist ./ui/dist
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data && chown -R glinr:glinr /app
+# Create data directory for SQLite and link CLI binary
+RUN mkdir -p /app/data && \
+    ln -sf /app/dist/cli/index.js /usr/local/bin/glinr && \
+    chmod +x /app/dist/cli/index.js 2>/dev/null || true && \
+    chown -R glinr:glinr /app
 
 # Production environment
 ENV NODE_ENV=production
@@ -88,7 +93,7 @@ ENV PORT=3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/api/health || exit 1
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
 # Switch to non-root user
 USER glinr

@@ -407,7 +407,7 @@ export function ProjectDetail() {
             <select
               value={selectedSprintId || ''}
               onChange={(e) => setSelectedSprintId(e.target.value || undefined)}
-              className="px-3 py-2 text-sm bg-muted border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="field"
             >
               <option value="">All Tickets</option>
               {sprints.map((sprint) => (

@@ -166,10 +166,10 @@ function ToolItem({ tool }: { tool: Tool }) {
   return (
     <div
       className={cn(
-        'rounded-lg border p-3 transition-colors',
+        'rounded-lg p-3 transition-colors',
         tool.availability.available
-          ? 'border-border bg-card'
-          : 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10'
+          ? 'bg-muted/30'
+          : 'bg-amber-50/50 dark:bg-amber-900/10'
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -192,7 +192,7 @@ function ToolItem({ tool }: { tool: Tool }) {
 
       {/* Expand for more details */}
       {!tool.availability.available && (
-        <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-800">
+        <div className="mt-2 pt-2 border-t border-amber-200/20 dark:border-amber-800/30">
           <p className="text-xs text-amber-700 dark:text-amber-300">
             Configure this tool in the Integrations section to enable it.
           </p>
@@ -220,7 +220,7 @@ function CategoryGroup({
   const unavailableCount = tools.length - availableCount;
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
+    <div className="rounded-lg bg-muted/20 overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between p-4 bg-muted/30 hover:bg-muted/50 transition-colors"
@@ -274,7 +274,7 @@ export function ToolsSection() {
   const { data, isLoading, error, refetch, isFetching } = useQuery<ToolsResponse>({
     queryKey: ['tools', 'availability'],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/tools/list/availability`);
+      const res = await fetch(`${API_BASE}/api/tools/list/availability`, { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch tools');
       return res.json();
     },
@@ -404,7 +404,7 @@ export function ToolsSection() {
 
         {/* Info banner for unavailable tools */}
         {data && data.summary.unavailable > 0 && !showUnavailableOnly && (
-          <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 mb-4">
+          <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 mb-4">
             <div className="flex items-start gap-2">
               <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
               <div className="text-sm">

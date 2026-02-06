@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import { Bell, CheckCircle2, AlertCircle, Clock, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -38,6 +39,7 @@ function NotificationIcon({ type }: { type: Notification['type'] }) {
 }
 
 export function NotificationBell() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { data } = useQuery({
@@ -134,7 +136,10 @@ export function NotificationBell() {
         </div>
 
         <div className="px-5 py-3 border-t border-white/5 bg-white/[0.02] text-center">
-             <button className="text-[11px] font-bold text-muted-foreground hover:text-foreground transition-colors uppercase tracking-widest">
+             <button
+                onClick={() => navigate('/activity')}
+                className="text-[11px] font-bold text-muted-foreground hover:text-foreground transition-colors uppercase tracking-widest"
+             >
                 View All Activity
              </button>
         </div>

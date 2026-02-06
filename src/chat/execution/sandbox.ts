@@ -86,7 +86,30 @@ export class SandboxManager {
     try {
       // Dynamically import dockerode
       const DockerModule = await import('dockerode');
-      this.docker = new DockerModule.default();
+
+      // Resolve Docker socket: env var > /var/run/docker.sock > default
+      const dockerHost = process.env.DOCKER_HOST;
+      if (dockerHost) {
+        // Support unix:///path or tcp://host:port
+        if (dockerHost.startsWith('unix://')) {
+          this.docker = new DockerModule.default({ socketPath: dockerHost.replace('unix://', '') });
+        } else {
+          this.docker = new DockerModule.default({ host: dockerHost });
+        }
+      } else {
+        // Try standard socket paths (works with Docker Desktop, OrbStack, colima, etc.)
+        const { existsSync } = await import('fs');
+        const socketPaths = [
+          '/var/run/docker.sock',
+          `${process.env.HOME}/.orbstack/run/docker.sock`,
+          `${process.env.HOME}/.docker/run/docker.sock`,
+          `${process.env.HOME}/.colima/default/docker.sock`,
+        ];
+        const socketPath = socketPaths.find(p => existsSync(p));
+        this.docker = socketPath
+          ? new DockerModule.default({ socketPath })
+          : new DockerModule.default();
+      }
 
       // Check Docker connection
       await this.docker.ping();

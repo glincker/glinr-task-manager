@@ -339,7 +339,7 @@ export function RelationsWidget({ ticketId, relations = [] }: RelationsWidgetPro
 
             {/* Search Results */}
             {searchQuery.length >= 2 && (
-              <div className="border rounded-lg divide-y divide-border max-h-48 overflow-y-auto">
+              <div className="bg-muted/30 rounded-lg divide-y divide-border/20 max-h-48 overflow-y-auto">
                 {isSearching ? (
                   <div className="p-4 text-center">
                     <Loader2 className="h-4 w-4 animate-spin mx-auto" />

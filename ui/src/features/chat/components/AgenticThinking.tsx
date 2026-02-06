@@ -204,12 +204,12 @@ export function AgenticThinking({ events, isActive, className }: AgenticThinking
   return (
     <div
       className={cn(
-        'rounded-xl border bg-card/50 backdrop-blur-sm overflow-hidden transition-all duration-300',
+        'rounded-xl bg-card/50 backdrop-blur-sm overflow-hidden transition-all duration-300',
         isActive
-          ? 'border-blue-500/30 shadow-sm shadow-blue-500/10'
+          ? 'ring-1 ring-blue-500/30 shadow-sm shadow-blue-500/10'
           : error
-            ? 'border-destructive/30'
-            : 'border-border/30',
+            ? 'ring-1 ring-destructive/30'
+            : 'bg-muted/30',
         className
       )}
     >
@@ -357,7 +357,7 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCallState }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="rounded-lg bg-muted/30 border border-border/20 overflow-hidden">
+    <div className="rounded-lg bg-muted/30 overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-2 p-2 text-left hover:bg-muted/50 transition-colors"

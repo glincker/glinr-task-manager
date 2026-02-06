@@ -403,7 +403,7 @@ export function Settings() {
                 aria-label="Search settings"
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                className="w-full pl-9 pr-8 py-2 bg-muted/50 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="w-full pl-9 pr-8 py-2 bg-muted/40 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
               {searchQuery && (
                 <button
@@ -724,6 +724,41 @@ function AccountSection() {
   const hasPassword = connectedAccountsData?.hasPassword ?? false;
   const canDisconnect = connectedAccountsData?.canDisconnect ?? false;
 
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+
+  const togglePasswordVisibility = (field: string) => {
+    setShowPasswords((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
+
+  const getPasswordStrength = (
+    password: string
+  ): { label: string; color: string; width: string; score: number } => {
+    if (!password)
+      return { label: "", color: "", width: "0%", score: 0 };
+    let score = 0;
+    if (password.length >= 8) score++;
+    if (password.length >= 12) score++;
+    if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
+    if (/\d/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+
+    if (score <= 1)
+      return { label: "Weak", color: "bg-red-500", width: "20%", score };
+    if (score === 2)
+      return { label: "Fair", color: "bg-orange-500", width: "40%", score };
+    if (score === 3)
+      return { label: "Good", color: "bg-amber-500", width: "60%", score };
+    if (score === 4)
+      return { label: "Strong", color: "bg-green-500", width: "80%", score };
+    return { label: "Very Strong", color: "bg-emerald-500", width: "100%", score };
+  };
+
+  const passwordStrength = getPasswordStrength(passwordForm.new);
+  const passwordsMatch =
+    passwordForm.confirm.length > 0 && passwordForm.new === passwordForm.confirm;
+  const passwordsMismatch =
+    passwordForm.confirm.length > 0 && passwordForm.new !== passwordForm.confirm;
+
   const handlePasswordChange = () => {
     if (passwordForm.new !== passwordForm.confirm) {
       toast.error("New passwords do not match");
@@ -731,6 +766,10 @@ function AccountSection() {
     }
     if (passwordForm.new.length < 8) {
       toast.error("Password must be at least 8 characters");
+      return;
+    }
+    if (!/[a-zA-Z]/.test(passwordForm.new) || !/\d/.test(passwordForm.new)) {
+      toast.error("Password must contain at least 1 letter and 1 number");
       return;
     }
     // If user has password, require current; OAuth-only users don't need current
@@ -862,7 +901,7 @@ function AccountSection() {
                         onChange={(e) =>
                           setEditForm((f) => ({ ...f, name: e.target.value }))
                         }
-                        className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
+                        className="w-full field"
                         placeholder="Your name"
                         autoFocus
                       />
@@ -876,7 +915,7 @@ function AccountSection() {
                         onChange={(e) =>
                           setEditForm((f) => ({ ...f, bio: e.target.value }))
                         }
-                        className="w-full bg-background border rounded-lg px-3 py-2 text-sm resize-none"
+                        className="w-full field resize-none"
                         placeholder="A short bio about yourself"
                         rows={2}
                       />
@@ -1066,7 +1105,7 @@ function AccountSection() {
                 onChange={(e) =>
                   setEmailForm((f) => ({ ...f, newEmail: e.target.value }))
                 }
-                className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
+                className="w-full field"
                 placeholder="your@email.com"
                 autoFocus
               />
@@ -1085,7 +1124,7 @@ function AccountSection() {
                       currentPassword: e.target.value,
                     }))
                   }
-                  className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
+                  className="w-full field"
                   placeholder="Enter your password to confirm"
                 />
               </div>
@@ -1195,75 +1234,168 @@ function AccountSection() {
           <div className="space-y-4">
             {hasPassword && (
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                   Current Password
                 </label>
-                <input
-                  type="password"
-                  value={passwordForm.current}
-                  onChange={(e) =>
-                    setPasswordForm((f) => ({ ...f, current: e.target.value }))
-                  }
-                  className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
-                  placeholder="Enter current password"
-                />
+                <div className="relative">
+                  <input
+                    type={showPasswords.current ? "text" : "password"}
+                    value={passwordForm.current}
+                    onChange={(e) =>
+                      setPasswordForm((f) => ({ ...f, current: e.target.value }))
+                    }
+                    className="w-full bg-muted/40 rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="Enter current password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => togglePasswordVisibility("current")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showPasswords.current ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
             )}
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                 {hasPassword ? "New Password" : "Password"}
               </label>
-              <input
-                type="password"
-                value={passwordForm.new}
-                onChange={(e) =>
-                  setPasswordForm((f) => ({ ...f, new: e.target.value }))
-                }
-                className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
-                placeholder={
-                  hasPassword
-                    ? "Enter new password"
-                    : "Create a password (min 8 characters)"
-                }
-              />
+              <div className="relative">
+                <input
+                  type={showPasswords.new ? "text" : "password"}
+                  value={passwordForm.new}
+                  onChange={(e) =>
+                    setPasswordForm((f) => ({ ...f, new: e.target.value }))
+                  }
+                  className="w-full bg-muted/40 rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder={
+                    hasPassword
+                      ? "Enter new password"
+                      : "Create a password (min 8 characters)"
+                  }
+                />
+                <button
+                  type="button"
+                  onClick={() => togglePasswordVisibility("new")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPasswords.new ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              {/* Password Strength Indicator */}
+              {passwordForm.new && (
+                <div className="mt-2 space-y-1.5">
+                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn("h-full rounded-full transition-all duration-300", passwordStrength.color)}
+                      style={{ width: passwordStrength.width }}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className={cn(
+                      "text-xs font-medium",
+                      passwordStrength.score <= 1 && "text-red-500",
+                      passwordStrength.score === 2 && "text-orange-500",
+                      passwordStrength.score === 3 && "text-amber-500",
+                      passwordStrength.score >= 4 && "text-green-500",
+                    )}>
+                      {passwordStrength.label}
+                    </p>
+                    <div className="flex gap-2 text-xs text-muted-foreground">
+                      <span className={cn(passwordForm.new.length >= 8 ? "text-green-500" : "")}>
+                        {passwordForm.new.length >= 8 ? <CheckCircle2 className="h-3 w-3 inline mr-0.5" /> : <XCircle className="h-3 w-3 inline mr-0.5" />}
+                        8+ chars
+                      </span>
+                      <span className={cn(/[a-zA-Z]/.test(passwordForm.new) && /\d/.test(passwordForm.new) ? "text-green-500" : "")}>
+                        {/[a-zA-Z]/.test(passwordForm.new) && /\d/.test(passwordForm.new) ? <CheckCircle2 className="h-3 w-3 inline mr-0.5" /> : <XCircle className="h-3 w-3 inline mr-0.5" />}
+                        Letter + number
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                 Confirm Password
               </label>
-              <input
-                type="password"
-                value={passwordForm.confirm}
-                onChange={(e) =>
-                  setPasswordForm((f) => ({ ...f, confirm: e.target.value }))
-                }
-                className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
-                placeholder="Confirm password"
-              />
+              <div className="relative">
+                <input
+                  type={showPasswords.confirm ? "text" : "password"}
+                  value={passwordForm.confirm}
+                  onChange={(e) =>
+                    setPasswordForm((f) => ({ ...f, confirm: e.target.value }))
+                  }
+                  className={cn(
+                    "w-full bg-muted/40 rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors",
+                    passwordsMatch && "border-green-500/50",
+                    passwordsMismatch && "border-red-500/50",
+                  )}
+                  placeholder="Confirm password"
+                />
+                <button
+                  type="button"
+                  onClick={() => togglePasswordVisibility("confirm")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPasswords.confirm ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              {passwordsMismatch && (
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                  <XCircle className="h-3 w-3" />
+                  Passwords do not match
+                </p>
+              )}
+              {passwordsMatch && (
+                <p className="text-xs text-green-500 mt-1 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Passwords match
+                </p>
+              )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-1">
               <Button
                 size="sm"
                 onClick={handlePasswordChange}
                 disabled={
                   changePassword.isPending ||
                   !passwordForm.new ||
+                  !passwordForm.confirm ||
+                  passwordsMismatch ||
+                  passwordForm.new.length < 8 ||
                   (hasPassword && !passwordForm.current)
                 }
                 className="rounded-xl"
               >
                 {changePassword.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : hasPassword ? (
-                  "Change Password"
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
-                  "Set Password"
+                  <Shield className="h-4 w-4 mr-2" />
                 )}
+                {hasPassword ? "Update Password" : "Set Password"}
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setShowPasswordChange(false)}
+                onClick={() => {
+                  setShowPasswordChange(false);
+                  setPasswordForm({ current: "", new: "", confirm: "" });
+                  setShowPasswords({});
+                }}
                 className="rounded-xl"
               >
                 Cancel
@@ -1272,16 +1404,34 @@ function AccountSection() {
           </div>
         ) : (
           <div className="flex items-center justify-between">
-            <div>
-              {hasPassword ? (
-                <p className="text-sm text-muted-foreground">
-                  Password is set. You can log in with email + password.
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No password set. Set one to enable email login.
-                </p>
-              )}
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "h-10 w-10 rounded-full flex items-center justify-center",
+                hasPassword ? "bg-green-500/10" : "bg-amber-500/10"
+              )}>
+                {hasPassword ? (
+                  <Shield className="h-5 w-5 text-green-500" />
+                ) : (
+                  <Unlock className="h-5 w-5 text-amber-500" />
+                )}
+              </div>
+              <div>
+                {hasPassword ? (
+                  <>
+                    <p className="text-sm font-medium">Password protected</p>
+                    <p className="text-xs text-muted-foreground">
+                      You can log in with email + password
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-amber-500">No password set</p>
+                    <p className="text-xs text-muted-foreground">
+                      Set one to enable email login alongside OAuth
+                    </p>
+                  </>
+                )}
+              </div>
             </div>
             <Button
               variant="outline"
@@ -1292,6 +1442,22 @@ function AccountSection() {
               <Key className="h-4 w-4 mr-2" />
               {hasPassword ? "Change" : "Set Password"}
             </Button>
+          </div>
+        )}
+
+        {/* CLI Reset Hint */}
+        {hasPassword && !showPasswordChange && (
+          <div className="mt-4 pt-4 border-t border-border/50">
+            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-muted/20">
+              <Terminal className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p className="font-medium text-foreground/80">Forgot your password?</p>
+                <p>Ask an admin to reset it, or run this on the server:</p>
+                <code className="block mt-1 px-2 py-1.5 bg-muted/40 rounded-lg font-mono text-[11px] break-all">
+                  glinr auth reset-password {profile?.user?.email || "your@email.com"}
+                </code>
+              </div>
+            </div>
           </div>
         )}
       </SettingsCard>
@@ -1538,8 +1704,8 @@ function GitHubIntegrationCard({ settings }: { settings?: SettingsType }) {
 
         {/* Repos List */}
         {showRepos && isConnected && (
-          <div className="border rounded-lg overflow-hidden">
-            <div className="p-2 bg-muted/30 border-b flex items-center justify-between">
+          <div className="rounded-2xl glass shadow-lg overflow-hidden">
+            <div className="p-2 bg-muted/30 border-b border-white/5 flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground">
                 {reposData?.count || 0} repositories
               </span>
@@ -2041,7 +2207,7 @@ function SecuritySection() {
                 onChange={(e) =>
                   updatePolicy.mutate({ askTimeout: parseInt(e.target.value) })
                 }
-                className="bg-background border rounded-lg px-3 py-1.5 text-sm"
+                className="field py-1.5"
               >
                 <option value={15000}>15 seconds</option>
                 <option value={30000}>30 seconds</option>
@@ -2072,7 +2238,7 @@ function SecuritySection() {
                 onChange={(e) =>
                   setNewType(e.target.value as "command" | "path" | "url")
                 }
-                className="bg-background border rounded-lg px-3 py-2 text-sm"
+                className="field"
               >
                 <option value="command">Command</option>
                 <option value="path">File Path</option>
@@ -2089,7 +2255,7 @@ function SecuritySection() {
                 }
                 value={newPattern}
                 onChange={(e) => setNewPattern(e.target.value)}
-                className="col-span-2 bg-background border rounded-lg px-3 py-2 text-sm"
+                className="col-span-2 field"
               />
             </div>
             <div className="flex gap-3">
@@ -2098,7 +2264,7 @@ function SecuritySection() {
                 placeholder="Description (optional)"
                 value={newDescription}
                 onChange={(e) => setNewDescription(e.target.value)}
-                className="flex-1 bg-background border rounded-lg px-3 py-2 text-sm"
+                className="flex-1 field"
               />
               <Button
                 onClick={handleAddToAllowlist}
@@ -2209,9 +2375,13 @@ function SecuritySection() {
             >
               {sandbox?.available ? "Ready" : "Unavailable"}
             </p>
-            {sandbox?.available && (
+            {sandbox?.available ? (
               <p className="text-xs text-muted-foreground mt-1">
                 {sandbox.activeContainers}/{sandbox.poolSize} containers
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">
+                Docker required
               </p>
             )}
           </div>
@@ -2325,7 +2495,7 @@ function SecuritySection() {
                         userLimit: parseInt(e.target.value) || 100,
                       })
                     }
-                    className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
+                    className="w-full field"
                     min={1}
                     max={1000}
                   />
@@ -2347,7 +2517,7 @@ function SecuritySection() {
                         conversationLimit: parseInt(e.target.value) || 50,
                       })
                     }
-                    className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
+                    className="w-full field"
                     min={1}
                     max={500}
                   />
@@ -2369,7 +2539,7 @@ function SecuritySection() {
                         globalLimit: parseInt(e.target.value) || 500,
                       })
                     }
-                    className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
+                    className="w-full field"
                     min={1}
                     max={5000}
                   />
@@ -2636,7 +2806,7 @@ function RecoveryCodesSection() {
             </>
           ) : (
             <>
-              <div className="bg-muted/30 border border-border rounded-xl p-4">
+              <div className="bg-muted/40 rounded-xl p-4">
                 <div className="grid grid-cols-2 gap-2 font-mono text-sm">
                   {newCodes.map((code, i) => (
                     <div
@@ -3167,7 +3337,7 @@ function SystemSection({
                   system: { maxConcurrentTasks: parseInt(e.target.value) },
                 })
               }
-              className="bg-muted border border-border rounded-lg px-3 py-1.5 text-sm"
+              className="field py-1.5"
             >
               {[1, 2, 3, 5, 10].map((n) => (
                 <option key={n} value={n}>
@@ -3206,6 +3376,27 @@ function SystemSection({
                 "system",
                 "debugMode",
                 settings?.system?.debugMode ?? false,
+              )
+            }
+            disabled={updateSettings.isPending}
+          />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Authentication"
+        description="Login and registration security options"
+      >
+        <div className="space-y-4">
+          <ToggleOption
+            label="Show Forgot Password"
+            description="Display the 'Forgot password?' link on the login page with CLI reset instructions"
+            checked={settings?.system?.showForgotPassword ?? true}
+            onChange={() =>
+              handleToggle(
+                "system",
+                "showForgotPassword",
+                settings?.system?.showForgotPassword ?? true,
               )
             }
             disabled={updateSettings.isPending}
@@ -3335,8 +3526,8 @@ function ApiInputField({
             value={displayValue}
             onChange={handleChange}
             className={cn(
-              "w-full bg-muted/50 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50",
-              isDirty ? "border-amber-500/50" : "border-border",
+              "w-full bg-muted/40 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/30",
+              isDirty && "ring-1 ring-amber-500/50",
             )}
           />
           {isSecret && (

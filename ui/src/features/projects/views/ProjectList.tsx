@@ -172,7 +172,7 @@ export function ProjectList() {
             placeholder="Search projects..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-muted/50 border border-border rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full field pl-10 pr-4"
           />
         </div>
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">

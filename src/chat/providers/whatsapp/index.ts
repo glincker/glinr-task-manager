@@ -184,6 +184,10 @@ function setConfig(config: WhatsAppConfig) {
   currentConfig = config;
 }
 
+function clearConfig() {
+  currentConfig = null;
+}
+
 async function callWhatsAppApi<T>(
   phoneNumberId: string,
   accessToken: string,
@@ -627,6 +631,6 @@ export const whatsappProvider: ChatProvider<WhatsAppAccountConfig> = {
   status: statusAdapter,
 };
 
-export { setConfig as setWhatsAppConfig };
+export { setConfig as setWhatsAppConfig, clearConfig as clearWhatsAppConfig };
 export { WhatsAppAccountConfigSchema };
 export type { WhatsAppConfig, WhatsAppWebhookPayload, WhatsAppMessage };

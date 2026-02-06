@@ -1,3 +1,9 @@
+# Profiles:
+#   (default)   glinr + redis
+#   ai          + ollama (free local AI)
+#   tools       + redis-commander
+#   monitoring  + prometheus + grafana
+
 version: '3.8'
 
 services:
@@ -17,6 +23,7 @@ services:
       - PORT=3000
       # Redis
       - REDIS_URL=redis://redis:6379
+      - GLINR_REQUIRE_REDIS=true
       # Database
       - DATABASE_URL=file:/app/data/glinr.db
       # OpenClaw
@@ -35,6 +42,8 @@ services:
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
       - GROQ_API_KEY=${GROQ_API_KEY}
+      # Ollama (free local AI)
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
       # Tool Execution
       - POOL_MAX_CONCURRENT=${POOL_MAX_CONCURRENT:-50}
       - POOL_TIMEOUT_MS=${POOL_TIMEOUT_MS:-300000}
@@ -45,7 +54,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -70,6 +79,28 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+    networks:
+      - glinr-network
+
+  # ===================
+  # Ollama (Free Local AI)
+  # ===================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: glinr-ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    profiles:
+      - ai
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     networks:
       - glinr-network
@@ -139,6 +170,8 @@ volumes:
   redis-data:
     driver: local
   workspace:
+    driver: local
+  ollama-data:
     driver: local
   prometheus-data:
     driver: local

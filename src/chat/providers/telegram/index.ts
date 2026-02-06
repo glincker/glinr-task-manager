@@ -293,6 +293,10 @@ function setConfig(config: TelegramConfig) {
   currentConfig = config;
 }
 
+function clearConfig() {
+  currentConfig = null;
+}
+
 const outboundAdapter: OutboundAdapter = {
   async send(message: OutgoingMessage): Promise<SendResult> {
     if (!currentConfig?.botToken) {
@@ -729,8 +733,8 @@ export const telegramProvider: ChatProvider<TelegramAccountConfig> = {
   status: statusAdapter,
 };
 
-// Export helper to set config for outbound calls
-export { setConfig as setTelegramConfig };
+// Export helpers to set/clear config for outbound calls
+export { setConfig as setTelegramConfig, clearConfig as clearTelegramConfig };
 
 export { TelegramAccountConfigSchema };
 export type { TelegramConfig, TelegramUpdate, TelegramMessage, TelegramCallbackQuery };

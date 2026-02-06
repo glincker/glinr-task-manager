@@ -64,8 +64,8 @@ export function ApiInputField({
             value={displayValue}
             onChange={handleChange}
             className={cn(
-              'w-full bg-muted/50 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50',
-              isDirty ? 'border-amber-500/50' : 'border-border'
+              'w-full bg-muted/40 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/30',
+              isDirty && 'ring-1 ring-amber-500/50'
             )}
           />
           {isSecret && (

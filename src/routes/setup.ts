@@ -82,6 +82,7 @@ setup.get('/status', async (c) => {
         configured: aiConfigured,
         provider: settings.aiProvider?.defaultProvider || null,
       },
+      showForgotPassword: settings.system?.showForgotPassword ?? true,
     });
   } catch (error) {
     console.error('[Setup] Status check error:', error);
@@ -256,28 +257,13 @@ setup.post('/github-oauth', async (c) => {
 
 /**
  * POST /api/setup/admin
- * Create the first admin user
- * Only works if no admin exists yet
+ * Create an admin user (allows multiple admins)
  */
 setup.post('/admin', adminCreateLimiter, async (c) => {
   try {
     const db = getDb();
     if (!db) {
       return c.json({ error: 'Database not initialized' }, 500);
-    }
-
-    // Check if admin already exists
-    const existingAdmin = await db
-      .select()
-      .from(users)
-      .where(eq(users.role, 'admin'))
-      .limit(1);
-
-    if (existingAdmin.length > 0) {
-      return c.json(
-        { error: 'Admin user already exists. Use password reset to recover access.' },
-        403
-      );
     }
 
     const body = await c.req.json();

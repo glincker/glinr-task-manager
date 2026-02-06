@@ -11,6 +11,8 @@
 import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
+import { eq } from 'drizzle-orm';
 import {
   signUpWithEmail,
   signInWithEmail,
@@ -32,7 +34,10 @@ import {
   handleLinearCallback,
 } from '../auth/linear-oauth.js';
 import { rateLimit } from '../middleware/rate-limit.js';
-import { validatePasswordStrength } from '../auth/password.js';
+import { validatePasswordStrength, hashInviteCode } from '../auth/password.js';
+import { getSettingsRaw } from '../settings/index.js';
+import { getDb } from '../storage/index.js';
+import { inviteCodes } from '../storage/schema.js';
 
 // =============================================================================
 // RATE LIMITERS
@@ -52,6 +57,7 @@ const signupSchema = z.object({
       message: 'Password must contain at least one letter and one number',
     }),
   name: z.string().min(1, 'Name is required').max(100).trim(),
+  inviteCode: z.string().max(50).optional(),
 });
 
 const loginSchema = z.object({
@@ -96,11 +102,63 @@ authRoutes.post('/signup', signupLimiter, async (c) => {
       return c.json({ error: firstError }, 400);
     }
 
-    const { email, password, name } = parsed.data;
+    const { email, password, name, inviteCode } = parsed.data;
+
+    // Check registration mode
+    const settings = await getSettingsRaw();
+    const mode = settings.system.registrationMode;
+
+    let inviteRecord: { id: string } | undefined;
+
+    if (mode === 'invite') {
+      if (!inviteCode) {
+        return c.json({ error: 'Registration requires an invite code' }, 403);
+      }
+
+      const db = getDb();
+      if (!db) {
+        return c.json({ error: 'Database not initialized' }, 500);
+      }
+
+      const codeHash = hashInviteCode(inviteCode);
+      const records = await db
+        .select()
+        .from(inviteCodes)
+        .where(eq(inviteCodes.codeHash, codeHash))
+        .limit(1);
+
+      if (!records.length) {
+        return c.json({ error: 'Invalid invite code' }, 400);
+      }
+
+      const record = records[0];
+
+      if (record.usedBy) {
+        return c.json({ error: 'Invite code already used' }, 400);
+      }
+
+      if (record.expiresAt && new Date() > new Date(record.expiresAt)) {
+        return c.json({ error: 'Invite code has expired' }, 400);
+      }
+
+      inviteRecord = { id: record.id };
+    }
+
     const result = await signUpWithEmail(email, password, name);
 
     if (!result.success || !result.session) {
       return c.json({ error: result.error || 'Signup failed' }, 400);
+    }
+
+    // Mark invite code as used
+    if (inviteRecord && result.user) {
+      const db = getDb();
+      if (db) {
+        await db
+          .update(inviteCodes)
+          .set({ usedBy: result.user.id, usedAt: new Date() })
+          .where(eq(inviteCodes.id, inviteRecord.id));
+      }
     }
 
     // Set session cookie

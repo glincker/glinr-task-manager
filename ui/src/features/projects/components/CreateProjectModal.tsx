@@ -168,7 +168,7 @@ export function CreateProjectModal({ open, onOpenChange, onSuccess }: CreateProj
                 onChange={(e) => handleKeyChange(e.target.value)}
                 placeholder="PROJ"
                 maxLength={10}
-                className="w-32 bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-32 field font-mono uppercase"
               />
               <span className="text-muted-foreground">-</span>
               <span className="text-muted-foreground font-mono">123</span>
@@ -189,7 +189,7 @@ export function CreateProjectModal({ open, onOpenChange, onSuccess }: CreateProj
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="My Awesome Project"
-              className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="w-full field"
             />
           </div>
 
@@ -201,7 +201,7 @@ export function CreateProjectModal({ open, onOpenChange, onSuccess }: CreateProj
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description..."
               rows={2}
-              className="w-full bg-muted/50 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+              className="w-full field resize-none"
             />
           </div>
 

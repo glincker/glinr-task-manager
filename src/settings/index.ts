@@ -43,6 +43,7 @@ export const SettingsSchema = z.object({
     taskFailed: z.boolean().default(true),
     budgetAlerts: z.boolean().default(true),
     dailyDigest: z.boolean().default(false),
+    browserNotifications: z.boolean().default(false),
   }).default({}),
   plugins: z.object({
     // MCP Server - allows AI agents to interact via MCP tools
@@ -75,6 +76,7 @@ export const SettingsSchema = z.object({
     debugMode: z.boolean().default(false),
     maxConcurrentTasks: z.number().min(1).max(10).default(3),
     registrationMode: z.enum(['open', 'invite']).default('invite'),
+    showForgotPassword: z.boolean().default(true),
   }).default({}),
 });
 
@@ -92,6 +94,7 @@ const DEFAULT_SETTINGS: Settings = {
     taskFailed: true,
     budgetAlerts: true,
     dailyDigest: false,
+    browserNotifications: false,
   },
   plugins: {
     mcpServer: { enabled: false, allowRead: true, allowWrite: false },
@@ -105,6 +108,7 @@ const DEFAULT_SETTINGS: Settings = {
     debugMode: false,
     maxConcurrentTasks: 3,
     registrationMode: 'invite' as const,
+    showForgotPassword: true,
   },
 };
 

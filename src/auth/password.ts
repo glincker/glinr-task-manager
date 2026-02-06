@@ -111,3 +111,26 @@ export function generateRecoveryCodes(count: number = 8): string[] {
 export function hashRecoveryCodes(codes: string[]): string[] {
   return codes.map(hashRecoveryCode);
 }
+
+// =============================================================================
+// INVITE CODE UTILITIES
+// =============================================================================
+
+/**
+ * Generate a human-friendly invite code.
+ * Format: GLINR-XXXX-XXXX-XXXX (12 hex chars)
+ */
+export function generateInviteCode(): string {
+  const hex = randomBytes(6).toString('hex').toUpperCase();
+  return `GLINR-${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}`;
+}
+
+/**
+ * Hash an invite code for secure storage.
+ * Normalizes by removing dashes and uppercasing before hashing.
+ */
+export function hashInviteCode(code: string): string {
+  return createHash('sha256')
+    .update(code.replace(/-/g, '').toUpperCase())
+    .digest('hex');
+}

@@ -4,6 +4,7 @@
  * Configure notification preferences.
  */
 
+import { toast } from 'sonner';
 import type { Settings as SettingsType } from '@/core/api/client';
 import { SettingsCard, ToggleOption } from '../components';
 
@@ -18,6 +19,29 @@ export function NotificationsSection({
   handleToggle,
   isPending,
 }: NotificationsSectionProps) {
+  const handleBrowserNotificationsToggle = async () => {
+    const current = settings?.notifications?.browserNotifications ?? false;
+
+    if (current) {
+      // Turning off — just toggle
+      handleToggle('notifications', 'browserNotifications', true);
+      return;
+    }
+
+    // Turning on — request permission first
+    if (!('Notification' in window)) {
+      toast.error('Browser notifications are not supported in this browser');
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      handleToggle('notifications', 'browserNotifications', false);
+    } else {
+      toast.error('Browser notification permission denied. Enable it in your browser settings.');
+    }
+  };
+
   return (
     <SettingsCard
       title="Notification Preferences"
@@ -74,6 +98,13 @@ export function NotificationsSection({
               settings?.notifications?.dailyDigest ?? false
             )
           }
+          disabled={isPending}
+        />
+        <ToggleOption
+          label="Browser Notifications"
+          description="Show native browser notifications for task events"
+          checked={settings?.notifications?.browserNotifications ?? false}
+          onChange={handleBrowserNotificationsToggle}
           disabled={isPending}
         />
       </div>

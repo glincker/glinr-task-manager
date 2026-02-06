@@ -45,7 +45,9 @@ import { getAgentRegistry } from './adapters/registry.js';
 import { startAllCronJobs, stopAllCronJobs, getHealthStatus } from './cron/index.js';
 import { initTokenTracker } from './costs/token-tracker.js';
 import { loadConfig } from './utils/config-loader.js';
-import { initStorage } from './storage/index.js';
+import { initStorage, getDb } from './storage/index.js';
+import { users } from './storage/schema.js';
+import { eq } from 'drizzle-orm';
 import { initApiTokensTable, tokenAuthMiddleware } from './auth/api-tokens.js';
 import { authMiddleware } from './auth/middleware.js';
 import { getGateway, type GatewayRequest, type WorkflowType } from './gateway/index.js';
@@ -75,6 +77,7 @@ const ENABLE_CRON = process.env.ENABLE_CRON !== undefined
   : (appSettings.server?.enableCron !== undefined ? appSettings.server.enableCron : true);
 
 const app = new Hono();
+export { app };
 
 // === Middleware ===
 
@@ -484,6 +487,12 @@ app.post('/api/plugins/:id/toggle', async (c) => {
 // === Server Startup ===
 
 async function main() {
+  // Only start IF we are the main module actually being executed
+  // We check if this is the start file.
+  const isMain = process.argv[1]?.endsWith('server.ts') || process.argv[1]?.endsWith('server.js');
+  if (!isMain && process.env.NODE_ENV === 'test') {
+    return;
+  }
   console.log('[GLINR] Task Manager starting...');
   console.log('[GLINR] Mode: Autonomous');
 
@@ -519,6 +528,28 @@ async function main() {
   } catch (error) {
     console.error('[ERROR] Failed to initialize storage:', error);
     console.log('[WARN] Running with in-memory storage only');
+  }
+
+  // Validate Redis connectivity
+  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+  try {
+    const IORedis = (await import('ioredis')).default;
+    const testRedis = new IORedis(redisUrl, {
+      maxRetriesPerRequest: 1,
+      connectTimeout: 5000,
+      lazyConnect: true,
+    });
+    await testRedis.connect();
+    await testRedis.ping();
+    await testRedis.disconnect();
+    console.log('[OK] Redis connected');
+  } catch {
+    console.error(`[ERROR] Redis unreachable at ${redisUrl}`);
+    if (process.env.GLINR_REQUIRE_REDIS === 'true') {
+      console.error('[FATAL] GLINR_REQUIRE_REDIS=true — exiting.');
+      process.exit(1);
+    }
+    console.log('[WARN] Continuing without Redis (tasks will not process)');
   }
 
   // Initialize task queue (loads tasks from DB)
@@ -680,6 +711,27 @@ async function main() {
     console.log(`  Stale Checker: ${Math.round(staleMs / 1000)}s (POLL_INTERVAL_STALE)`);
     console.log(`  Log Level: ${process.env.LOG_LEVEL || 'INFO'} (LOG_LEVEL)`);
   }
+
+  // First-time setup banner
+  try {
+    const db = getDb();
+    if (db) {
+      const adminCount = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.role, 'admin'))
+        .limit(1);
+      if (adminCount.length === 0) {
+        console.log('\n' + '='.repeat(56));
+        console.log('  GLINR needs initial setup!');
+        console.log('');
+        console.log('  Run:   glinr setup');
+        console.log('  Or:    docker exec -it glinr-task-manager glinr setup');
+        console.log(`  Or visit: http://localhost:${PORT}/setup`);
+        console.log('='.repeat(56) + '\n');
+      }
+    }
+  } catch { /* ignore - DB may not be ready */ }
 }
 
 // Graceful shutdown

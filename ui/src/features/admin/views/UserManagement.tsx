@@ -25,6 +25,16 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -61,6 +71,7 @@ export function UserManagement() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetResult, setResetResult] = useState<{ password: string; codes: string[] } | null>(null);
   const [copiedItem, setCopiedItem] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
 
   // Fetch all users
   const { data, isLoading, error, refetch } = useQuery({
@@ -169,8 +180,13 @@ export function UserManagement() {
   };
 
   const handleDeleteUser = (user: User) => {
-    if (confirm(`Are you sure you want to delete ${user.name}? This action cannot be undone.`)) {
-      deleteUser.mutate(user.id);
+    setDeleteTarget(user);
+  };
+
+  const confirmDeleteUser = () => {
+    if (deleteTarget) {
+      deleteUser.mutate(deleteTarget.id);
+      setDeleteTarget(null);
     }
   };
 
@@ -213,16 +229,16 @@ export function UserManagement() {
           placeholder="Search users..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 bg-muted/30 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="w-full pl-10 pr-4 py-2 field-lg"
         />
       </div>
 
       {/* Users Table */}
-      <div className="rounded-2xl border bg-card overflow-hidden">
+      <div className="rounded-2xl glass shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b bg-muted/30">
+              <tr className="border-b border-white/5 bg-muted/30">
                 <th className="text-left p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   User
                 </th>
@@ -255,17 +271,17 @@ export function UserManagement() {
                 </tr>
               ) : (
                 filteredUsers.map((user) => (
-                  <tr key={user.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                  <tr key={user.id} className="border-b border-white/5 last:border-0 hover:bg-muted/20 transition-colors">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         {user.avatarUrl ? (
                           <img
                             src={user.avatarUrl}
                             alt={user.name}
-                            className="h-10 w-10 rounded-full ring-2 ring-border"
+                            className="h-10 w-10 rounded-full ring-1 ring-white/10"
                           />
                         ) : (
-                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/60 ring-2 ring-border flex items-center justify-center text-sm font-medium text-white">
+                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary to-primary/60 ring-1 ring-white/10 flex items-center justify-center text-sm font-medium text-white">
                             {user.name.charAt(0).toUpperCase()}
                           </div>
                         )}
@@ -372,17 +388,17 @@ export function UserManagement() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 rounded-2xl bg-card border">
+        <div className="p-4 rounded-2xl glass shadow-lg">
           <p className="text-sm text-muted-foreground">Total Users</p>
           <p className="text-2xl font-bold">{data?.total || 0}</p>
         </div>
-        <div className="p-4 rounded-2xl bg-card border">
+        <div className="p-4 rounded-2xl glass shadow-lg">
           <p className="text-sm text-muted-foreground">Admins</p>
           <p className="text-2xl font-bold text-red-500">
             {data?.users?.filter((u) => u.role === 'admin').length || 0}
           </p>
         </div>
-        <div className="p-4 rounded-2xl bg-card border">
+        <div className="p-4 rounded-2xl glass shadow-lg">
           <p className="text-sm text-muted-foreground">Active</p>
           <p className="text-2xl font-bold text-green-500">
             {data?.users?.filter((u) => u.status === 'active').length || 0}
@@ -390,10 +406,28 @@ export function UserManagement() {
         </div>
       </div>
 
+      {/* Delete User Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This action cannot be undone and will remove all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteUser} className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete User
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Reset Password Modal */}
       {showResetModal && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-card rounded-2xl border shadow-xl w-full max-w-md mx-4 p-6">
+          <div className="glass-heavy rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="h-12 w-12 rounded-full bg-amber-500/10 flex items-center justify-center">
                 <Key className="h-6 w-6 text-amber-500" />
@@ -406,7 +440,7 @@ export function UserManagement() {
 
             {resetResult ? (
               <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-muted/30 border">
+                <div className="p-4 rounded-xl bg-muted/30">
                   <p className="text-xs text-muted-foreground mb-1">Temporary Password</p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 font-mono text-sm">{resetResult.password}</code>
@@ -425,7 +459,7 @@ export function UserManagement() {
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-muted/30 border">
+                <div className="p-4 rounded-xl bg-muted/30">
                   <p className="text-xs text-muted-foreground mb-2">Recovery Codes</p>
                   <div className="grid grid-cols-2 gap-2">
                     {resetResult.codes.map((code, i) => (

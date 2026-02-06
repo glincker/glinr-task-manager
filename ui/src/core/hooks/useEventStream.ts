@@ -32,7 +32,7 @@ export function useEventStream() {
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const notificationPrefsRef = useRef({ taskComplete: true, taskFailed: true });
+  const notificationPrefsRef = useRef({ taskComplete: true, taskFailed: true, browserNotifications: false });
 
   const { data: settingsData } = useQuery({
     queryKey: ["settings"],
@@ -45,6 +45,7 @@ export function useEventStream() {
     notificationPrefsRef.current = {
       taskComplete: prefs?.taskComplete ?? true,
       taskFailed: prefs?.taskFailed ?? true,
+      browserNotifications: prefs?.browserNotifications ?? false,
     };
   }, [settingsData]);
 
@@ -85,6 +86,9 @@ export function useEventStream() {
       queryClient.invalidateQueries({ queryKey: ["summaries"] });
       if (notificationPrefsRef.current.taskComplete) {
         toast.success(`Task completed: ${data.task.title}`);
+        if (notificationPrefsRef.current.browserNotifications && Notification.permission === 'granted') {
+          new Notification('Task Completed', { body: data.task.title });
+        }
       }
     });
 
@@ -97,12 +101,19 @@ export function useEventStream() {
         toast.error(`Task failed: ${data.task.title}`, {
           description: data.result?.error,
         });
+        if (notificationPrefsRef.current.browserNotifications && Notification.permission === 'granted') {
+          new Notification('Task Failed', { body: `${data.task.title}${data.result?.error ? ': ' + data.result.error : ''}` });
+        }
       }
     });
 
     eventSource.addEventListener("task:progress", (event) => {
       const data: TaskEvent = JSON.parse(event.data);
       queryClient.invalidateQueries({ queryKey: ["tasks", data.taskId] });
+    });
+
+    eventSource.addEventListener("notification:new", () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     });
 
     eventSource.onerror = () => {

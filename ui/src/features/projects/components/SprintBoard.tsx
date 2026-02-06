@@ -184,9 +184,9 @@ function TicketCard({
     <div
       ref={ref}
       className={cn(
-        'group bg-card border border-border rounded-lg p-3 cursor-grab active:cursor-grabbing',
-        'hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200',
-        dragging && 'opacity-40 scale-[1.02] shadow-xl border-primary rotate-1'
+        'group glass rounded-xl p-3 cursor-grab active:cursor-grabbing',
+        'hover:shadow-lg hover:shadow-primary/5 transition-all duration-200',
+        dragging && 'opacity-40 scale-[1.02] shadow-xl rotate-1'
       )}
       onClick={handleClick}
     >

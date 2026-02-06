@@ -1,80 +1,109 @@
-# GLINR Task Manager - Antigravity Session Prompt
+# GLINR Task Manager - Antigravity Testing Session
 
-Copy and paste this prompt to start Antigravity on the next phase of development.
+Copy and paste this prompt to start Antigravity on testing the latest changes.
 
 ---
 
 ## Prompt for Antigravity
 
 ```
-# GLINR Task Manager - Implementation Session
+# GLINR Task Manager - Testing & Verification Session
 
 ## Context
-You are working on GLINR Task Manager, an AI agent orchestrator. Read these docs first:
-- docs/HANDOFF.md - Current status and recommended tasks (READ FIRST)
-- docs/ROADMAP.md - Full roadmap with checklist
+You are testing GLINR Task Manager, an AI agent orchestrator. Read these docs first:
+- docs/LAUNCH_CHECKLIST.md - Full testing queue (READ FIRST, especially "Antigravity Testing Queue" section)
 - CLAUDE.md - Development guidelines
-- AGENTS.md - AI agent workflow
+- docs/ROADMAP.md - Full roadmap
 
-## Current State (2026-02-01)
-Phase 5 (MCP Integration) is 75% complete. The following are DONE:
-- ✅ MCP Server with 4 tools (glinr__log_task, glinr__complete_task, glinr__report_usage, glinr__get_context)
-- ✅ Hook endpoints (tool-use, session-end, prompt-submit)
-- ✅ Rules engine for pattern-based inference
-- ✅ Linear webhook integration
-- ✅ Example Claude settings and setup docs
+## Current State (2026-02-05)
+466 unit tests passing, 10/10 API tests passing. Build clean.
+
+### What Was Just Built (needs testing):
+
+1. **In-App Notifications API** (6 new endpoints)
+   - `src/routes/notifications.ts` - CRUD + mark-read + unread count
+   - `src/storage/libsql.ts` - New `notifications` table
+   - `ui/src/features/notifications/components/NotificationBell.tsx` - Real API via TanStack Query
+
+2. **OpenAPI/Swagger Documentation**
+   - `src/routes/openapi.ts` - Full spec + Swagger UI
+   - Visit `/api/docs` in browser for interactive docs
+   - `GET /api/docs/openapi.json` for raw spec
+
+3. **Adaptive Effort Levels on Agentic Endpoint**
+   - `effort` param: `low | medium | high | max`
+   - Controls thinking budget tokens for AI responses
+
+4. **Model Config Consolidation**
+   - `src/providers/core/models.ts` is now canonical source
+   - `src/providers/ai-sdk.ts` imports from core (no more duplicates)
+
+5. **6 New UI Components** (ticket detail/list)
+   - AssigneePicker, WatchersWidget, AttachmentsWidget
+   - ReactionPicker, BulkActionBar, RelationsWidget
+
+6. **Tool Call Status Fixes**
+   - Tool call status now derives from result (error/pending/success)
+   - UI tool cards show failed status when tool returns `success: false`
+
+7. **Tickets Schema Fix**
+   - Added `start_date` to tickets table for `GET /api/tickets`
+   - Startup migration ensures existing DBs get the column
+
+8. **Coverage Expansion**
+   - Added tests for labels, states, and skills prompt/frontmatter utilities
 
 ## Your Task
-Pick ONE of these independent tasks to implement:
+Run through the testing queue in docs/LAUNCH_CHECKLIST.md under "Antigravity Testing Queue":
 
-### Option A: Token Cost Tracking (Phase 6) - RECOMMENDED
-Create `src/costs/` directory:
-1. `token-tracker.ts` - Track input/output tokens per task
-2. `pricing.ts` - Model pricing config (Claude, GPT, Gemini rates)
-3. Add `/api/costs/summary` endpoint
+### Priority 1: Functional Testing
+Test ticket listing stability:
+1. GET /api/tickets?limit=20 - verify no SQLITE_ERROR for start_date
 
-### Option B: Structured Summaries (Phase 7)
-Create `src/summaries/` directory:
-1. `src/types/summary.ts` - Zod schema for summaries
-2. `src/summaries/extractor.ts` - Extract from agent output
-3. Add `/api/summaries/*` endpoints
+Test the new Notifications API:
+1. POST /api/notifications with {"title":"Test Notification","type":"info","category":"system"}
+2. GET /api/notifications - verify it appears
+3. PATCH /api/notifications/:id/read - mark as read
+4. GET /api/notifications/unread-count - verify count
+5. POST /api/notifications/mark-all-read
+6. DELETE /api/notifications/:id
 
-### Option C: Local LLM (Ollama) Integration
-Create `src/intelligence/ollama.ts`:
-1. Detect if Ollama running on localhost:11434
-2. Use for summary generation (zero cost)
-3. Create `src/intelligence/router.ts` to coordinate
+Test Swagger UI:
+1. Navigate to /api/docs - verify Swagger UI loads
+2. GET /api/docs/openapi.json - verify valid JSON
+
+Test Effort Levels:
+1. POST /api/chat/conversations/:id/messages/agentic with "effort":"low" vs "effort":"max"
+2. Compare response quality/depth
+
+Test tool status rendering:
+1. Trigger a tool with invalid args (e.g., web_search without query)
+2. Verify tool card shows Failed status (not Success)
+
+### Priority 2: UI Smoke Tests
+Open the app and verify:
+1. NotificationBell shows real data (not mock)
+2. AssigneePicker opens and lists agents
+3. WatchersWidget expands/collapses
+4. AttachmentsWidget accepts drag-and-drop
+5. BulkActionBar appears when selecting multiple tickets
+
+### Priority 3: Regression
+1. pnpm build - must pass
+2. pnpm test - all 466 tests must pass (update count if changed)
+3. cd docs/api-testing && ./run-all.sh --parallel
 
 ## Validation Workflow
-RESEARCH → VALIDATE → IMPLEMENT → VERIFY
-
-Before implementing:
-1. Check existing patterns in the codebase
-2. Use Context7 for library validation
-3. Follow patterns in AGENTS.md
-
-After implementing:
-1. Run `pnpm build` - must pass
-2. Run `pnpm test` - should pass (some pre-existing failures ok)
-3. Update docs/ROADMAP.md with [x] for completed items
-4. Update docs/HANDOFF.md with your changes
-
-## Important Files
-- `src/server.ts` - Add new endpoints here
-- `src/types/` - Add new types here
-- `src/hooks/` - Reference for handler patterns
-- `src/intelligence/rules.ts` - Reference for inference patterns
-
-## DO NOT modify:
-- package.json (unless absolutely necessary)
-- tsconfig.json
-- Existing working code in src/queue/, src/adapters/
+For each test:
+1. Document the request/response
+2. Mark PASS or FAIL
+3. If FAIL, describe the issue and expected vs actual behavior
 
 ## Commands
 pnpm install    # Install dependencies
-pnpm dev        # Start dev server
-pnpm build      # Must pass before PR
-pnpm test       # Run tests
+pnpm dev        # Start dev server (port 3000)
+pnpm build      # Must pass
+pnpm test       # 466 tests must pass
 ```
 
 ---
@@ -82,14 +111,17 @@ pnpm test       # Run tests
 ## Notes for User
 
 1. **Copy the prompt above** and paste it into Antigravity's session
-2. **Let Antigravity pick** which option to work on
-3. **After completion**, Antigravity should update HANDOFF.md
-4. **To avoid overlap**, only one agent should work at a time on this repo
+2. **Start the dev server first** with `pnpm dev` so API endpoints are available
+3. **After testing**, Antigravity should report results in the session
+4. **Test auth**: Login first via `POST /api/auth/login` or use setup wizard
 
-## Verification Checklist
+## Expected Results
 
-After Antigravity completes work, verify:
-- [ ] `pnpm build` passes
-- [ ] New files follow existing patterns
-- [ ] ROADMAP.md updated with completed items
-- [ ] HANDOFF.md updated with changes
+| Category | Expected |
+|----------|----------|
+| Build | Clean pass |
+| Unit Tests | 466/466 passing |
+| API Tests | 10/10 passing |
+| Notifications API | 6/6 endpoints working |
+| Swagger UI | Loads at /api/docs |
+| UI Components | Render without errors |

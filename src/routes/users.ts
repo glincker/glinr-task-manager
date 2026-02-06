@@ -9,7 +9,7 @@ import { getCookie } from 'hono/cookie';
 import { eq } from 'drizzle-orm';
 import { randomUUID, randomBytes, createHash } from 'crypto';
 import { getDb } from '../storage/index.js';
-import { users, userPreferences, userApiKeys, sessions, oauthAccounts } from '../storage/schema.js';
+import { users, userPreferences, userApiKeys, sessions, oauthAccounts, inviteCodes } from '../storage/schema.js';
 import { validateSession, getUserById, getUserConnectedAccounts, type User } from '../auth/auth-service.js';
 import {
   hashPassword,
@@ -18,7 +18,10 @@ import {
   generateRecoveryCodes,
   hashRecoveryCodes,
   hashRecoveryCode,
+  generateInviteCode,
+  hashInviteCode,
 } from '../auth/password.js';
+import { getSettingsRaw, updateSettings, type Settings } from '../settings/index.js';
 
 // Define environment with user variable
 type Variables = {
@@ -876,6 +879,162 @@ userRoutes.get('/admin/list', requireAdmin, async (c) => {
   }
 });
 
+// =============================================================================
+// ADMIN: INVITE CODES (must be before /:userId to avoid route shadowing)
+// =============================================================================
+
+/**
+ * POST /api/users/admin/invites
+ * Generate invite code(s) (admin only)
+ */
+userRoutes.post('/admin/invites', requireAdmin, async (c) => {
+  const user = c.get('user');
+  const db = getDb();
+  if (!db) return c.json({ error: 'Database not initialized' }, 500);
+
+  try {
+    const body = await c.req.json();
+    const count = Math.min(Math.max(body.count || 1, 1), 50);
+    const label = body.label || null;
+
+    let expiresAt: Date | null = null;
+    if (body.expiresInDays) {
+      expiresAt = new Date(Date.now() + body.expiresInDays * 24 * 60 * 60 * 1000);
+    }
+
+    const codes: Array<{ id: string; code: string; expiresAt: Date | null }> = [];
+
+    for (let i = 0; i < count; i++) {
+      const code = generateInviteCode();
+      const codeHash = hashInviteCode(code);
+      const id = randomUUID();
+
+      await db.insert(inviteCodes).values({
+        id,
+        codeHash,
+        createdBy: user.id,
+        expiresAt,
+        createdAt: new Date(),
+        label,
+      });
+
+      codes.push({ id, code, expiresAt });
+    }
+
+    return c.json({
+      codes,
+      message: `Generated ${count} invite code(s)`,
+    });
+  } catch (err) {
+    console.error('[Admin] Generate invites error:', err);
+    return c.json({ error: 'Failed to generate invite codes' }, 500);
+  }
+});
+
+/**
+ * GET /api/users/admin/invites
+ * List invite codes (admin only)
+ */
+userRoutes.get('/admin/invites', requireAdmin, async (c) => {
+  const db = getDb();
+  if (!db) return c.json({ error: 'Database not initialized' }, 500);
+
+  try {
+    const allInvites = await db
+      .select({
+        id: inviteCodes.id,
+        createdBy: inviteCodes.createdBy,
+        usedBy: inviteCodes.usedBy,
+        usedAt: inviteCodes.usedAt,
+        expiresAt: inviteCodes.expiresAt,
+        createdAt: inviteCodes.createdAt,
+        label: inviteCodes.label,
+      })
+      .from(inviteCodes)
+      .orderBy(inviteCodes.createdAt);
+
+    return c.json({ invites: allInvites, total: allInvites.length });
+  } catch (err) {
+    console.error('[Admin] List invites error:', err);
+    return c.json({ error: 'Failed to list invite codes' }, 500);
+  }
+});
+
+/**
+ * DELETE /api/users/admin/invites/:id
+ * Revoke/delete an invite code (admin only)
+ */
+userRoutes.delete('/admin/invites/:id', requireAdmin, async (c) => {
+  const inviteId = c.req.param('id');
+  const db = getDb();
+  if (!db) return c.json({ error: 'Database not initialized' }, 500);
+
+  try {
+    const existing = await db
+      .select()
+      .from(inviteCodes)
+      .where(eq(inviteCodes.id, inviteId))
+      .limit(1);
+
+    if (!existing.length) {
+      return c.json({ error: 'Invite code not found' }, 404);
+    }
+
+    await db.delete(inviteCodes).where(eq(inviteCodes.id, inviteId));
+
+    return c.json({ message: 'Invite code deleted' });
+  } catch (err) {
+    console.error('[Admin] Delete invite error:', err);
+    return c.json({ error: 'Failed to delete invite code' }, 500);
+  }
+});
+
+// =============================================================================
+// ADMIN: REGISTRATION MODE (must be before /:userId to avoid route shadowing)
+// =============================================================================
+
+/**
+ * GET /api/users/admin/registration-mode
+ * Get current registration mode (admin only)
+ */
+userRoutes.get('/admin/registration-mode', requireAdmin, async (c) => {
+  try {
+    const settings = await getSettingsRaw();
+    return c.json({ mode: settings.system.registrationMode });
+  } catch (err) {
+    console.error('[Admin] Get registration mode error:', err);
+    return c.json({ error: 'Failed to get registration mode' }, 500);
+  }
+});
+
+/**
+ * PATCH /api/users/admin/registration-mode
+ * Set registration mode (admin only)
+ */
+userRoutes.patch('/admin/registration-mode', requireAdmin, async (c) => {
+  try {
+    const body = await c.req.json();
+    const { mode } = body;
+
+    if (mode !== 'open' && mode !== 'invite') {
+      return c.json({ error: 'Mode must be "open" or "invite"' }, 400);
+    }
+
+    await updateSettings({
+      system: { registrationMode: mode } as Settings['system'],
+    });
+
+    return c.json({ mode, message: `Registration mode set to ${mode}` });
+  } catch (err) {
+    console.error('[Admin] Set registration mode error:', err);
+    return c.json({ error: 'Failed to set registration mode' }, 500);
+  }
+});
+
+// =============================================================================
+// ADMIN: USER CRUD (/:userId wildcard routes - must be AFTER specific routes)
+// =============================================================================
+
 /**
  * GET /api/users/admin/:userId
  * Get user details (admin only)
@@ -1035,3 +1194,4 @@ userRoutes.delete('/admin/:userId', requireAdmin, async (c) => {
     return c.json({ error: 'Failed to delete user' }, 500);
   }
 });
+

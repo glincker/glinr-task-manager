@@ -18,7 +18,7 @@ import {
   userPreferences,
   githubTokens,
 } from '../storage/schema.js';
-import { getGitHubOAuthConfig, type GitHubOAuthConfig } from '../settings/index.js';
+import { getGitHubOAuthConfig, getSettingsRaw, type GitHubOAuthConfig } from '../settings/index.js';
 import { hashPassword, verifyPassword as verifyPw } from './password.js';
 
 /**
@@ -532,6 +532,15 @@ export async function signInWithGitHub(
       // Link GitHub to existing user
       userId = existingUser[0].id;
     } else {
+      // Block new user creation via GitHub OAuth in invite mode
+      const settings = await getSettingsRaw();
+      if (settings.system.registrationMode === 'invite') {
+        return {
+          success: false,
+          error: 'Registration requires an invite code. Please sign up with email first.',
+        };
+      }
+
       // Create new user
       userId = randomUUID();
       await db.insert(users).values({

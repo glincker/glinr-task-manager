@@ -19,10 +19,22 @@ export async function initStorage(): Promise<StorageAdapter> {
     return storage;
   }
   const settings = loadConfig<SettingsYaml>("settings.yml");
-  const tier = process.env.STORAGE_TIER || settings.storage?.tier || "memory";
+
+  // Support DATABASE_URL env var (e.g. "file:/app/data/glinr.db" from Docker)
+  const databaseUrl = process.env.DATABASE_URL;
+  let tier = process.env.STORAGE_TIER || settings.storage?.tier || "memory";
+  let dbPathOverride: string | undefined;
+
+  if (databaseUrl && tier === "memory") {
+    // DATABASE_URL implies persistent storage
+    tier = "local";
+    dbPathOverride = databaseUrl.startsWith("file:")
+      ? databaseUrl.slice(5)
+      : databaseUrl;
+  }
 
   if (tier === "local") {
-    const dbPath = process.env.DB_PATH || settings.storage?.dbPath;
+    const dbPath = dbPathOverride || process.env.DB_PATH || settings.storage?.dbPath;
     storage = new LibSQLAdapter({ dbPath });
     console.log(
       `[Storage] Initializing LibSQL storage at ${dbPath || "default path"}`,

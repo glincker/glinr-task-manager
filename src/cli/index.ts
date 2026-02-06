@@ -11,6 +11,7 @@ import { costCommands } from './commands/cost.js';
 import { serveCommand } from './commands/serve.js';
 import { toolsCommands } from './commands/tools.js';
 import { authCommands } from './commands/auth.js';
+import { setupCommand } from './commands/setup.js';
 
 const VERSION = '0.1.0';
 
@@ -46,11 +47,13 @@ program.addCommand(costCommands());
 program.addCommand(serveCommand());
 program.addCommand(toolsCommands());
 program.addCommand(authCommands());
+program.addCommand(setupCommand());
 
 // Default action (no command) - show banner and help
 program.action(() => {
   showBanner();
   console.log(chalk.yellow('Quick Start:'));
+  console.log('  glinr setup            First-time setup wizard');
   console.log('  glinr serve            Start the API server');
   console.log('  glinr task list        List all tasks');
   console.log('  glinr ticket list      List AI-native tickets');

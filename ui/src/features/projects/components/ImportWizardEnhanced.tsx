@@ -860,7 +860,7 @@ export function ImportWizardEnhanced({ open, onOpenChange, onSuccess }: ImportWi
 
                   {/* Import Options */}
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 border border-border rounded-lg">
+                    <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div>
                         <p className="font-medium text-sm">Import Iterations as Sprints</p>
                         <p className="text-xs text-muted-foreground">
@@ -870,7 +870,7 @@ export function ImportWizardEnhanced({ open, onOpenChange, onSuccess }: ImportWi
                       <Switch checked={importIterations} onCheckedChange={setImportIterations} />
                     </div>
 
-                    <div className="flex items-center justify-between p-3 border border-border rounded-lg">
+                    <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div>
                         <p className="font-medium text-sm flex items-center gap-2">
                           <Sparkles className="h-4 w-4 text-primary" />
@@ -883,7 +883,7 @@ export function ImportWizardEnhanced({ open, onOpenChange, onSuccess }: ImportWi
                       <Switch checked={enableSync} onCheckedChange={setEnableSync} />
                     </div>
 
-                    <div className="flex items-center justify-between p-3 border border-border rounded-lg">
+                    <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
                       <div>
                         <p className="font-medium text-sm">Preserve Original Timestamps</p>
                         <p className="text-xs text-muted-foreground">

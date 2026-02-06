@@ -15,10 +15,11 @@ import { TicketList, TicketDetail, TicketBoard } from '@/features/tickets';
 import { ChatView } from '@/features/chat';
 import { ProjectList, ProjectDetail } from '@/features/projects';
 import { CronDashboard } from '@/features/cron';
+import { ActivityView } from '@/features/notifications/views/ActivityView';
 import { LoginPage, SignupPage, AuthGuard, GuestGuard } from '@/features/auth';
 import { SetupWizard } from '@/features/setup/views/SetupWizard';
 import { OnboardingPage } from '@/features/setup/views/OnboardingPage';
-import { UserManagement } from '@/features/admin';
+import { UserManagement, InviteCodeManagement } from '@/features/admin';
 import { PrivacyPolicy, TermsOfService } from '@/features/legal';
 
 const router = createBrowserRouter([
@@ -127,10 +128,18 @@ const router = createBrowserRouter([
     path: '/cron',
     element: <AuthGuard><RootLayout><CronDashboard /></RootLayout></AuthGuard>,
   },
+  {
+    path: '/activity',
+    element: <AuthGuard><RootLayout><ActivityView /></RootLayout></AuthGuard>,
+  },
   // Admin routes
   {
     path: '/admin/users',
     element: <AuthGuard><RootLayout><UserManagement /></RootLayout></AuthGuard>,
+  },
+  {
+    path: '/admin/invite-codes',
+    element: <AuthGuard><RootLayout><InviteCodeManagement /></RootLayout></AuthGuard>,
   },
 ]);
 

@@ -271,7 +271,7 @@ export function ProviderSetupDialog({
                               }))
                             }
                             onClick={(e) => e.stopPropagation()}
-                            className="w-full bg-background border rounded-lg px-3 py-2 text-sm pr-9"
+                            className="w-full field pr-9"
                             autoFocus
                           />
                           <button

@@ -19,6 +19,7 @@ import {
   getTelegramWebhookInfo,
   answerTelegramCallbackQuery,
   setTelegramConfig,
+  clearTelegramConfig,
   type TelegramUpdate,
   type TelegramConfig,
 } from '../chat/providers/telegram/index.js';
@@ -471,6 +472,28 @@ telegram.post('/config', async (c) => {
   } catch (error) {
     logger.error('[Telegram] Failed to register account:', error instanceof Error ? error : undefined);
     return c.json({ error: 'Failed to save configuration' }, 500);
+  }
+});
+
+// DELETE /config — Disconnect the bot
+telegram.delete('/config', async (c) => {
+  try {
+    // Try to delete webhook and clean up accounts
+    const accounts = getChatRegistry().listAccounts('telegram');
+    for (const account of accounts) {
+      if ('botToken' in account && account.botToken) {
+        await deleteTelegramWebhook(account.botToken as string).catch(() => {});
+      }
+      getChatRegistry().removeAccount('telegram', account.id);
+    }
+
+    clearTelegramConfig();
+
+    logger.info('[Telegram] Bot disconnected');
+    return c.json({ success: true });
+  } catch (error) {
+    logger.error('[Telegram] Failed to disconnect:', error instanceof Error ? error : undefined);
+    return c.json({ error: 'Failed to disconnect' }, 500);
   }
 });
 

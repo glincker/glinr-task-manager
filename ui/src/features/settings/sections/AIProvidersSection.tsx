@@ -243,7 +243,7 @@ export function AIProvidersSection() {
                       }))
                     }
                     onClick={(e) => e.stopPropagation()}
-                    className="w-full bg-background border rounded-lg px-3 py-2 text-sm pr-10"
+                    className="w-full field pr-10"
                   />
                   <button
                     type="button"
@@ -294,8 +294,8 @@ export function AIProvidersSection() {
                     }}
                     onClick={(e) => e.stopPropagation()}
                     className={cn(
-                      'w-full bg-background border rounded-lg px-3 py-2 font-mono text-xs',
-                      azureValidation.endpoint && 'border-destructive'
+                      'w-full field font-mono text-xs',
+                      azureValidation.endpoint && 'ring-1 ring-destructive'
                     )}
                   />
                   {azureValidation.endpoint && (
@@ -319,7 +319,7 @@ export function AIProvidersSection() {
                     value={azureDeploymentName}
                     onChange={(e) => setAzureDeploymentName(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
-                    className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
+                    className="w-full field"
                   />
                   <p className="text-[10px] text-muted-foreground mt-1">
                     The deployment name from Model deployments section
@@ -338,7 +338,7 @@ export function AIProvidersSection() {
                       setAzureApiVersion(e.target.value);
                     }}
                     onClick={(e) => e.stopPropagation()}
-                    className="w-full bg-background border rounded-lg px-3 py-2 text-sm appearance-none cursor-pointer"
+                    className="w-full field appearance-none cursor-pointer"
                   >
                     {AZURE_API_VERSIONS.map((version) => (
                       <option key={version.value} value={version.value}>
@@ -398,7 +398,7 @@ export function AIProvidersSection() {
                     }))
                   }
                   onClick={(e) => e.stopPropagation()}
-                  className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
+                  className="w-full field"
                 />
               </div>
             )}
@@ -421,7 +421,7 @@ export function AIProvidersSection() {
                         }));
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="w-full bg-background border rounded-lg px-3 py-2 text-sm appearance-none cursor-pointer"
+                      className="w-full field appearance-none cursor-pointer"
                     >
                       {config.models.map((model) => (
                         <option key={model} value={model}>
@@ -447,7 +447,7 @@ export function AIProvidersSection() {
                         }));
                       }}
                       onClick={(e) => e.stopPropagation()}
-                      className="w-full bg-background border rounded-lg px-3 py-2 text-sm"
+                      className="w-full field"
                     />
                     <p className="text-[10px] text-muted-foreground mt-1">
                       Enter your model identifier

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { validateFileUpload, FILE_SIZE_LIMITS, sanitizeFilename } from "../utils/security.js";
 import {
   createTicket,
   getTicket,
@@ -840,9 +841,22 @@ ticketsRouter.post("/:id/attachments", async (c) => {
       return c.json({ error: "fileName and url are required" }, 400);
     }
 
+    // Validate file upload
+    const validation = validateFileUpload(
+      { fileName, fileType, fileSize },
+      { category: 'attachment' }
+    );
+    
+    if (!validation.valid) {
+      return c.json({ error: validation.errors.join(', ') }, 400);
+    }
+
+    // Sanitize filename
+    const safeFileName = sanitizeFilename(fileName);
+
     const attachment = await addTicketAttachment({
       ticketId: id,
-      fileName,
+      fileName: safeFileName,
       fileType,
       fileSize,
       url,

@@ -1073,19 +1073,34 @@ export class JobScheduler {
 
   /**
    * Execute a script job
+   * Security: Commands are validated against an allowlist and shell execution is disabled
    */
   private async executeScriptJob(payload: ScriptJobPayload): Promise<JobRunResult> {
     const startTime = Date.now();
 
     try {
+      // Import security validation
+      const { validateCommand } = await import('../utils/security.js');
       const { spawn } = await import('child_process');
 
+      // Validate command against allowlist and check for injection
+      const validation = validateCommand(payload.command, payload.args);
+      if (!validation.valid) {
+        return {
+          success: false,
+          error: `Command validation failed: ${validation.error}`,
+          durationMs: Date.now() - startTime,
+        };
+      }
+
       return new Promise((resolve) => {
-        const args = payload.args || [];
-        const proc = spawn(payload.command, args, {
+        const args = validation.sanitizedArgs || [];
+        
+        // SECURITY: shell: false prevents shell injection attacks
+        const proc = spawn(validation.sanitizedCommand!, args, {
           cwd: payload.workdir || process.cwd(),
           timeout: payload.timeout || 60000,
-          shell: true,
+          shell: false, // Explicitly disable shell to prevent injection
         });
 
         let stdout = '';

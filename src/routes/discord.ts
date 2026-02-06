@@ -16,6 +16,7 @@ import {
   verifyDiscordSignature,
   isDiscordSenderAllowed,
   setDiscordConfig,
+  clearDiscordConfig,
   buildPingResponse,
   isPingInteraction,
   buildDeferredResponse,
@@ -300,7 +301,29 @@ discord.get('/oauth/callback', async (c) => {
   // Redirect to success page or return JSON
   const redirectUrl = c.req.query('redirect_uri');
   if (redirectUrl) {
-    return c.redirect(redirectUrl);
+    // Validate redirect URL to prevent open redirect attacks
+    // Only allow relative paths or same-origin redirects
+    try {
+      // If it starts with / it's a relative path - safe
+      if (redirectUrl.startsWith('/') && !redirectUrl.startsWith('//')) {
+        return c.redirect(redirectUrl);
+      }
+      
+      // Parse as URL and check if it's the same origin
+      const requestUrl = new URL(c.req.url);
+      const targetUrl = new URL(redirectUrl, requestUrl.origin);
+      
+      // Only allow redirect to same origin
+      if (targetUrl.origin === requestUrl.origin) {
+        return c.redirect(redirectUrl);
+      }
+      
+      // Block external redirects
+      logger.warn('[Discord] Blocked open redirect attempt', { redirectUrl });
+      return c.json({ error: 'Invalid redirect URL' }, 400);
+    } catch {
+      return c.json({ error: 'Invalid redirect URL format' }, 400);
+    }
   }
 
   return c.json({
@@ -611,6 +634,24 @@ discord.post('/config', async (c) => {
   } catch (error) {
     logger.error('[Discord] Failed to register account:', error instanceof Error ? error : undefined);
     return c.json({ error: 'Failed to save configuration' }, 500);
+  }
+});
+
+/**
+ * DELETE /config - Disconnect the bot
+ */
+discord.delete('/config', async (c) => {
+  try {
+    const accounts = getChatRegistry().listAccounts('discord');
+    for (const account of accounts) {
+      getChatRegistry().removeAccount('discord', account.id);
+    }
+    clearDiscordConfig();
+    logger.info('[Discord] Bot disconnected');
+    return c.json({ success: true });
+  } catch (error) {
+    logger.error('[Discord] Failed to disconnect:', error instanceof Error ? error : undefined);
+    return c.json({ error: 'Failed to disconnect' }, 500);
   }
 });
 

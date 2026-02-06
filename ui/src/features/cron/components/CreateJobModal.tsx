@@ -585,7 +585,7 @@ export function CreateJobModal({ open: controlledOpen, onOpenChange }: CreateJob
       </DialogTrigger>
       <DialogContent className="max-w-4xl w-[90vw] max-h-[85vh] my-8 flex flex-col p-0 overflow-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {/* Header */}
-        <div className="border-b bg-linear-to-r from-primary/5 to-transparent">
+        <div className="border-b border-border/20 bg-linear-to-r from-primary/5 to-transparent">
           <DialogHeader className="px-6 pt-5 pb-3">
             <div className="flex items-center justify-between">
               <DialogTitle className="flex items-center gap-3">
@@ -706,10 +706,10 @@ export function CreateJobModal({ open: controlledOpen, onOpenChange }: CreateJob
                           key={template.id}
                           onClick={() => handleTemplateSelect(template)}
                           className={cn(
-                            'flex items-start gap-3 p-3 rounded-xl border text-left transition-all hover:scale-[1.01]',
+                            'flex items-start gap-3 p-3 rounded-xl text-left transition-all hover:scale-[1.01]',
                             selectedTemplate?.id === template.id
-                              ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                              : 'border-border/50 hover:border-primary/30'
+                              ? 'bg-primary/5 ring-2 ring-primary/20'
+                              : 'bg-muted/30 hover:bg-muted/50'
                           )}
                         >
                           <div className={cn(
@@ -735,7 +735,7 @@ export function CreateJobModal({ open: controlledOpen, onOpenChange }: CreateJob
                           <button
                             key={t.id}
                             onClick={() => handleTemplateSelect(t)}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/50 hover:border-primary/30 text-xs"
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 text-xs"
                           >
                             <FileCode className="h-3 w-3 text-primary" />
                             {t.name}
@@ -772,10 +772,10 @@ export function CreateJobModal({ open: controlledOpen, onOpenChange }: CreateJob
                           setSelectedTemplate(null);
                         }}
                         className={cn(
-                          'relative overflow-hidden group p-4 rounded-2xl border text-left transition-all duration-200',
+                          'relative overflow-hidden group p-4 rounded-2xl text-left transition-all duration-200',
                           isSelected
-                            ? 'border-primary bg-primary/5 ring-2 ring-primary/20 scale-[1.02]'
-                            : 'border-border/50 hover:border-primary/30 hover:scale-[1.01]'
+                            ? 'bg-primary/5 ring-2 ring-primary/20 scale-[1.02]'
+                            : 'bg-muted/30 hover:bg-muted/50 hover:scale-[1.01]'
                         )}
                       >
                         <div className={cn('absolute inset-0 bg-linear-to-br opacity-0 transition-opacity', type.color, isSelected && 'opacity-100', 'group-hover:opacity-50')} />
@@ -830,8 +830,8 @@ export function CreateJobModal({ open: controlledOpen, onOpenChange }: CreateJob
                         key={type.type}
                         onClick={() => setScheduleType(type.type)}
                         className={cn(
-                          'flex flex-col items-center gap-2 p-4 rounded-xl border transition-all',
-                          isSelected ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border/50 hover:border-primary/30'
+                          'flex flex-col items-center gap-2 p-4 rounded-xl transition-all',
+                          isSelected ? 'bg-primary/5 ring-2 ring-primary/20' : 'bg-muted/30 hover:bg-muted/50'
                         )}
                       >
                         <Icon className={cn('h-6 w-6', isSelected ? 'text-primary' : 'text-muted-foreground')} />
@@ -965,8 +965,8 @@ export function CreateJobModal({ open: controlledOpen, onOpenChange }: CreateJob
                           key={type.type}
                           onClick={() => setEventType(type.type)}
                           className={cn(
-                            'flex flex-col items-center p-3 rounded-xl border text-center transition-all',
-                            eventType === type.type ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border/50 hover:border-primary/30'
+                            'flex flex-col items-center p-3 rounded-xl text-center transition-all',
+                            eventType === type.type ? 'bg-primary/5 ring-2 ring-primary/20' : 'bg-muted/30 hover:bg-muted/50'
                           )}
                         >
                           <span className={cn('text-xs font-medium', eventType === type.type && 'text-primary')}>{type.label}</span>
@@ -1034,8 +1034,8 @@ export function CreateJobModal({ open: controlledOpen, onOpenChange }: CreateJob
                   value={payload}
                   onChange={(e) => setPayload(e.target.value)}
                   className={cn(
-                    'w-full p-4 rounded-xl border bg-muted/30 font-mono text-sm resize-none h-32 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20',
-                    payloadValidation.valid ? 'border-border/50' : 'border-red-500'
+                    'w-full p-4 rounded-xl bg-muted/40 font-mono text-sm resize-none h-32 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/30',
+                    !payloadValidation.valid && 'ring-1 ring-red-500'
                   )}
                   placeholder='{"url": "https://..."}'
                 />
@@ -1043,7 +1043,7 @@ export function CreateJobModal({ open: controlledOpen, onOpenChange }: CreateJob
 
               {/* Advanced Options */}
               {mode === 'advanced' && (
-                <div className="p-4 rounded-xl bg-muted/30 border border-border/50 space-y-4">
+                <div className="p-4 rounded-xl bg-muted/30 space-y-4">
                   <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2">
                     <Settings2 className="h-3.5 w-3.5" />
                     Advanced Options
@@ -1136,7 +1136,7 @@ export function CreateJobModal({ open: controlledOpen, onOpenChange }: CreateJob
               </div>
 
               {/* Summary Card */}
-              <div className="p-5 rounded-2xl border bg-linear-to-br from-muted/50 to-transparent space-y-4">
+              <div className="p-5 rounded-2xl bg-linear-to-br from-muted/50 to-transparent space-y-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="text-xs text-muted-foreground uppercase tracking-wider">Job Name</div>
@@ -1216,7 +1216,7 @@ export function CreateJobModal({ open: controlledOpen, onOpenChange }: CreateJob
         </div>
 
         {/* Footer */}
-        <div className="border-t p-4 flex items-center justify-between bg-muted/30">
+        <div className="border-t border-border/20 p-4 flex items-center justify-between bg-muted/30">
           <Button variant="ghost" onClick={currentStepIndex === 0 ? () => setOpen(false) : goBack} className="gap-2">
             <ChevronLeft className="h-4 w-4" />
             {currentStepIndex === 0 ? 'Cancel' : 'Back'}

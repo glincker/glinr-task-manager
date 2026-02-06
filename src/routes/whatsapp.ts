@@ -14,6 +14,7 @@ import {
   verifyWhatsAppWebhook,
   isWhatsAppSenderAllowed,
   setWhatsAppConfig,
+  clearWhatsAppConfig,
   type WhatsAppConfig,
   type WhatsAppWebhookPayload,
 } from '../chat/providers/whatsapp/index.js';
@@ -412,6 +413,24 @@ whatsapp.post('/config', async (c) => {
   } catch (error) {
     logger.error('[WhatsApp] Failed to register account:', error instanceof Error ? error : undefined);
     return c.json({ error: 'Failed to save configuration' }, 500);
+  }
+});
+
+/**
+ * DELETE /config - Disconnect WhatsApp
+ */
+whatsapp.delete('/config', async (c) => {
+  try {
+    const accounts = getChatRegistry().listAccounts('whatsapp');
+    for (const account of accounts) {
+      getChatRegistry().removeAccount('whatsapp', account.id);
+    }
+    clearWhatsAppConfig();
+    logger.info('[WhatsApp] Disconnected');
+    return c.json({ success: true });
+  } catch (error) {
+    logger.error('[WhatsApp] Failed to disconnect:', error instanceof Error ? error : undefined);
+    return c.json({ error: 'Failed to disconnect' }, 500);
   }
 });
 

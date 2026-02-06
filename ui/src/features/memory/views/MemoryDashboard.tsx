@@ -240,7 +240,7 @@ export function MemoryDashboard() {
         <CardContent>
           <div className="space-y-4">
             {/* Watcher Status */}
-            <div className="flex items-center justify-between p-3 border rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
               <div className="flex items-center gap-3">
                 {watcherStatus?.enabled ? (
                   <Eye className="h-5 w-5 text-green-500" />
@@ -264,7 +264,7 @@ export function MemoryDashboard() {
             {/* Sync State */}
             {watcherStatus?.enabled && watcherStatus.state && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-3 border rounded-lg">
+                <div className="p-3 bg-muted/30 rounded-lg">
                   <div className="flex items-center gap-2 mb-1">
                     <Zap className={`h-4 w-4 ${watcherStatus.state.dirty ? 'text-amber-500' : 'text-green-500'}`} />
                     <span className="text-sm font-medium">Dirty State</span>
@@ -274,7 +274,7 @@ export function MemoryDashboard() {
                   </p>
                 </div>
 
-                <div className="p-3 border rounded-lg">
+                <div className="p-3 bg-muted/30 rounded-lg">
                   <div className="flex items-center gap-2 mb-1">
                     {watcherStatus.state.syncing ? (
                       <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -288,7 +288,7 @@ export function MemoryDashboard() {
                   </p>
                 </div>
 
-                <div className="p-3 border rounded-lg">
+                <div className="p-3 bg-muted/30 rounded-lg">
                   <div className="flex items-center gap-2 mb-1">
                     <FileText className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm font-medium">Watched Files</span>
@@ -298,7 +298,7 @@ export function MemoryDashboard() {
                   </p>
                 </div>
 
-                <div className="p-3 border rounded-lg">
+                <div className="p-3 bg-muted/30 rounded-lg">
                   <div className="flex items-center gap-2 mb-1">
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm font-medium">Last Auto-Sync</span>
@@ -312,7 +312,7 @@ export function MemoryDashboard() {
 
             {/* Auto-Sync Config */}
             {watcherStatus?.config && (
-              <div className="flex flex-wrap gap-2 pt-2 border-t">
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-border/20">
                 <Badge variant={watcherStatus.config.onSessionStart ? 'default' : 'outline'}>
                   {watcherStatus.config.onSessionStart ? '✓' : '○'} Sync on Session Start
                 </Badge>
@@ -376,7 +376,7 @@ export function MemoryDashboard() {
               {searchResults.chunks.map((chunk: MemoryChunk) => (
                 <div
                   key={chunk.id}
-                  className="p-4 border rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                  className="p-4 bg-muted/40 rounded-lg hover:bg-muted/60 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -429,7 +429,7 @@ export function MemoryDashboard() {
               {files.map((file: MemoryFile) => (
                 <div
                   key={file.path}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                  className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <FileText className="h-5 w-5 text-muted-foreground" />

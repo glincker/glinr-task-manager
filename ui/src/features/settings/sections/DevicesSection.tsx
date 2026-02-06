@@ -101,7 +101,7 @@ export function DevicesSection() {
   const { data: identity, isLoading: identityLoading } = useQuery({
     queryKey: ['device-identity'],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/devices/identity`);
+      const res = await fetch(`${API_BASE}/api/devices/identity`, { credentials: 'include' });
       const data = await res.json();
       return data.identity as DeviceIdentity;
     },
@@ -111,7 +111,7 @@ export function DevicesSection() {
   const { data: pairedDevices, isLoading: devicesLoading } = useQuery({
     queryKey: ['paired-devices'],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/devices/paired`);
+      const res = await fetch(`${API_BASE}/api/devices/paired`, { credentials: 'include' });
       const data = await res.json();
       return data.devices as Device[];
     },
@@ -121,7 +121,7 @@ export function DevicesSection() {
   const { data: pendingRequests, isLoading: requestsLoading } = useQuery({
     queryKey: ['pending-pairing-requests'],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/devices/pairing/pending`);
+      const res = await fetch(`${API_BASE}/api/devices/pairing/pending`, { credentials: 'include' });
       const data = await res.json();
       return data.requests as PairingRequest[];
     },
@@ -133,6 +133,7 @@ export function DevicesSection() {
     mutationFn: async () => {
       const res = await fetch(`${API_BASE}/api/devices/pairing/request`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
@@ -156,6 +157,7 @@ export function DevicesSection() {
     mutationFn: async (code: string) => {
       const res = await fetch(`${API_BASE}/api/devices/pairing/approve`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }),
       });
@@ -178,6 +180,7 @@ export function DevicesSection() {
     mutationFn: async (code: string) => {
       const res = await fetch(`${API_BASE}/api/devices/pairing/reject`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }),
       });
@@ -199,6 +202,7 @@ export function DevicesSection() {
     mutationFn: async (deviceId: string) => {
       const res = await fetch(`${API_BASE}/api/devices/paired/${deviceId}`, {
         method: 'DELETE',
+        credentials: 'include',
       });
       return res.json();
     },
@@ -224,7 +228,7 @@ export function DevicesSection() {
   return (
     <div className="space-y-6">
       {/* Current Device Identity */}
-      <div className="rounded-lg border border-border bg-card p-4">
+      <div className="rounded-2xl glass shadow-lg p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
@@ -265,7 +269,7 @@ export function DevicesSection() {
       </div>
 
       {/* Pending Pairing Requests */}
-      <div className="rounded-lg border border-border bg-card p-4">
+      <div className="rounded-2xl glass shadow-lg p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <QrCode className="h-5 w-5 text-amber-500" />
@@ -375,7 +379,7 @@ export function DevicesSection() {
       </div>
 
       {/* Paired Devices */}
-      <div className="rounded-lg border border-border bg-card p-4">
+      <div className="rounded-2xl glass shadow-lg p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Smartphone className="h-5 w-5 text-green-500" />

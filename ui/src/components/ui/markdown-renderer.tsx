@@ -119,7 +119,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         ),
         table: ({ children }) => (
           <div className="overflow-x-auto my-3">
-            <table className="min-w-full border border-border rounded-lg">{children}</table>
+            <table className="min-w-full rounded-lg">{children}</table>
           </div>
         ),
         th: ({ children }) => (

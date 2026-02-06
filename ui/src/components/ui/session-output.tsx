@@ -158,10 +158,10 @@ export function SessionOutput({
   }
 
   return (
-    <div className={cn('rounded-lg border bg-card', className)}>
+    <div className={cn('rounded-lg glass', className)}>
       {/* Header */}
       {showStatus && (
-        <div className="flex items-center justify-between gap-2 border-b px-4 py-2 bg-muted/30">
+        <div className="flex items-center justify-between gap-2 border-b border-border/20 px-4 py-2 bg-muted/30">
           <div className="flex items-center gap-2">
             <Terminal className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">
@@ -209,7 +209,7 @@ export function SessionOutput({
 
       {/* Stdin Input */}
       {showControls && stream.status === 'running' && (
-        <div className="flex items-center gap-2 border-t p-2 bg-muted/30">
+        <div className="flex items-center gap-2 border-t border-border/20 p-2 bg-muted/30">
           <Terminal className="h-4 w-4 text-muted-foreground" />
           <Input
             value={stdinValue}
@@ -232,7 +232,7 @@ export function SessionOutput({
 
       {/* Connection indicator */}
       {!stream.connected && stream.status !== 'disconnected' && !['completed', 'failed', 'killed', 'timeout'].includes(stream.status) && (
-        <div className="border-t px-4 py-2 bg-muted/30 text-xs text-muted-foreground">
+        <div className="border-t border-border/20 px-4 py-2 bg-muted/30 text-xs text-muted-foreground">
           Attempting to reconnect...
         </div>
       )}

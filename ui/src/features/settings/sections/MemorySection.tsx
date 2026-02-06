@@ -120,9 +120,9 @@ export function MemorySection() {
     setError(null);
     try {
       const [statsRes, filesRes, watcherRes] = await Promise.all([
-        fetch(`${API_BASE}/api/memory/stats`),
-        fetch(`${API_BASE}/api/memory/files`),
-        fetch(`${API_BASE}/api/memory/watcher/status`),
+        fetch(`${API_BASE}/api/memory/stats`, { credentials: 'include' }),
+        fetch(`${API_BASE}/api/memory/files`, { credentials: 'include' }),
+        fetch(`${API_BASE}/api/memory/watcher/status`, { credentials: 'include' }),
       ]);
 
       if (statsRes.ok) {
@@ -155,6 +155,7 @@ export function MemorySection() {
     try {
       const res = await fetch(`${API_BASE}/api/memory/sync`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
@@ -175,6 +176,7 @@ export function MemorySection() {
     try {
       const res = await fetch(`${API_BASE}/api/memory/warm`, {
         method: 'POST',
+        credentials: 'include',
       });
       if (res.ok) {
         await fetchData();
@@ -195,6 +197,7 @@ export function MemorySection() {
     try {
       const res = await fetch(`${API_BASE}/api/memory/search`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: searchQuery, maxResults: 10 }),
       });
@@ -216,7 +219,8 @@ export function MemorySection() {
     setLoadingChunks(true);
     try {
       const res = await fetch(
-        `${API_BASE}/api/memory/files/${encodeURIComponent(file.path)}/chunks`
+        `${API_BASE}/api/memory/files/${encodeURIComponent(file.path)}/chunks`,
+        { credentials: 'include' }
       );
       if (res.ok) {
         const data = await res.json();
@@ -234,7 +238,7 @@ export function MemorySection() {
     try {
       const res = await fetch(
         `${API_BASE}/api/memory/files/${encodeURIComponent(path)}`,
-        { method: 'DELETE' }
+        { method: 'DELETE', credentials: 'include' }
       );
       if (res.ok) {
         setSelectedFile(null);
@@ -253,6 +257,7 @@ export function MemorySection() {
     try {
       const res = await fetch(`${API_BASE}/api/memory/all`, {
         method: 'DELETE',
+        credentials: 'include',
       });
       if (res.ok) {
         setShowClearDialog(false);
@@ -505,7 +510,7 @@ export function MemorySection() {
 
             {/* File Detail Panel */}
             {selectedFile && (
-              <div className="border rounded-lg p-4 space-y-3">
+              <div className="bg-muted/30 rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="font-medium">{selectedFile.path}</h4>

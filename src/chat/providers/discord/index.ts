@@ -245,6 +245,10 @@ function setConfig(config: DiscordConfig) {
   currentConfig = config;
 }
 
+function clearConfig() {
+  currentConfig = null;
+}
+
 async function callDiscordApi<T>(
   endpoint: string,
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
@@ -997,7 +1001,7 @@ export const discordProvider: ChatProvider<DiscordAccountConfig> = {
   status: statusAdapter,
 };
 
-export { setConfig as setDiscordConfig };
+export { setConfig as setDiscordConfig, clearConfig as clearDiscordConfig };
 export { DiscordAccountConfigSchema };
 export type {
   DiscordConfig,
