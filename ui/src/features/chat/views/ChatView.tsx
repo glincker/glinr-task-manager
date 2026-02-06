@@ -700,7 +700,22 @@ export function ChatView() {
   }, [STORAGE_KEYS.agentMode]);
 
   const handleToggleFocusedView = useCallback(() => {
-    setFocusedView((prev) => !prev);
+    setFocusedView((prev) => {
+      const next = !prev;
+      if (next) {
+        document.documentElement.classList.add('chat-fullscreen');
+      } else {
+        document.documentElement.classList.remove('chat-fullscreen');
+      }
+      return next;
+    });
+  }, []);
+
+  // Cleanup fullscreen class on unmount
+  useEffect(() => {
+    return () => {
+      document.documentElement.classList.remove('chat-fullscreen');
+    };
   }, []);
 
   const handleDeleteConversation = useCallback(async (id: string) => {
@@ -736,10 +751,10 @@ export function ChatView() {
 
   return (
     <div className={cn(
-      "flex rounded-2xl border border-border/30 bg-card/40 backdrop-blur-xl overflow-hidden transition-all duration-300",
-      "shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)]",
-      "-mx-2 -my-2 sm:-mx-4 sm:-my-3",
-      focusedView ? "h-[calc(100vh-4.5rem)]" : "h-[calc(100vh-6.5rem)]"
+      "flex overflow-hidden transition-all duration-300",
+      focusedView
+        ? "h-screen rounded-none border-0 shadow-none mx-0 my-0 bg-background"
+        : "rounded-2xl border border-border/30 bg-card/40 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] -mx-2 -my-2 sm:-mx-4 sm:-my-3 h-[calc(100vh-6.5rem)]"
     )}>
       {/* Sidebar - hidden in focused view */}
       {!focusedView && (

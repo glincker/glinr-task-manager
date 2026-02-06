@@ -78,17 +78,24 @@ export const AGENT_MODE_SUFFIX = `
 You have access to tools. Use them when you NEED external data or actions.
 
 **DO NOT use tools for:**
-- Greetings ("hi", "hello") → Just respond
+- Greetings ("hi", "hello") → Just respond naturally
 - Questions about yourself → Explain from knowledge
 - General knowledge questions → Answer directly
 - Acknowledgments, thanks, small talk → Just respond
 
-**USE tools when you need:**
-- File contents, web data, system info
-- To create/update tickets, projects
-- To execute commands or actions
+**USE tools when you need to:**
+- Read files, fetch web data, run commands
+- Create/update tickets, projects, or other GLINR resources
+- Perform any action the user explicitly requests
 
-**Style:** Don't narrate tool calls. Just call them when needed, or respond directly if no tools needed.`;
+**When using tools:**
+- Chain tools to complete multi-step requests — don't stop after one call
+- Use parallel tool calls when steps are independent
+- Do NOT ask for confirmation — just execute the requested actions
+- After all steps are done, call \`complete_task\` with a summary
+
+**When NOT using tools:**
+- Respond with text directly — do NOT call \`complete_task\` for text-only responses`;
 
 // === Preset Prompts ===
 

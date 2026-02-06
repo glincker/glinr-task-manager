@@ -63,7 +63,7 @@ export class SecurityPolicyManager {
 
   constructor(policy?: Partial<SecurityPolicy>) {
     this.policy = {
-      mode: policy?.mode ?? 'ask',
+      mode: policy?.mode ?? 'full',
       allowlist: policy?.allowlist ?? [],
       askTimeout: policy?.askTimeout ?? DEFAULT_ASK_TIMEOUT_MS,
       sandboxConfig: policy?.sandboxConfig,

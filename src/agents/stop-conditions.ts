@@ -160,14 +160,22 @@ export function modelIndicatesCompletion(): StopCondition {
 }
 
 /**
- * Stop when no tool calls are made in the last step.
- * This indicates the model has finished its work.
+ * Stop when no tool calls are made in the last step AND the agent has never
+ * executed any tools. This handles simple text-only responses (e.g. "hello")
+ * without prematurely killing multi-step workflows where the AI pauses to
+ * think between tool calls.
  */
 export function noToolCallsInLastStep(): StopCondition {
   return {
     name: 'noToolCallsInLastStep',
     check: (state, lastResult) => {
-      // Check if the last result had no tool calls
+      // If tools have been executed previously, the agent is mid-workflow —
+      // don't stop just because the current step has no tool calls.
+      if (state.toolCallHistory.some((t) => t.status === 'executed')) {
+        return false;
+      }
+
+      // No tools ever executed — check if this step also has none
       if (typeof lastResult === 'object' && lastResult !== null) {
         const result = lastResult as { steps?: Array<{ toolCalls?: unknown[] }> };
         if (result.steps && result.steps.length > 0) {
@@ -176,6 +184,33 @@ export function noToolCallsInLastStep(): StopCondition {
         }
       }
       return false;
+    },
+  };
+}
+
+// =============================================================================
+// Repeat Detection
+// =============================================================================
+
+/**
+ * Stop when the same tool is called with the same arguments repeatedly.
+ * Prevents infinite loops where the AI keeps retrying a failing tool.
+ */
+export function sameToolRepeated(maxRepeats: number = 3): StopCondition {
+  return {
+    name: `sameToolRepeated:${maxRepeats}`,
+    check: (state) => {
+      const history = state.toolCallHistory;
+      if (history.length < maxRepeats) return false;
+
+      // Check the last N entries
+      const lastN = history.slice(-maxRepeats);
+      const firstName = lastN[0].name;
+      const firstArgs = JSON.stringify(lastN[0].args);
+
+      return lastN.every(
+        (t) => t.name === firstName && JSON.stringify(t.args) === firstArgs
+      );
     },
   };
 }
@@ -307,6 +342,7 @@ export const defaultStopConditions: StopCondition[] = [
 
   // Error handling
   consecutiveFailures(3), // Stop after 3 consecutive failures
+  sameToolRepeated(3), // Stop if same tool+args called 3 times in a row
 ];
 
 /**

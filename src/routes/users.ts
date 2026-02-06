@@ -7,40 +7,17 @@
 import { Hono, Context } from 'hono';
 import { getCookie } from 'hono/cookie';
 import { eq } from 'drizzle-orm';
-import { randomUUID, createHash, randomBytes } from 'crypto';
+import { randomUUID, randomBytes, createHash } from 'crypto';
 import { getDb } from '../storage/index.js';
 import { users, userPreferences, userApiKeys, sessions, oauthAccounts } from '../storage/schema.js';
 import { validateSession, getUserById, getUserConnectedAccounts, type User } from '../auth/auth-service.js';
-
-// =============================================================================
-// RECOVERY CODE HELPERS
-// =============================================================================
-
-function hashPassword(password: string, salt?: string): { hash: string; salt: string } {
-  const useSalt = salt || randomBytes(16).toString('hex');
-  const hash = createHash('sha256')
-    .update(password + useSalt)
-    .digest('hex');
-  return { hash, salt: useSalt };
-}
-
-function generateRecoveryCodes(count: number = 8): string[] {
-  const codes: string[] = [];
-  for (let i = 0; i < count; i++) {
-    // Generate 8-character alphanumeric code
-    const code = randomBytes(4).toString('hex').toUpperCase();
-    // Format as XXXX-XXXX
-    codes.push(`${code.slice(0, 4)}-${code.slice(4)}`);
-  }
-  return codes;
-}
-
-function hashRecoveryCodes(codes: string[]): string[] {
-  return codes.map((code) => {
-    const { hash } = hashPassword(code.replace('-', ''));
-    return hash;
-  });
-}
+import {
+  hashPassword,
+  verifyPassword,
+  generateRecoveryCodes,
+  hashRecoveryCodes,
+  hashRecoveryCode,
+} from '../auth/password.js';
 
 // Define environment with user variable
 type Variables = {
@@ -183,10 +160,8 @@ userRoutes.put('/me/email', async (c) => {
       return c.json({ error: 'Current password is required' }, 400);
     }
 
-    const [storedSalt, storedHash] = currentUser[0].passwordHash.split(':');
-    const { hash } = hashPassword(currentPassword, storedSalt);
-
-    if (hash !== storedHash) {
+    const { valid } = verifyPassword(currentPassword, currentUser[0].passwordHash);
+    if (!valid) {
       return c.json({ error: 'Current password is incorrect' }, 401);
     }
   }
@@ -251,18 +226,15 @@ userRoutes.put('/me/password', async (c) => {
       return c.json({ error: 'Current password is required' }, 400);
     }
 
-    const [storedSalt, storedHash] = currentUser[0].passwordHash.split(':');
-    const { hash } = hashPassword(currentPassword, storedSalt);
-
-    if (hash !== storedHash) {
+    const { valid } = verifyPassword(currentPassword, currentUser[0].passwordHash);
+    if (!valid) {
       return c.json({ error: 'Current password is incorrect' }, 401);
     }
   }
   // Note: OAuth-only users (no passwordHash) can set a password without verification
 
-  // Hash new password
-  const { hash: newHash, salt: newSalt } = hashPassword(newPassword);
-  const newPasswordHash = `${newSalt}:${newHash}`;
+  // Hash new password with scrypt
+  const newPasswordHash = hashPassword(newPassword);
 
   // Update password
   await db
@@ -994,8 +966,7 @@ userRoutes.post('/admin/:userId/reset-password', requireAdmin, async (c) => {
   try {
     // Generate a temporary password
     const tempPassword = randomBytes(8).toString('hex');
-    const { hash, salt } = hashPassword(tempPassword);
-    const passwordHash = `${salt}:${hash}`;
+    const passwordHash = hashPassword(tempPassword);
 
     // Generate new recovery codes
     const recoveryCodes = generateRecoveryCodes(8);

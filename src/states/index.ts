@@ -11,6 +11,10 @@ import { getDb } from '../storage/index.js';
 import { states } from '../storage/schema.js';
 import type { StateGroup } from '../tickets/types.js';
 
+// TODO(@copilot): Generate unit tests for this module
+// Key functions to test: createState, getState, listStates, updateState, deleteState, initializeProjectStates
+// Test file location: src/states/tests/index.test.ts
+
 export interface State {
   id: string;
   projectId: string | null;

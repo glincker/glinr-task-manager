@@ -1033,7 +1033,7 @@ export class LibSQLAdapter implements StorageAdapter {
     const newTask = {
       ...input,
       id,
-      status: "pending" as const,
+      status: (input as any).status || "pending",
       createdAt: now,
       updatedAt: now,
       attempts: 0,
@@ -1446,22 +1446,14 @@ export class LibSQLAdapter implements StorageAdapter {
     totalCost: number;
     totalTokens: number;
   }> {
-    const all = await this.db.select().from(schema.summaries);
     const daily: Record<string, { cost: number; tokens: number }> = {};
     const byModel: Record<string, { cost: number; tokens: number }> = {};
     const byAgent: Record<string, { cost: number; tokens: number }> = {};
     let totalCost = 0;
     let totalTokens = 0;
 
-    for (const s of all) {
-      if (!s.createdAt) continue;
-
-      const date = s.createdAt.toISOString().split("T")[0];
-      const model = s.model || "unknown";
-      const agent = s.agent || "unknown";
-      const cost = (s.cost as any)?.amount || 0;
-      const tokens = (s.tokensUsed as any)?.total || 0;
-
+    // Helper to accumulate into the aggregation maps
+    const accumulate = (date: string, model: string, agent: string, cost: number, tokens: number) => {
       totalCost += cost;
       totalTokens += tokens;
 
@@ -1476,6 +1468,38 @@ export class LibSQLAdapter implements StorageAdapter {
       if (!byAgent[agent]) byAgent[agent] = { cost: 0, tokens: 0 };
       byAgent[agent].cost += cost;
       byAgent[agent].tokens += tokens;
+    };
+
+    // Source 1: Summaries table (queue task results)
+    const all = await this.db.select().from(schema.summaries);
+    for (const s of all) {
+      if (!s.createdAt) continue;
+      const date = s.createdAt.toISOString().split("T")[0];
+      const model = s.model || "unknown";
+      const agent = s.agent || "unknown";
+      const cost = (s.cost as any)?.amount || 0;
+      const tokens = (s.tokensUsed as any)?.total || 0;
+      accumulate(date, model, agent, cost, tokens);
+    }
+
+    // Source 2: Conversation messages (chat/agentic sessions)
+    try {
+      const chatRows = await this.client.execute(
+        `SELECT created_at, model, total_tokens, prompt_tokens, completion_tokens, cost
+         FROM conversation_messages
+         WHERE total_tokens > 0 AND role = 'assistant'`
+      );
+      for (const row of chatRows.rows) {
+        const createdAt = row.created_at as string | null;
+        if (!createdAt) continue;
+        const date = createdAt.split("T")[0];
+        const model = (row.model as string) || "unknown";
+        const tokens = Number(row.total_tokens) || 0;
+        const cost = Number(row.cost) || 0;
+        accumulate(date, model, "chat", cost, tokens);
+      }
+    } catch {
+      // conversation_messages table may not exist yet — skip silently
     }
 
     const dailyArray = Object.entries(daily)

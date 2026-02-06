@@ -2,27 +2,28 @@
  * Agent Executor
  *
  * The main orchestrator for the GLINR agentic loop system.
- * Runs tools continuously until task completion, with context persistence
- * between steps and proper stop condition handling.
- *
- * Based on patterns from:
- * - OpenClaw pi-agent-core (session-based execution)
- * - Vercel AI SDK v5.0 (stopWhen API)
+ * Uses AI SDK's native multi-step execution (stopWhen + onStepFinish)
+ * instead of a manual loop. Tools have execute functions and the SDK
+ * handles message accumulation, tool result feeding, and step chaining.
  */
 
-import { generateText } from "ai";
+import {
+  generateText,
+  stepCountIs as sdkStepCountIs,
+  hasToolCall as sdkHasToolCall,
+} from "ai";
+import type { StopCondition as AiSdkStopCondition } from "ai";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type {
   AgentState,
   AgentConfig,
-  AgentContext,
   AgentResult,
   AgentEvents,
   ToolCallRecord,
-  StepContext,
-  StopCondition,
+  ThinkingEffort,
 } from "./types.js";
+import { EFFORT_BUDGET_MAP } from "./types.js";
 import { defaultStopConditions, taskCompleted } from "./stop-conditions.js";
 import { logger } from "../utils/logger.js";
 
@@ -37,7 +38,11 @@ const DEFAULT_CONFIG: Required<AgentConfig> = {
   securityMode: "ask",
   stepTimeoutMs: 60000, // 1 minute per step
   enableStreaming: true,
+  effort: "medium",
 };
+
+/** After this many consecutive same-tool failures, inject a system hint */
+const FAILURE_ESCALATION_THRESHOLD = 2;
 
 // =============================================================================
 // Agent Executor Class
@@ -72,6 +77,8 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
       currentStep: 0,
       maxBudget: this.config.maxBudget,
       usedBudget: 0,
+      inputTokensUsed: 0,
+      outputTokensUsed: 0,
       toolCallHistory: [],
       pendingToolCalls: [],
       context: {},
@@ -94,6 +101,8 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
 
   /**
    * Run the agent until completion or stop condition.
+   * Uses AI SDK's native multi-step execution — a single generateText call
+   * with stopWhen + onStepFinish replaces the old manual loop.
    */
   async run(
     model: any,
@@ -103,6 +112,7 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
       name: string,
       args: Record<string, unknown>,
     ) => Promise<unknown>,
+    providerHint?: string,
   ): Promise<AgentState> {
     if (this.isRunning) {
       throw new Error("Agent is already running");
@@ -119,26 +129,148 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
     });
 
     try {
-      // Main agent loop
-      while (this.shouldContinue()) {
-        const stepResult = await this.executeStep(
-          model,
-          messages,
-          tools,
-          onToolExecute,
-        );
+      // Inject failure hint if applicable (from prior runs / retries)
+      this.injectFailureHint(messages);
 
-        // Check stop conditions
-        const stoppedByCondition = await this.checkStopConditions(stepResult);
-        if (stoppedByCondition) {
-          break;
-        }
+      // Wire execute functions into tools so the SDK can auto-execute them
+      const executableTools = this.wrapToolsWithExecute(tools, onToolExecute);
+
+      const hasTools = Object.keys(executableTools).length > 0;
+
+      // Build provider-specific options (e.g. Anthropic thinking/effort)
+      const providerOptions = this.buildProviderOptions(providerHint);
+
+      // Single generateText call — the SDK handles multi-step chaining
+      const result = await generateText({
+        model,
+        messages,
+        tools: hasTools ? executableTools : undefined,
+        ...(providerOptions ? { providerOptions } : {}),
+        stopWhen: [
+          sdkStepCountIs(this.config.maxSteps),
+          sdkHasToolCall("complete_task"),
+        ] as AiSdkStopCondition<any>[],
+        abortSignal: this.abortController.signal,
+        onStepFinish: (step: any) => {
+          this.state.currentStep++;
+          this.state.updatedAt = Date.now();
+
+          // Track token budget (AI SDK v6 uses inputTokens/outputTokens)
+          const stepInput = step.usage?.inputTokens ?? step.usage?.promptTokens ?? 0;
+          const stepOutput = step.usage?.outputTokens ?? step.usage?.completionTokens ?? 0;
+          const tokensUsed = stepInput + stepOutput;
+          this.state.usedBudget += tokensUsed;
+          this.state.inputTokensUsed += stepInput;
+          this.state.outputTokensUsed += stepOutput;
+
+          // Store text response for summary extraction
+          if (step.text) {
+            this.state.context.lastTextResponse = step.text;
+          }
+
+          // Record tool calls in history
+          for (const tc of step.toolCalls ?? []) {
+            const record: ToolCallRecord = {
+              id: tc.toolCallId ?? randomUUID(),
+              name: tc.toolName,
+              args: (tc as any).input ?? (tc as any).args ?? {},
+              status: "pending",
+              startedAt: Date.now(),
+            };
+
+            // Find the matching tool result
+            const tr = (step.toolResults ?? []).find(
+              (r: any) => r.toolCallId === tc.toolCallId,
+            );
+
+            if (tr) {
+              record.result = tr.result;
+              record.completedAt = Date.now();
+
+              // Check if the tool result indicates a failure
+              if (typeof record.result === "object" && record.result !== null) {
+                const resultObj = record.result as Record<string, unknown>;
+                const isPending = resultObj.pending === true;
+                const hasError = Boolean(resultObj.error);
+                const isFailure = resultObj.success === false || hasError;
+
+                if (isPending) {
+                  record.status = "pending";
+                } else if (isFailure) {
+                  record.status = "failed";
+                  record.error =
+                    (resultObj.error as string) ||
+                    "Tool returned unsuccessful result";
+                } else {
+                  record.status = "executed";
+                }
+              } else {
+                record.status = "executed";
+              }
+            }
+
+            this.state.toolCallHistory.push(record);
+            this.emit("tool:call", this.state, record);
+
+            // Extract context from tool results (projects, tickets, etc.)
+            this.extractContext(record);
+
+            if (record.status === "executed") {
+              this.emit("tool:result", this.state, record);
+            }
+          }
+
+          // Emit step events
+          this.emit("step:start", this.state);
+          this.emit("step:complete", this.state, step);
+
+          logger.debug("[AgentExecutor] Step completed", {
+            step: this.state.currentStep,
+            toolCalls: step.toolCalls?.length ?? 0,
+            tokensUsed,
+            text: step.text?.substring(0, 100),
+          });
+
+          // Check custom stop conditions (consecutive failures, same tool repeated, etc.)
+          this.checkCustomStopConditions(step);
+
+          // Budget abort
+          if (this.state.usedBudget >= this.state.maxBudget) {
+            logger.info("[AgentExecutor] Budget exceeded, aborting", {
+              used: this.state.usedBudget,
+              max: this.state.maxBudget,
+            });
+            this.abortController.abort();
+          }
+        },
+      } as any);
+
+      // Update budget from total usage (AI SDK v6 uses inputTokens/outputTokens)
+      const totalUsage = (result as any).totalUsage;
+      if (totalUsage) {
+        const totalInput = totalUsage.inputTokens ?? totalUsage.promptTokens ?? 0;
+        const totalOutput = totalUsage.outputTokens ?? totalUsage.completionTokens ?? 0;
+        // totalUsage is the authoritative sum; overwrite our step-by-step estimate
+        this.state.usedBudget = totalInput + totalOutput;
+        this.state.inputTokensUsed = totalInput;
+        this.state.outputTokensUsed = totalOutput;
+      }
+
+      // Store final text from the result (last step's text)
+      if (result.text) {
+        this.state.context.lastTextResponse = result.text;
       }
 
       // Finalize
       this.finalize();
       return this.state;
     } catch (error) {
+      if ((error as Error).name === "AbortError") {
+        // Aborted by budget or cancellation — still finalize
+        logger.info("[AgentExecutor] Agent aborted");
+        this.finalize();
+        return this.state;
+      }
       this.handleError(error as Error);
       throw error;
     } finally {
@@ -186,317 +318,194 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
   }
 
   // ===========================================================================
-  // Core Loop
+  // Provider Options (Effort / Thinking)
   // ===========================================================================
 
-  private shouldContinue(): boolean {
-    return (
-      this.state.status === "running" &&
-      this.state.currentStep < this.config.maxSteps &&
-      !this.abortController.signal.aborted
-    );
+  /**
+   * Build provider-specific options based on agent config.
+   * For Anthropic models with effort set, enables extended thinking.
+   */
+  private buildProviderOptions(providerHint?: string): Record<string, unknown> | undefined {
+    const effort = this.config.effort;
+    if (!effort) return undefined;
+
+    // Only apply thinking options for Anthropic provider
+    const isAnthropic = providerHint === 'anthropic' || !providerHint;
+    if (!isAnthropic) return undefined;
+
+    const budgetTokens = EFFORT_BUDGET_MAP[effort];
+    logger.info("[AgentExecutor] Enabling extended thinking", {
+      effort,
+      budgetTokens,
+      provider: providerHint || 'auto',
+    });
+
+    return {
+      anthropic: {
+        thinking: { type: 'enabled', budgetTokens },
+      },
+    };
   }
 
-  private async executeStep(
-    model: any,
-    messages: any[],
+  // ===========================================================================
+  // Tool Wrapping
+  // ===========================================================================
+
+  /**
+   * Wrap tools with execute functions so the AI SDK can auto-execute them.
+   * This is the key change: instead of us manually processing tool calls
+   * after each step, the SDK calls execute() and feeds results back.
+   */
+  private wrapToolsWithExecute(
     tools: Record<string, any>,
     onToolExecute?: (
       name: string,
       args: Record<string, unknown>,
     ) => Promise<unknown>,
-  ): Promise<unknown> {
-    this.state.currentStep++;
-    this.state.updatedAt = Date.now();
-    this.emit("step:start", this.state);
+  ): Record<string, any> {
+    if (!onToolExecute) return tools;
 
-    logger.debug("[AgentExecutor] Executing step", {
-      step: this.state.currentStep,
-      usedBudget: this.state.usedBudget,
-    });
-
-    // Build step context
-    const stepContext = this.buildStepContext();
-
-    // Prepare messages with injected context
-    const messagesWithContext = this.injectContext(messages, stepContext);
-
-    try {
-      // Execute one step with the model
-      const result = await generateText({
-        model,
-        messages: messagesWithContext,
-        tools: Object.keys(tools).length > 0 ? tools : undefined,
-        maxSteps: 1, // Single step for control
-        abortSignal: this.abortController.signal,
-      } as any);
-
-      // Update budget
-      const usage = result.usage as
-        | { promptTokens?: number; completionTokens?: number }
-        | undefined;
-      const tokensUsed =
-        (usage?.promptTokens ?? 0) + (usage?.completionTokens ?? 0);
-      this.state.usedBudget += tokensUsed;
-
-      // Store the text response for later (used when completing without tools)
-      if (result.text) {
-        this.state.context.lastTextResponse = result.text;
-      }
-
-      // CRITICAL: Accumulate response messages for next step
-      // This ensures the AI sees its own tool calls and results in subsequent steps
-      // Without this, the AI repeats the same tool call indefinitely
-      if (result.response?.messages) {
-        logger.info("[AgentExecutor] Response messages from AI SDK", {
-          step: this.state.currentStep,
-          messageCount: result.response.messages.length,
-          messages: JSON.stringify(result.response.messages).substring(0, 1000),
-        });
-        messages.push(...result.response.messages);
-        logger.debug("[AgentExecutor] Accumulated messages", {
-          step: this.state.currentStep,
-          newMessages: result.response.messages.length,
-          totalMessages: messages.length,
-        });
-      }
-
-      // Process tool calls from this step and add tool result messages
-      await this.processToolCalls(result, messages, onToolExecute);
-
-      this.emit("step:complete", this.state, result);
-
-      logger.debug("[AgentExecutor] Step completed", {
-        step: this.state.currentStep,
-        toolCalls: result.steps?.[0]?.toolCalls?.length ?? 0,
-        tokensUsed,
-        text: result.text?.substring(0, 100),
-      });
-
-      return result;
-    } catch (error) {
-      if ((error as Error).name === "AbortError") {
-        logger.info("[AgentExecutor] Step aborted");
-        throw error;
-      }
-
-      logger.error(
-        "[AgentExecutor] Step error",
-        error instanceof Error ? error : undefined,
-      );
-      throw error;
-    }
-  }
-
-  private async processToolCalls(
-    result: any,
-    messages: any[],
-    onToolExecute?: (
-      name: string,
-      args: Record<string, unknown>,
-    ) => Promise<unknown>,
-  ): Promise<void> {
-    const steps = result.steps ?? [];
-
-    for (const step of steps) {
-      const toolCalls = step.toolCalls ?? [];
-      const toolResults = step.toolResults ?? [];
-
-      // Collect tool results to add as a single message
-      const toolResultParts: any[] = [];
-
-      for (let i = 0; i < toolCalls.length; i++) {
-        const toolCall = toolCalls[i];
-        const toolResult = toolResults.find(
-          (r: any) => r.toolCallId === toolCall.toolCallId,
-        );
-
-        const record: ToolCallRecord = {
-          id: toolCall.toolCallId ?? randomUUID(),
-          name: toolCall.toolName,
-          // AI SDK v6 uses 'input' instead of 'args'
-          args: toolCall.input ?? toolCall.args ?? {},
-          result: toolResult?.result,
-          status: toolResult ? "executed" : "pending",
-          startedAt: Date.now(),
-          completedAt: toolResult ? Date.now() : undefined,
-        };
-
-        // If we have a custom executor and the tool wasn't already executed
-        if (onToolExecute && !toolResult) {
+    const wrapped: Record<string, any> = {};
+    for (const [name, toolDef] of Object.entries(tools)) {
+      wrapped[name] = {
+        ...toolDef,
+        execute: async (args: Record<string, unknown>) => {
           try {
-            record.result = await onToolExecute(record.name, record.args);
-            record.completedAt = Date.now();
-
-            // Check if the tool result indicates a failure (validation error, etc.)
-            if (typeof record.result === "object" && record.result !== null) {
-              const resultRecord = record.result as Record<string, unknown>;
-              const isPending = resultRecord.pending === true;
-              const hasError = Boolean(resultRecord.error);
-              const isFailure = resultRecord.success === false || hasError;
-
-              if (isPending) {
-                record.status = "pending";
-              } else if (isFailure) {
-                // Tool returned an error result (e.g., validation failure)
-                record.status = "failed";
-                record.error =
-                  (resultRecord.error as string) ||
-                  "Tool returned unsuccessful result";
-                logger.warn("[AgentExecutor] Tool returned error result", {
-                  tool: record.name,
-                  error: record.error,
-                });
-              } else {
-                record.status = "executed";
-              }
-            } else {
-              record.status = "executed";
-            }
-
-            // Add tool result to be added to messages
-            // Unwrap result from tool handler's { result: ... } wrapper
-            const outputData = typeof record.result === 'object' && record.result !== null && 'result' in record.result
-              ? (record.result as { result: unknown }).result
-              : record.result;
-            // AI SDK v6 requires output to be a discriminated union with type field
-            toolResultParts.push({
-              type: "tool-result",
-              toolCallId: record.id,
-              toolName: record.name,
-              output: {
-                type: "json",
-                value: outputData,
-              },
-            });
+            const result = await onToolExecute(name, args);
+            return result;
           } catch (error) {
-            record.status = "failed";
-            record.error =
+            // Return error as a structured result so the AI can see it and adjust
+            const errorMsg =
               error instanceof Error ? error.message : "Unknown error";
-            record.completedAt = Date.now();
+            const isPermError =
+              errorMsg.toLowerCase().includes("permission") ||
+              errorMsg.toLowerCase().includes("unauthorized") ||
+              errorMsg.toLowerCase().includes("forbidden") ||
+              errorMsg.toLowerCase().includes("not allowed");
 
-            // Add error result to messages
-            toolResultParts.push({
-              type: "tool-result",
-              toolCallId: record.id,
-              toolName: record.name,
-              output: {
-                type: "error-json",
-                value: { error: record.error },
-              },
+            logger.warn("[AgentExecutor] Tool execution failed", {
+              tool: name,
+              error: errorMsg,
             });
+
+            return {
+              error: errorMsg,
+              success: false,
+              suggestion:
+                "This tool failed. Consider trying a different approach or asking the user for help.",
+              canRetry: !isPermError,
+            };
           }
-        } else if (toolResult) {
-          // Tool was already executed by AI SDK, add its result
-          toolResultParts.push({
-            type: "tool-result",
-            toolCallId: record.id,
-            toolName: record.name,
-            output: {
-              type: "json",
-              value: toolResult.result,
-            },
-          });
-        }
-
-        this.state.toolCallHistory.push(record);
-        this.emit("tool:call", this.state, record);
-
-        // Extract context from tool results
-        this.extractContext(record);
-
-        if (record.status === "executed") {
-          this.emit("tool:result", this.state, record);
-        }
-      }
-
-      // CRITICAL: Add tool result message for the AI to see in next step
-      // Without this, the AI has no memory of tool results and repeats calls
-      if (toolResultParts.length > 0) {
-        const toolMessage = {
-          role: "tool" as const,
-          content: toolResultParts,
-        };
-        messages.push(toolMessage);
-        logger.info("[AgentExecutor] Added tool result message", {
-          step: this.state.currentStep,
-          toolCount: toolResultParts.length,
-          message: JSON.stringify(toolMessage).substring(0, 500),
-        });
-      }
-    }
-  }
-
-  // ===========================================================================
-  // Context Management
-  // ===========================================================================
-
-  private buildStepContext(): StepContext {
-    return {
-      step: this.state.currentStep,
-      goal: this.state.goal,
-      toolsUsed: this.state.toolCallHistory.map((t) => t.name),
-      lastToolResult: this.getLastToolResult(),
-      accumulatedContext: this.state.context,
-      hint: this.getNextHint(),
-      remainingBudget: this.state.maxBudget - this.state.usedBudget,
-    };
-  }
-
-  private injectContext(messages: any[], stepContext: StepContext): any[] {
-    // Only inject context when we have accumulated state from previous steps
-    // This follows OpenClaw's pattern: let AI decide, don't frame everything as a "task"
-    const hasAccumulatedContext =
-      Object.keys(stepContext.accumulatedContext).length > 0;
-    const hasToolHistory = stepContext.toolsUsed.length > 0;
-    const hasHint = stepContext.hint && stepContext.hint.length > 0;
-
-    // For step 1 with no context, just pass messages through - trust the AI
-    if (stepContext.step === 1 && !hasAccumulatedContext && !hasHint) {
-      return messages;
-    }
-
-    // Only inject minimal context for multi-step operations
-    const contextParts: string[] = [];
-
-    if (hasToolHistory) {
-      contextParts.push(`Tools used: ${stepContext.toolsUsed.join(", ")}`);
-    }
-
-    if (hasAccumulatedContext) {
-      // Only include relevant accumulated data, not empty objects
-      const relevantContext = Object.entries(stepContext.accumulatedContext)
-        .filter(([key, value]) => key !== "lastHint" && value !== undefined)
-        .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
-        .join("\n");
-      if (relevantContext) {
-        contextParts.push(relevantContext);
-      }
-    }
-
-    if (hasHint) {
-      contextParts.push(`Hint: ${stepContext.hint}`);
-    }
-
-    // If nothing to inject, return original messages
-    if (contextParts.length === 0) {
-      return messages;
-    }
-
-    const contextBlock = `\n\n## Context\n${contextParts.join("\n")}`;
-
-    const systemIndex = messages.findIndex((m) => m.role === "system");
-    if (systemIndex >= 0) {
-      const updatedMessages = [...messages];
-      updatedMessages[systemIndex] = {
-        ...updatedMessages[systemIndex],
-        content: updatedMessages[systemIndex].content + contextBlock,
+        },
       };
-      return updatedMessages;
+    }
+    return wrapped;
+  }
+
+  // ===========================================================================
+  // Custom Stop Condition Checks (in onStepFinish)
+  // ===========================================================================
+
+  /**
+   * Check custom stop conditions that can't be expressed via AI SDK's stopWhen.
+   * These include consecutive failures, same tool repeated, budget, timeout, etc.
+   * If triggered, we abort the generateText call.
+   */
+  private checkCustomStopConditions(step: any): void {
+    const history = this.state.toolCallHistory;
+
+    // Consecutive failures check
+    if (history.length >= 3) {
+      const lastThree = history.slice(-3);
+      if (lastThree.every((t) => t.status === "failed")) {
+        logger.info("[AgentExecutor] 3 consecutive failures, aborting");
+        this.state.status = "completed";
+        this.abortController.abort();
+        return;
+      }
     }
 
-    return messages;
+    // Same tool repeated with same args check
+    if (history.length >= 3) {
+      const lastThree = history.slice(-3);
+      const firstName = lastThree[0].name;
+      const firstArgs = JSON.stringify(lastThree[0].args);
+      if (
+        lastThree.every(
+          (t) => t.name === firstName && JSON.stringify(t.args) === firstArgs,
+        )
+      ) {
+        logger.info(
+          "[AgentExecutor] Same tool+args repeated 3 times, aborting",
+        );
+        this.state.status = "completed";
+        this.abortController.abort();
+        return;
+      }
+    }
+
+    // Timeout check
+    if (Date.now() - this.state.createdAt >= 5 * 60 * 1000) {
+      logger.info("[AgentExecutor] 5 minute timeout exceeded, aborting");
+      this.state.status = "completed";
+      this.abortController.abort();
+      return;
+    }
+
+    // Text-only response: if no tools were ever executed and this step has no tool calls,
+    // the AI just wants to respond with text — abort to complete
+    if (
+      !history.some((t) => t.status === "executed") &&
+      (!step.toolCalls || step.toolCalls.length === 0)
+    ) {
+      logger.info(
+        "[AgentExecutor] Text-only response with no tool history, completing",
+      );
+      this.state.status = "completed";
+      this.abortController.abort();
+      return;
+    }
   }
+
+  // ===========================================================================
+  // Failure Escalation
+  // ===========================================================================
+
+  /**
+   * If the same tool has failed consecutively, inject a system hint
+   * telling the AI to try a different approach.
+   */
+  private injectFailureHint(messages: any[]): void {
+    const history = this.state.toolCallHistory;
+    if (history.length < FAILURE_ESCALATION_THRESHOLD) return;
+
+    const lastTool = history[history.length - 1];
+    if (lastTool.status !== "failed") return;
+
+    let consecutiveCount = 0;
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].name === lastTool.name && history[i].status === "failed") {
+        consecutiveCount++;
+      } else {
+        break;
+      }
+    }
+
+    if (consecutiveCount >= FAILURE_ESCALATION_THRESHOLD) {
+      messages.push({
+        role: "system" as const,
+        content: `Tool "${lastTool.name}" has failed ${consecutiveCount} times consecutively. Do NOT retry it with the same parameters. Either try a different approach or inform the user about the issue.`,
+      });
+      logger.warn("[AgentExecutor] Injecting failure escalation hint", {
+        tool: lastTool.name,
+        consecutiveFailures: consecutiveCount,
+      });
+    }
+  }
+
+  // ===========================================================================
+  // Context Extraction
+  // ===========================================================================
 
   private extractContext(record: ToolCallRecord): void {
     if (!record.result || typeof record.result !== "object") {
@@ -550,69 +559,6 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
     }
   }
 
-  private getLastToolResult(): unknown | undefined {
-    const lastCall =
-      this.state.toolCallHistory[this.state.toolCallHistory.length - 1];
-    return lastCall?.result;
-  }
-
-  private getNextHint(): string {
-    // Return last hint from tools if any
-    const lastHint = this.state.context.lastHint;
-    if (lastHint) {
-      return lastHint;
-    }
-
-    // Minimal hints - trust the AI to decide what to do
-    const goal = this.state.goal.toLowerCase().trim();
-
-    // Ticket creation workflow - provide context when needed
-    if (
-      (goal.includes("ticket") ||
-        goal.includes("task") ||
-        goal.includes("bug")) &&
-      !this.state.context.createdTickets
-    ) {
-      if (!this.state.context.availableProjects) {
-        return "For ticket creation, use list_projects first to get project keys.";
-      }
-      const projectKeys = (this.state.context.availableProjects as any[])
-        ?.map((p) => p.key)
-        .join(", ");
-      return `Available projects: ${projectKeys}`;
-    }
-
-    // Default: no hint, let AI decide
-    return "";
-  }
-
-  // ===========================================================================
-  // Stop Conditions
-  // ===========================================================================
-
-  private async checkStopConditions(lastResult: unknown): Promise<boolean> {
-    for (const condition of this.config.stopConditions) {
-      try {
-        const shouldStop = await condition.check(this.state, lastResult);
-        if (shouldStop) {
-          logger.info("[AgentExecutor] Stop condition met", {
-            condition: condition.name,
-            step: this.state.currentStep,
-          });
-          this.state.status = "completed";
-          this.emit("complete", this.state, condition.name);
-          return true;
-        }
-      } catch (error) {
-        logger.error(
-          `[AgentExecutor] Error checking stop condition: ${condition.name}`,
-          error instanceof Error ? error : undefined,
-        );
-      }
-    }
-    return false;
-  }
-
   // ===========================================================================
   // Finalization
   // ===========================================================================
@@ -629,8 +575,13 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
         (t) => t.status === "executed" && t.name !== "complete_task",
       );
 
-    // Extract summary from complete_task if available
-    let summary = `Agent completed after ${this.state.currentStep} steps.`;
+    // Extract summary with 3-tier priority:
+    // 1. complete_task tool summary (most explicit)
+    // 2. AI's lastTextResponse (always available for text-only responses)
+    // 3. Descriptive fallback from tool history
+    let summary: string | undefined;
+
+    // Priority 1: complete_task tool result
     const completionCall = this.state.toolCallHistory.find(
       (t) => t.name === "complete_task" && t.status === "executed",
     );
@@ -638,14 +589,33 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
       const result = completionCall.result as Record<string, unknown>;
       if (result.data && typeof result.data === "object") {
         const data = result.data as Record<string, unknown>;
-        summary = (data.summary as string) ?? summary;
+        if (data.summary && typeof data.summary === "string") {
+          summary = data.summary;
+        }
       }
-    } else if (completedViaTextResponse) {
-      // Simple text response - use the model's actual text response
+    }
+
+    // Priority 2: AI's text response
+    if (!summary) {
       const textResponse = this.state.context.lastTextResponse as
         | string
         | undefined;
-      summary = textResponse || "Response provided.";
+      if (textResponse) {
+        summary = textResponse;
+      }
+    }
+
+    // Priority 3: Descriptive fallback from tool history
+    if (!summary) {
+      const executedTools = this.state.toolCallHistory.filter(
+        (t) => t.status === "executed" && t.name !== "complete_task",
+      );
+      if (executedTools.length > 0) {
+        const uniqueNames = [...new Set(executedTools.map((t) => t.name))];
+        summary = `Executed ${executedTools.length} tool call${executedTools.length === 1 ? "" : "s"} (${uniqueNames.join(", ")}) in ${this.state.currentStep} step${this.state.currentStep === 1 ? "" : "s"}.`;
+      } else {
+        summary = `Agent completed after ${this.state.currentStep} step${this.state.currentStep === 1 ? "" : "s"}.`;
+      }
     }
 
     // Determine stop reason
@@ -653,7 +623,7 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
     if (completedViaTask) {
       stopReason = "taskCompleted";
     } else if (completedViaTextResponse) {
-      stopReason = "textResponse"; // AI responded without tools
+      stopReason = "textResponse";
     }
 
     this.state.finalResult = {
@@ -667,8 +637,14 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
       stopReason,
       totalSteps: this.state.currentStep,
       totalTokens: this.state.usedBudget,
+      inputTokens: this.state.inputTokensUsed,
+      outputTokens: this.state.outputTokensUsed,
     };
 
+    // Set status to completed if not already set (e.g. cancelled)
+    if (this.state.status === "running") {
+      this.state.status = "completed";
+    }
     this.state.updatedAt = Date.now();
 
     logger.info("[AgentExecutor] Agent finalized", {
@@ -707,7 +683,6 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
         const taskArtifacts = data.artifacts as any[];
         if (taskArtifacts) {
           for (const artifact of taskArtifacts) {
-            // Avoid duplicates
             if (!artifacts.some((a) => a.id === artifact.id)) {
               artifacts.push(artifact);
             }
@@ -747,6 +722,8 @@ export class AgentExecutor extends EventEmitter<AgentEvents> {
       stopReason: "error",
       totalSteps: this.state.currentStep,
       totalTokens: this.state.usedBudget,
+      inputTokens: this.state.inputTokensUsed,
+      outputTokens: this.state.outputTokensUsed,
     };
     this.emit("error", error, this.state);
 

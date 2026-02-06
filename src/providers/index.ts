@@ -10,6 +10,7 @@ export {
   chatStream,
   ProviderType,
   MODEL_ALIASES,
+  MODEL_CATALOG,
   type ProviderConfig,
   type ModelInfo,
   type ChatMessage,

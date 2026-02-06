@@ -8,7 +8,7 @@
  * - Password hashing with crypto
  */
 
-import { randomUUID, createHash, randomBytes, timingSafeEqual } from 'crypto';
+import { randomUUID, randomBytes, createHash } from 'crypto';
 import { eq, and } from 'drizzle-orm';
 import { getDb } from '../storage/index.js';
 import {
@@ -19,6 +19,15 @@ import {
   githubTokens,
 } from '../storage/schema.js';
 import { getGitHubOAuthConfig, type GitHubOAuthConfig } from '../settings/index.js';
+import { hashPassword, verifyPassword as verifyPw } from './password.js';
+
+/**
+ * Hash a session token for secure storage.
+ * Uses SHA256 which is fast and sufficient for random 32-byte tokens.
+ */
+function hashSessionToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 // =============================================================================
 // TYPES
@@ -29,6 +38,9 @@ export interface User {
   email: string;
   name: string;
   avatarUrl?: string | null;
+  bio?: string | null;
+  timezone?: string | null;
+  locale?: string | null;
   role: string;
   status: string;
   createdAt: Date;
@@ -73,29 +85,23 @@ async function getGitHubConfig(): Promise<GitHubOAuthConfig | null> {
 }
 
 // =============================================================================
-// PASSWORD HASHING (using crypto)
+// PASSWORD UPGRADE (transparent SHA256 → scrypt migration)
 // =============================================================================
 
-function hashPassword(password: string, salt?: string): { hash: string; salt: string } {
-  const useSalt = salt || randomBytes(16).toString('hex');
-  const hash = createHash('sha256')
-    .update(password + useSalt)
-    .digest('hex');
-  return { hash, salt: useSalt };
-}
+/**
+ * Upgrade a user's password hash from legacy SHA256 to scrypt.
+ * Called transparently on successful login with legacy hash.
+ */
+async function upgradePasswordHash(userId: string, password: string): Promise<void> {
+  const db = getDb();
+  if (!db) return;
 
-function verifyPassword(password: string, storedHash: string): boolean {
-  // Format: salt:hash
-  const [salt, hash] = storedHash.split(':');
-  if (!salt || !hash) return false;
-
-  const { hash: computedHash } = hashPassword(password, salt);
-
-  try {
-    return timingSafeEqual(Buffer.from(hash), Buffer.from(computedHash));
-  } catch {
-    return false;
-  }
+  const newHash = hashPassword(password);
+  await db
+    .update(users)
+    .set({ passwordHash: newHash, updatedAt: new Date() })
+    .where(eq(users.id, userId));
+  console.log(`[Auth] Upgraded password hash to scrypt for user ${userId}`);
 }
 
 // =============================================================================
@@ -111,14 +117,16 @@ export async function createSession(
   if (!db) throw new Error('Database not initialized');
 
   const sessionId = randomUUID();
-  const token = randomBytes(32).toString('hex');
+  const plainToken = randomBytes(32).toString('hex');
+  const tokenHash = hashSessionToken(plainToken);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SESSION_DURATION_MS);
 
+  // Store the HASH, not the plaintext token
   await db.insert(sessions).values({
     id: sessionId,
     userId,
-    token,
+    token: tokenHash,
     userAgent,
     ipAddress,
     createdAt: now,
@@ -126,18 +134,20 @@ export async function createSession(
     lastActiveAt: now,
   });
 
-  return { id: sessionId, userId, token, expiresAt };
+  // Return plaintext token to caller (set in cookie, never stored server-side)
+  return { id: sessionId, userId, token: plainToken, expiresAt };
 }
 
 export async function validateSession(token: string): Promise<User | null> {
   const db = getDb();
   if (!db) return null;
 
+  const tokenHash = hashSessionToken(token);
   const result = await db
     .select()
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
-    .where(eq(sessions.token, token))
+    .where(eq(sessions.token, tokenHash))
     .limit(1);
 
   if (!result.length) return null;
@@ -173,7 +183,8 @@ export async function deleteSession(token: string): Promise<void> {
   const db = getDb();
   if (!db) return;
 
-  await db.delete(sessions).where(eq(sessions.token, token));
+  const tokenHash = hashSessionToken(token);
+  await db.delete(sessions).where(eq(sessions.token, tokenHash));
 }
 
 export async function deleteAllUserSessions(userId: string): Promise<void> {
@@ -211,9 +222,8 @@ export async function signUpWithEmail(
     return { success: false, error: 'Password must be at least 8 characters' };
   }
 
-  // Hash password
-  const { hash, salt } = hashPassword(password);
-  const passwordHash = `${salt}:${hash}`;
+  // Hash password with scrypt
+  const passwordHash = hashPassword(password);
 
   // Create user
   const userId = randomUUID();
@@ -280,8 +290,16 @@ export async function signInWithEmail(
     return { success: false, error: 'Please sign in with GitHub' };
   }
 
-  if (!verifyPassword(password, user.passwordHash)) {
+  const { valid, needsUpgrade } = verifyPw(password, user.passwordHash);
+  if (!valid) {
     return { success: false, error: 'Invalid email or password' };
+  }
+
+  // Transparently upgrade legacy SHA256 hash to scrypt
+  if (needsUpgrade) {
+    upgradePasswordHash(user.id, password).catch((err) => {
+      console.error('[Auth] Failed to upgrade password hash:', err);
+    });
   }
 
   // Check if suspended
@@ -632,6 +650,9 @@ export async function getUserById(userId: string): Promise<User | null> {
     email: user.email,
     name: user.name,
     avatarUrl: user.avatarUrl,
+    bio: user.bio,
+    timezone: user.timezone,
+    locale: user.locale,
     role: user.role,
     status: user.status,
     createdAt: user.createdAt as Date,

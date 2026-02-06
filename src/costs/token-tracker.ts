@@ -93,6 +93,43 @@ function trackTaskUsage(task: any, result: any): void {
 }
 
 /**
+ * Track usage from a chat/agentic session (not queue tasks)
+ */
+export function trackChatUsage(
+  model: string,
+  totalTokens: number,
+  inputTokens?: number,
+  outputTokens?: number,
+): void {
+  const input = inputTokens ?? Math.floor(totalTokens * 0.7);
+  const output = outputTokens ?? totalTokens - input;
+  const cost = calculateCost(model, input, output);
+
+  globalUsage.totalTokens += totalTokens;
+  globalUsage.inputTokens += input;
+  globalUsage.outputTokens += output;
+  globalUsage.totalCost += cost;
+  globalUsage.taskCount += 1;
+
+  const agentId = 'chat';
+  if (!globalUsage.byModel[model]) {
+    globalUsage.byModel[model] = { tokens: 0, cost: 0, tasks: 0 };
+  }
+  globalUsage.byModel[model].tokens += totalTokens;
+  globalUsage.byModel[model].cost += cost;
+  globalUsage.byModel[model].tasks += 1;
+
+  if (!globalUsage.byAgent[agentId]) {
+    globalUsage.byAgent[agentId] = { tokens: 0, cost: 0, tasks: 0 };
+  }
+  globalUsage.byAgent[agentId].tokens += totalTokens;
+  globalUsage.byAgent[agentId].cost += cost;
+  globalUsage.byAgent[agentId].tasks += 1;
+
+  logger.debug('Chat usage tracked', { model, tokens: totalTokens, cost });
+}
+
+/**
  * Get current usage summary
  */
 export function getUsageSummary(): UsageSummary {

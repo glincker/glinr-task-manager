@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown-renderer';
-import { ToolCallCard } from '@/components/ui/tool-call-card';
+import { ToolCallGroup } from '@/components/ui/tool-call-card';
 import { cn } from '@/lib/utils';
 import type { Message, ChatPreset, QuickAction } from '../types';
 import { ThinkingBlock, FilteredJsonBlock } from './ThinkingBlock';
@@ -234,9 +234,7 @@ function MessageItem({
                   <Terminal className="h-3 w-3" />
                   <span>Used {message.toolCalls.length} tool{message.toolCalls.length > 1 ? 's' : ''}</span>
                 </div>
-                {message.toolCalls.map((tool) => (
-                  <ToolCallCard key={tool.id} tool={tool} />
-                ))}
+                <ToolCallGroup tools={message.toolCalls} />
               </div>
             )}
 

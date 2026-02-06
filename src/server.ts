@@ -45,6 +45,7 @@ import { initTokenTracker } from './costs/token-tracker.js';
 import { loadConfig } from './utils/config-loader.js';
 import { initStorage } from './storage/index.js';
 import { initApiTokensTable, tokenAuthMiddleware } from './auth/api-tokens.js';
+import { authMiddleware } from './auth/middleware.js';
 import { getGateway, type GatewayRequest, type WorkflowType } from './gateway/index.js';
 import { CreateTaskSchema } from './types/task.js';
 import { addTask } from './queue/task-queue.js';
@@ -85,22 +86,47 @@ app.use('*', (c, next) => {
 
 // CORS configuration
 // When credentials: true, origin cannot be "*" - must be explicit or dynamic
-// Priority: CORS_ORIGIN env var > settings.yml > dynamic (echo requesting origin)
+// Priority: CORS_ORIGIN env var > settings.yml > dynamic localhost fallback
 const configuredOrigin = process.env.CORS_ORIGIN || appSettings.server?.cors?.origin;
+
+// Default safe origins for development (localhost on common ports)
+const DEFAULT_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:4173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+];
 
 app.use(
   '*',
   cors({
-    // If no explicit origin or wildcard configured, dynamically echo the requesting origin
-    // This allows the app to run on any domain/subdomain without hardcoding
-    origin: !configuredOrigin || configuredOrigin === '*'
-      ? (origin) => origin || ''  // Echo back the request origin (works with any domain)
-      : configuredOrigin,
+    origin: configuredOrigin && configuredOrigin !== '*'
+      ? configuredOrigin
+      : (origin) => {
+          // In development: allow localhost origins
+          // In production without CORS_ORIGIN: only allow same-origin
+          if (!origin) return '';
+          if (DEFAULT_ORIGINS.includes(origin)) return origin;
+          // Allow any *.localhost or 127.0.0.1 origin for dev flexibility
+          try {
+            const url = new URL(origin);
+            if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return origin;
+          } catch { /* invalid origin */ }
+          // Production: require explicit CORS_ORIGIN config
+          if (process.env.NODE_ENV === 'production') return '';
+          return origin; // Dev fallback: allow all (only in non-production)
+        },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'Cookie'],
     credentials: true,
   })
 );
+
+// Authentication middleware — applied to all /api/* routes
+// Skips public routes (auth, setup, webhooks, messaging channels)
+app.use('/api/*', authMiddleware());
 
 // === Core Routes ===
 

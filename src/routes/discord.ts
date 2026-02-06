@@ -29,6 +29,10 @@ import { getChatRegistry } from '../chat/providers/registry.js';
 import type { DiscordAccountConfig } from '../chat/providers/types.js';
 import { logger } from '../utils/logger.js';
 
+// Re-export formatToolResult for channel response formatting
+// Usage: formatToolResult(toolName, result, 'discord') → { summary, detail, fields }
+export { formatToolResult } from '../chat/format/index.js';
+
 const discord = new Hono();
 
 // =============================================================================

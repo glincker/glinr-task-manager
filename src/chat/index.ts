@@ -100,6 +100,13 @@ export {
   type ChatToolHandlerOptions,
 } from './tool-handler.js';
 
+// Tool result formatting for channels (WhatsApp, Telegram, Discord)
+export {
+  formatToolResult,
+  type ChannelFormat,
+  type FormattedToolResult,
+} from './format/index.js';
+
 // Session management (model overrides)
 export {
   getSessionModel,

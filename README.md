@@ -1,230 +1,181 @@
-# GLINR Task Manager
+<p align="center">
+  <h1 align="center">GLINR Task Manager</h1>
+  <p align="center">
+    AI-native task orchestration platform — manage tasks, tickets, and workflows through natural language conversations.
+  </p>
+</p>
 
-> **AI Agent Task Orchestration** - Queue, route, and track tasks across OpenClaw, Claude Code, and other AI agents.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
+  <a href="https://github.com/GLINCKER/glinr-task-manager/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/GLINCKER/glinr-task-manager/ci.yml?branch=main&label=CI" alt="CI"></a>
+  <img src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white" alt="Node.js 22+">
+  <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <a href="https://github.com/GLINCKER/glinr-task-manager/pkgs/container/glinr-task-manager"><img src="https://img.shields.io/badge/Docker-ghcr.io-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
+</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-## Overview
-
-GLINR Task Manager is an open-source task queue and orchestration system for AI coding agents. It bridges issue trackers (GitHub, Jira, Linear) with AI agents (OpenClaw, Claude Code) to automate development workflows.
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    GLINR Task Manager                            │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
-│  │ GitHub Issues│    │    Jira      │    │   Linear     │       │
-│  │   Webhook    │    │   Webhook    │    │   Webhook    │       │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘       │
-│         │                   │                   │                │
-│         └───────────────────┼───────────────────┘                │
-│                             ▼                                    │
-│                    ┌────────────────┐                            │
-│                    │  Task Queue    │  Redis/BullMQ              │
-│                    └───────┬────────┘                            │
-│                            │                                     │
-│         ┌──────────────────┼──────────────────┐                  │
-│         ▼                  ▼                  ▼                  │
-│  ┌────────────┐    ┌────────────┐    ┌────────────┐             │
-│  │  OpenClaw  │    │Claude Code │    │  Custom    │             │
-│  └────────────┘    └────────────┘    └────────────┘             │
-│                            │                                     │
-│                    ┌───────▼───────┐                             │
-│                    │ Post Results  │ → GitHub Comments           │
-│                    └───────────────┘                             │
-└─────────────────────────────────────────────────────────────────┘
-```
+---
 
 ## Features
 
-- **Multi-Agent Support** - Works with OpenClaw, Claude Code, and custom adapters
-- **Priority Queue** - Tasks processed by priority with retry support
-- **GitHub/Jira/Linear Integration** - Create tasks from issues, post results as comments
-- **MCP Server** - Native Claude Code integration via Model Context Protocol
-- **Zero-Cost Hooks** - Track AI activity without burning tokens
-- **Rules Engine** - Pattern-based inference for task classification
-- **Extensible** - Add new agents and integrations easily
-- **Audit Trail** - Track what AI did, when, and results
+- **Agentic AI execution** — multi-step tool-calling loops with automatic retry and error recovery
+- **30+ built-in tools** — file ops, git, web search, browser automation, project management
+- **Real-time chat interface** — streaming responses with tool call visualization
+- **Project and ticket management** — AI-assisted CRUD workflows with status tracking
+- **Multi-provider AI support** — Anthropic Claude, OpenAI, Google Gemini, Groq, Ollama
+- **BullMQ job queue** — priority scheduling, retry policies, dead letter queue, concurrency control
+- **Webhook integrations** — GitHub, Jira, Linear issue-to-task automation
+- **Messaging channels** — Discord, Telegram, WhatsApp bot connectors
+- **Cron automation** — scheduled task execution with lifecycle management
+- **React 19 dashboard** — modern glass-morphism UI with dark/light themes
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     GLINR Task Manager                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  React 19 + Vite UI ──► Hono HTTP API                      │
+│                              │                              │
+│              ┌───────────────┼───────────────┐              │
+│              ▼               ▼               ▼              │
+│       AI Providers     BullMQ Queue    LibSQL Storage       │
+│     (Claude, GPT,      (Redis)        (SQLite)             │
+│      Gemini, Ollama)        │                              │
+│              │               ▼                              │
+│              ▼          Integrations                        │
+│        Tool System      (GitHub, Jira, Linear,             │
+│        (30+ tools)       Discord, Telegram)                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## Quick Start
 
 ### Prerequisites
 
-- Node.js 20+
-- Redis (for task queue)
-- An AI agent (OpenClaw or Claude Code)
+- **Node.js** 22+ (with corepack enabled)
+- **pnpm** (via corepack: `corepack enable`)
+- **Redis** (for job queue)
 
-### Installation
+### Setup
 
 ```bash
-# Clone the repo
+# Clone
 git clone https://github.com/GLINCKER/glinr-task-manager.git
 cd glinr-task-manager
 
 # Install dependencies
 pnpm install
 
-# Copy environment template
+# Configure environment
 cp .env.example .env
+# Edit .env — set REDIS_URL and at least one AI provider key
 
-# Start Redis (if not running)
+# Start Redis (if not already running)
 docker run -d --name redis -p 6379:6379 redis:alpine
 
-# Start the server
+# Start development server
 pnpm dev
 ```
 
-### Environment Variables
+The server starts at `http://localhost:3000`. The UI is served from the same port.
+
+### Docker
 
 ```bash
-# Server
-PORT=3000
-CORS_ORIGIN=*
+# Using Docker Compose
+docker compose up -d
 
-# Redis
-REDIS_URL=redis://localhost:6379
-
-# OpenClaw (if using)
-OPENCLAW_BASE_URL=http://localhost:18789
-OPENCLAW_GATEWAY_TOKEN=your-token
-OPENCLAW_WORKING_DIR=~/openclaw-workdir
-
-# GitHub
-GITHUB_TOKEN=ghp_xxx
-GITHUB_WEBHOOK_SECRET=your-webhook-secret
-GITHUB_AI_TASK_LABEL=ai-task
-GITHUB_AI_REVIEW_LABEL=ai-review
-
-# Task Processing
-TASK_CONCURRENCY=2
+# Or pull the image directly
+docker pull ghcr.io/glincker/glinr-task-manager:latest
+docker run -p 3000:3000 --env-file .env ghcr.io/glincker/glinr-task-manager:latest
 ```
 
-## Usage
+## Configuration
 
-### Creating Tasks via API
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | HTTP server port |
+| `REDIS_URL` | required | Redis connection string |
+| `ANTHROPIC_API_KEY` | — | Anthropic Claude API key |
+| `OPENAI_API_KEY` | — | OpenAI API key |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | — | Google Gemini API key |
+| `GROQ_API_KEY` | — | Groq API key |
+| `GITHUB_TOKEN` | — | GitHub PAT for integrations |
+| `TASK_CONCURRENCY` | `2` | Concurrent task processing |
+| `POOL_MAX_CONCURRENT` | `50` | Max concurrent tool executions |
+| `ENABLE_CRON` | `true` | Enable scheduled jobs |
+
+See [`.env.example`](.env.example) for all available options.
+
+## Development
 
 ```bash
-curl -X POST http://localhost:3000/api/tasks \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Fix login bug",
-    "prompt": "The login button doesn'\''t work on mobile. Please investigate and fix.",
-    "source": "api",
-    "repository": "GLINCKER/my-app",
-    "priority": 2,
-    "labels": ["bug", "mobile"]
-  }'
+pnpm dev       # Start dev server with hot reload
+pnpm build     # Compile TypeScript (must pass)
+pnpm test      # Run test suite (Vitest)
+pnpm lint      # Lint check
 ```
 
-### Creating Tasks from GitHub
-
-1. Set up a GitHub webhook pointing to `/webhooks/github`
-2. Add the `ai-task` label to an issue
-3. The task manager will:
-   - Create a task from the issue
-   - Queue it for processing
-   - Assign an AI agent
-   - Post results back as a comment
-
-### Trigger via Comment
-
-Comment `/ai fix this bug` on any issue to trigger a task:
+## Project Structure
 
 ```
-/ai Please implement the feature described in this issue
+src/
+├── adapters/       # AI agent adapters (Claude, OpenClaw, Ollama)
+├── agents/         # Agentic executor and stop conditions
+├── auth/           # Authentication service
+├── chat/           # Chat engine, tool handler, system prompts
+├── cron/           # Scheduled job definitions
+├── integrations/   # GitHub, Jira, Linear webhook handlers
+├── notifications/  # Slack, Discord, Telegram, WhatsApp
+├── projects/       # Project management
+├── providers/      # AI SDK provider configuration
+├── queue/          # BullMQ job queue and failure handling
+├── routes/         # Hono HTTP route handlers
+├── storage/        # LibSQL persistence layer
+├── tickets/        # Ticket CRUD and workflows
+├── tools/          # 30+ built-in tool definitions
+├── types/          # TypeScript type definitions
+└── server.ts       # Hono HTTP entry point
+
+ui/src/
+├── features/       # Feature modules (chat, tasks, tickets, settings)
+├── components/     # Shared UI components (shadcn/ui based)
+├── core/           # Providers, hooks, utilities
+└── layouts/        # App shell and navigation
 ```
 
-## API Endpoints
+## Tech Stack
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/api/tasks` | GET | List tasks |
-| `/api/tasks` | POST | Create task |
-| `/api/tasks/:id` | GET | Get task details |
-| `/api/agents` | GET | List available agents |
-| `/webhooks/github` | POST | GitHub webhook receiver |
-| `/webhooks/jira` | POST | Jira webhook receiver |
-| `/webhooks/linear` | POST | Linear webhook receiver |
-| `/api/hook/tool-use` | POST | Claude Code PostToolUse hook |
-| `/api/hook/session-end` | POST | Claude Code session end hook |
-| `/api/hook/sessions` | GET | List recent Claude sessions |
+**Backend**: [Hono](https://hono.dev) | [BullMQ](https://bullmq.io) | [LibSQL](https://libsql.org) | [Zod](https://zod.dev)
 
-## Adding Custom Agents
+**Frontend**: [React 19](https://react.dev) | [Vite](https://vite.dev) | [Tailwind CSS v4](https://tailwindcss.com) | [shadcn/ui](https://ui.shadcn.com) | [TanStack Query](https://tanstack.com/query)
 
-Create a new adapter by implementing the `AgentAdapter` interface:
+**AI**: [Vercel AI SDK](https://sdk.vercel.ai) | Anthropic Claude | OpenAI | Google Gemini | Groq | Ollama
 
-```typescript
-import type { AgentAdapter, AgentConfig } from './types/agent';
+**Queue**: [Redis](https://redis.io) + [BullMQ](https://bullmq.io) (priority queue, retry, DLQ)
 
-export class MyCustomAdapter implements AgentAdapter {
-  readonly type = 'my-agent';
-  readonly name = 'My Custom Agent';
-  readonly capabilities = ['code_generation', 'bug_fix'];
-
-  async healthCheck() {
-    return { healthy: true, lastChecked: new Date() };
-  }
-
-  async executeTask(task) {
-    // Your implementation
-    return { success: true, output: 'Done!' };
-  }
-}
-```
-
-Register it in the registry:
-
-```typescript
-import { getAgentRegistry } from './adapters/registry';
-
-const registry = getAgentRegistry();
-registry.registerAdapter('my-agent', (config) => new MyCustomAdapter(config));
-```
-
-## Docker Compose
-
-```bash
-docker-compose up -d
-```
-
-See [docker-compose.yml](./docker-compose.yml) for the full configuration.
-
-## Roadmap
-
-- [x] Core task queue with BullMQ
-- [x] OpenClaw adapter
-- [x] Claude Code adapter
-- [x] GitHub webhook integration
-- [x] Jira integration
-- [x] Linear integration
-- [x] MCP Server for Claude Code
-- [x] Zero-cost hook endpoints
-- [x] Rules-based inference engine
-- [ ] Token cost tracking
-- [ ] Structured summaries
-- [ ] GitHub OAuth & PR linking
-- [ ] Web dashboard
-- [ ] Slack notifications
-
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the complete roadmap.
+**Integrations**: GitHub | Jira | Linear | Discord | Telegram | WhatsApp
 
 ## Contributing
 
-Contributions welcome! Please read our [Contributing Guide](CONTRIBUTING.md) first.
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feat/your-feature`)
+3. Make your changes and ensure `pnpm build && pnpm test` passes
+4. Submit a pull request
+
+For bugs and feature requests, please [open an issue](https://github.com/GLINCKER/glinr-task-manager/issues).
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+This project is licensed under the **GNU Affero General Public License v3.0** — see the [LICENSE](LICENSE) file for details.
 
-## Credits
-
-Built by [GLINCKER](https://www.glincker.com/) for the GLINR Platform.
+Copyright (C) 2024-2026 GLINCKER LLC. All rights reserved.
 
 ---
 
-**Related Projects:**
-- [OpenClaw](https://github.com/openclaw/openclaw) - Open-source AI agent
-- [Claude Code](https://claude.ai/claude-code) - Anthropic's CLI coding assistant
-- [BullMQ](https://github.com/taskforcesh/bullmq) - Redis-based queue
+<p align="center">Built with care by <a href="https://www.glincker.com">GLINCKER LLC</a></p>

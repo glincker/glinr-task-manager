@@ -10,6 +10,7 @@
 
 import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
+import { z } from 'zod';
 import {
   signUpWithEmail,
   signInWithEmail,
@@ -30,6 +31,30 @@ import {
   redirectToLinear,
   handleLinearCallback,
 } from '../auth/linear-oauth.js';
+
+// =============================================================================
+// VALIDATION SCHEMAS
+// =============================================================================
+
+const signupSchema = z.object({
+  email: z.string().email('Invalid email address').max(255),
+  password: z.string().min(8, 'Password must be at least 8 characters').max(128),
+  name: z.string().min(1, 'Name is required').max(100).trim(),
+});
+
+const loginSchema = z.object({
+  email: z.string().email('Invalid email address').max(255),
+  password: z.string().min(1, 'Password is required').max(128),
+});
+
+const updateProfileSchema = z.object({
+  name: z.string().min(1).max(100).trim().optional(),
+  avatarUrl: z.string().url().max(500).optional(),
+  bio: z.string().max(500).optional(),
+  timezone: z.string().max(50).optional(),
+  locale: z.string().max(10).optional(),
+  onboardingCompleted: z.boolean().optional(),
+});
 
 export const authRoutes = new Hono();
 
@@ -52,12 +77,14 @@ const COOKIE_OPTIONS = {
 authRoutes.post('/signup', async (c) => {
   try {
     const body = await c.req.json();
-    const { email, password, name } = body;
+    const parsed = signupSchema.safeParse(body);
 
-    if (!email || !password || !name) {
-      return c.json({ error: 'Email, password, and name are required' }, 400);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0]?.message || 'Invalid input';
+      return c.json({ error: firstError }, 400);
     }
 
+    const { email, password, name } = parsed.data;
     const result = await signUpWithEmail(email, password, name);
 
     if (!result.success || !result.session) {
@@ -84,12 +111,14 @@ authRoutes.post('/signup', async (c) => {
 authRoutes.post('/login', async (c) => {
   try {
     const body = await c.req.json();
-    const { email, password } = body;
+    const parsed = loginSchema.safeParse(body);
 
-    if (!email || !password) {
-      return c.json({ error: 'Email and password are required' }, 400);
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0]?.message || 'Invalid input';
+      return c.json({ error: firstError }, 400);
     }
 
+    const { email, password } = parsed.data;
     const result = await signInWithEmail(email, password);
 
     if (!result.success || !result.session) {
@@ -306,16 +335,14 @@ authRoutes.patch('/me', async (c) => {
     }
 
     const body = await c.req.json();
-    const { name, avatarUrl, bio, timezone, locale, onboardingCompleted } = body;
+    const parsed = updateProfileSchema.safeParse(body);
 
-    const updatedUser = await updateUser(user.id, {
-      name,
-      avatarUrl,
-      bio,
-      timezone,
-      locale,
-      onboardingCompleted,
-    });
+    if (!parsed.success) {
+      const firstError = parsed.error.errors[0]?.message || 'Invalid input';
+      return c.json({ error: firstError }, 400);
+    }
+
+    const updatedUser = await updateUser(user.id, parsed.data);
 
     return c.json({ user: updatedUser });
   } catch (error) {

@@ -383,7 +383,7 @@ export function RootLayout({ children }: RootLayoutProps) {
 
       {/* Floating Liquid Glass Sidebar */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 p-2 transition-all duration-300 ease-out",
+        "global-sidebar fixed inset-y-0 left-0 z-50 p-2 transition-all duration-300 ease-out",
         collapsed ? "w-[72px]" : "w-64",
         sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
@@ -609,12 +609,12 @@ export function RootLayout({ children }: RootLayoutProps) {
 
       {/* Main content */}
       <div className={cn(
-        "flex flex-1 flex-col transition-all duration-300",
+        "global-content flex flex-1 flex-col transition-all duration-300",
         collapsed ? "lg:pl-[88px]" : "lg:pl-[272px]"
       )}>
         {/* Header - macOS Liquid Toolbar Style with scroll effects */}
         <header className={cn(
-          "sticky top-0 z-40 mx-3 mt-3 mb-0 transition-all duration-300",
+          "global-header sticky top-0 z-40 mx-3 mt-3 mb-0 transition-all duration-300",
           scrolled && "mt-0"
         )}>
           <div className={cn(

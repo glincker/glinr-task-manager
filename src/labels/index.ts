@@ -12,6 +12,10 @@ import { eq, and, isNull, desc, asc } from 'drizzle-orm';
 import { getDb } from '../storage/index.js';
 import { labels, ticketLabels } from '../storage/schema.js';
 
+// TODO(@copilot): Generate unit tests for this module
+// Key functions to test: createLabel, getLabel, listLabels, updateLabel, deleteLabel, addLabelToTicket, removeLabelFromTicket, getTicketLabels, setTicketLabels, findLabelByExternalId, findOrCreateLabel, syncLabelsFromGitHub
+// Test file location: src/labels/tests/index.test.ts
+
 // Types
 export interface Label {
   id: string;

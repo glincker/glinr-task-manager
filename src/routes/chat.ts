@@ -56,6 +56,7 @@ import {
   type AgenticStreamEvent,
 } from "../chat/index.js";
 import { getClient } from "../storage/index.js";
+import { trackChatUsage } from "../costs/token-tracker.js";
 
 const chatRoutes = new Hono();
 
@@ -1577,6 +1578,7 @@ chatRoutes.post(
       showThinking: z.boolean().optional().default(true),
       maxSteps: z.number().min(1).max(200).optional(),
       maxBudget: z.number().min(1000).optional(),
+      effort: z.enum(['low', 'medium', 'high', 'max']).optional(),
     }),
   ),
   async (c) => {
@@ -1641,26 +1643,13 @@ chatRoutes.post(
         sessionOverride,
       };
 
-      // Get tools
-      const tools = getDefaultChatTools();
+      // Get tools - agentic mode uses all tools (securityMode: full)
+      const tools = getAllChatTools();
 
-      // Build system prompt with agentic mode enabled
-      const systemPrompt =
-        (await buildSystemPrompt(conversation.presetId, context, {
-          enableTools: true,
-        })) +
-        `
-
-## AGENTIC MODE
-
-You are running in AGENTIC MODE. This means:
-1. You have access to tools and should use them to accomplish the user's request
-2. You can run multiple tools in sequence to complete complex tasks
-3. After each tool result, decide if you need more information or can proceed
-4. When the task is FULLY COMPLETE, call the \`complete_task\` tool with a summary
-
-Work autonomously towards the goal. Don't ask for confirmation - just do the work.
-`;
+      // Build system prompt with agent mode (uses AGENT_MODE_SUFFIX)
+      const systemPrompt = await buildSystemPrompt(conversation.presetId, context, {
+        agentMode: true,
+      });
 
       // Get existing messages
       const existingMessages = await getConversationMessages(conversationId);
@@ -1724,6 +1713,31 @@ Work autonomously towards the goal. Don't ask for confirmation - just do the wor
       c.header("X-Accel-Buffering", "no");
 
       return streamText(c, async (stream) => {
+        // Overall timeout for the agentic session (3 minutes)
+        const AGENTIC_TIMEOUT_MS = 3 * 60 * 1000;
+        let timedOut = false;
+        const timeoutId = setTimeout(async () => {
+          timedOut = true;
+          logger.warn("[Chat/Agentic] Session timed out", {
+            conversationId,
+            timeoutMs: AGENTIC_TIMEOUT_MS,
+          });
+          try {
+            await stream.write(
+              `data: ${JSON.stringify({
+                type: "error",
+                data: {
+                  message: "Agentic session timed out after 3 minutes. The task may be too complex — try breaking it into smaller steps.",
+                  code: "TIMEOUT",
+                },
+                timestamp: Date.now(),
+              })}\n\n`,
+            );
+          } catch {
+            // Stream may already be closed
+          }
+        }, AGENTIC_TIMEOUT_MS);
+
         // Send initial event with user message and compaction info
         await stream.write(
           `data: ${JSON.stringify({
@@ -1740,6 +1754,8 @@ Work autonomously towards the goal. Don't ask for confirmation - just do the wor
 
         let lastAssistantContent = "";
         let totalTokens = 0;
+        let inputTokensTotal: number | undefined;
+        let outputTokensTotal: number | undefined;
         let finalModel = "";
         let finalProvider = "";
         let collectedToolCalls: Array<{
@@ -1768,7 +1784,11 @@ Work autonomously towards the goal. Don't ask for confirmation - just do the wor
             showThinking: body.showThinking,
             maxSteps: body.maxSteps,
             maxBudget: body.maxBudget,
+            effort: body.effort,
           })) {
+            // Check if we've timed out
+            if (timedOut) break;
+
             // Stream each event to the client
             await stream.write(`data: ${JSON.stringify(event)}\n\n`);
 
@@ -1780,6 +1800,8 @@ Work autonomously towards the goal. Don't ask for confirmation - just do the wor
             if (event.type === "complete") {
               const completeData = event.data as {
                 totalTokens: number;
+                inputTokens?: number;
+                outputTokens?: number;
                 model: string;
                 provider: string;
                 toolCalls?: Array<{
@@ -1791,14 +1813,22 @@ Work autonomously towards the goal. Don't ask for confirmation - just do the wor
                 }>;
               };
               totalTokens = completeData.totalTokens;
+              inputTokensTotal = completeData.inputTokens;
+              outputTokensTotal = completeData.outputTokens;
               finalModel = completeData.model;
               finalProvider = completeData.provider;
               collectedToolCalls = completeData.toolCalls || [];
             }
           }
 
+          // Clear the timeout - we completed normally
+          clearTimeout(timeoutId);
+
           // Save assistant response after streaming completes
           if (lastAssistantContent) {
+            const promptTokens = inputTokensTotal ?? Math.floor(totalTokens * 0.7);
+            const completionTokens = outputTokensTotal ?? (totalTokens - promptTokens);
+
             const assistantMessage = await addMessage({
               conversationId,
               role: "assistant",
@@ -1808,14 +1838,19 @@ Work autonomously towards the goal. Don't ask for confirmation - just do the wor
               tokenUsage:
                 totalTokens > 0
                   ? {
-                      prompt: Math.floor(totalTokens * 0.7),
-                      completion: Math.floor(totalTokens * 0.3),
+                      prompt: promptTokens,
+                      completion: completionTokens,
                       total: totalTokens,
                     }
                   : undefined,
               toolCalls:
                 collectedToolCalls.length > 0 ? collectedToolCalls : undefined,
             });
+
+            // Track in-memory usage for cost dashboard
+            if (totalTokens > 0 && finalModel) {
+              trackChatUsage(finalModel, totalTokens, inputTokensTotal, outputTokensTotal);
+            }
 
             // Send final saved message event
             await stream.write(
@@ -1827,6 +1862,7 @@ Work autonomously towards the goal. Don't ask for confirmation - just do the wor
             );
           }
         } catch (error) {
+          clearTimeout(timeoutId);
           logger.error(
             "[Chat] Agentic streaming error:",
             error instanceof Error ? error : undefined,

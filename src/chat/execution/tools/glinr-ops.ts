@@ -308,23 +308,25 @@ DO NOT just list projects and stop - you must CREATE the ticket to complete the 
 
       logger.info(`[GLINR] Created ticket ${ticketKey}: ${params.title}`);
 
-      return {
-        success: true,
-        data: {
-          id,
-          key: ticketKey,
-          title: params.title,
-          description: params.description,
-          status: 'backlog',
-          type: params.type,
-          priority: params.priority,
-          labels: params.labels,
-          storyPoints: params.storyPoints,
-          projectKey: project.key,
-          createdAt: now.toISOString(),
-          url: `/tickets/${id}`,
-        },
+      const data: TicketResult = {
+        id,
+        key: ticketKey,
+        title: params.title,
+        description: params.description,
+        status: 'backlog',
+        type: params.type,
+        priority: params.priority,
+        labels: params.labels,
+        storyPoints: params.storyPoints,
+        projectKey: project.key,
+        createdAt: now.toISOString(),
+        url: `/tickets/${id}`,
       };
+
+      const labelsLine = params.labels?.length ? `\n- Labels: ${params.labels.join(', ')}` : '';
+      const output = `## Ticket Created\n**${ticketKey}** — ${params.title}\n- Type: ${params.type}\n- Priority: ${params.priority}\n- Status: backlog${labelsLine}`;
+
+      return { success: true, data, output };
     } catch (error) {
       logger.error('[GLINR] Create ticket error:', error instanceof Error ? error : undefined);
       return {
@@ -396,18 +398,19 @@ export const createProjectTool: ToolDefinition<CreateProjectParams, ProjectResul
 
       logger.info(`[GLINR] Created project ${key}: ${params.name}`);
 
-      return {
-        success: true,
-        data: {
-          id,
-          name: params.name,
-          key,
-          description: params.description,
-          icon: params.icon || '📁',
-          color: params.color || '#6366f1',
-          status: 'active',
-        },
+      const data: ProjectResult = {
+        id,
+        name: params.name,
+        key,
+        description: params.description,
+        icon: params.icon || '📁',
+        color: params.color || '#6366f1',
+        status: 'active',
       };
+
+      const output = `## Project Created\n**${params.name}** (${key})${params.description ? `\n${params.description}` : ''}`;
+
+      return { success: true, data, output };
     } catch (error) {
       logger.error('[GLINR] Create project error:', error instanceof Error ? error : undefined);
       return {
@@ -525,12 +528,21 @@ export const listTicketsTool: ToolDefinition<ListTicketsParams, { tickets: Ticke
         url: `/tickets/${t.id}`,
       }));
 
+      // Build markdown output
+      let output: string;
+      if (ticketResults.length === 0) {
+        output = '## Tickets\n\nNo tickets found matching your criteria.';
+      } else {
+        const rows = ticketResults.map(
+          t => `| ${t.key} | ${t.title} | ${t.status} | ${t.priority} |`
+        );
+        output = `## Tickets (${ticketResults.length})\n\n| Key | Title | Status | Priority |\n|-----|-------|--------|----------|\n${rows.join('\n')}`;
+      }
+
       return {
         success: true,
-        data: {
-          tickets: ticketResults,
-          total: ticketResults.length,
-        },
+        data: { tickets: ticketResults, total: ticketResults.length },
+        output,
       };
     } catch (error) {
       logger.error('[GLINR] List tickets error:', error instanceof Error ? error : undefined);
@@ -611,12 +623,21 @@ Example: User says "create a bug ticket" →
         ? `NEXT STEP: To create a ticket, call create_ticket with one of these projectKeys: ${projectKeys}`
         : `No projects found. Create a project first with create_project, then create tickets in it.`;
 
+      // Build markdown output
+      let output: string;
+      if (projectResults.length === 0) {
+        output = '## Projects\n\nNo projects found. Use `create_project` to create one.';
+      } else {
+        const lines = projectResults.map(
+          p => `- **${p.name}** (${p.key}) — ${p.ticketCount ?? 0} tickets`
+        );
+        output = `## Projects\n\n${lines.join('\n')}`;
+      }
+
       return {
         success: true,
-        data: {
-          projects: projectResults,
-          hint,
-        },
+        data: { projects: projectResults, hint },
+        output,
       };
     } catch (error) {
       logger.error('[GLINR] List projects error:', error instanceof Error ? error : undefined);
@@ -664,9 +685,9 @@ export const updateTicketTool: ToolDefinition<UpdateTicketParams, TicketResult> 
         };
       }
 
-      // Build update object
+      // Build update object — updatedAt must be Date (schema uses mode: "timestamp")
       const updates: Record<string, unknown> = {
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       };
 
       if (params.title !== undefined) updates.title = params.title;
@@ -684,23 +705,32 @@ export const updateTicketTool: ToolDefinition<UpdateTicketParams, TicketResult> 
 
       logger.info(`[GLINR] Updated ticket ${params.ticketKey}`);
 
-      return {
-        success: true,
-        data: {
-          id: updated!.id,
-          key: params.ticketKey,
-          title: updated!.title,
-          description: updated!.description || undefined,
-          status: updated!.status,
-          type: updated!.type,
-          priority: updated!.priority,
-          labels: updated!.labels || undefined,
-          storyPoints: updated!.estimate || undefined,
-          projectKey: updated!.projectKey,
-          createdAt: formatDateSafe(updated!.createdAt),
-          url: `/tickets/${updated!.id}`,
-        },
+      const data: TicketResult = {
+        id: updated!.id,
+        key: params.ticketKey,
+        title: updated!.title,
+        description: updated!.description || undefined,
+        status: updated!.status,
+        type: updated!.type,
+        priority: updated!.priority,
+        labels: updated!.labels || undefined,
+        storyPoints: updated!.estimate || undefined,
+        projectKey: updated!.projectKey,
+        createdAt: formatDateSafe(updated!.createdAt),
+        url: `/tickets/${updated!.id}`,
       };
+
+      // Build change summary
+      const changes: string[] = [];
+      if (params.status !== undefined) changes.push(`- Status: ${ticket.status} → ${params.status}`);
+      if (params.priority !== undefined) changes.push(`- Priority: ${ticket.priority} → ${params.priority}`);
+      if (params.type !== undefined) changes.push(`- Type: ${ticket.type} → ${params.type}`);
+      if (params.title !== undefined) changes.push(`- Title: ${params.title}`);
+      if (params.labels !== undefined) changes.push(`- Labels: ${params.labels.join(', ')}`);
+      if (params.storyPoints !== undefined) changes.push(`- Story Points: ${params.storyPoints}`);
+      const output = `## Ticket Updated\n**${params.ticketKey}** — ${updated!.title}\n${changes.join('\n')}`;
+
+      return { success: true, data, output };
     } catch (error) {
       logger.error('[GLINR] Update ticket error:', error instanceof Error ? error : undefined);
       return {
@@ -741,23 +771,26 @@ export const getTicketTool: ToolDefinition<GetTicketParams, TicketResult> = {
         };
       }
 
-      return {
-        success: true,
-        data: {
-          id: ticket.id,
-          key: params.ticketKey,
-          title: ticket.title,
-          description: ticket.description || undefined,
-          status: ticket.status,
-          type: ticket.type,
-          priority: ticket.priority,
-          labels: ticket.labels || undefined,
-          storyPoints: ticket.estimate || undefined,
-          projectKey: ticket.projectKey,
-          createdAt: formatDateSafe(ticket.createdAt),
-          url: `/tickets/${ticket.id}`,
-        },
+      const data: TicketResult = {
+        id: ticket.id,
+        key: params.ticketKey,
+        title: ticket.title,
+        description: ticket.description || undefined,
+        status: ticket.status,
+        type: ticket.type,
+        priority: ticket.priority,
+        labels: ticket.labels || undefined,
+        storyPoints: ticket.estimate || undefined,
+        projectKey: ticket.projectKey,
+        createdAt: formatDateSafe(ticket.createdAt),
+        url: `/tickets/${ticket.id}`,
       };
+
+      const labelsLine = ticket.labels?.length ? `\n- Labels: ${(ticket.labels as string[]).join(', ')}` : '';
+      const descLine = ticket.description ? `\n\n${ticket.description}` : '';
+      const output = `## ${params.ticketKey} — ${ticket.title}\n- Status: ${ticket.status}\n- Type: ${ticket.type}\n- Priority: ${ticket.priority}${labelsLine}${descLine}`;
+
+      return { success: true, data, output };
     } catch (error) {
       logger.error('[GLINR] Get ticket error:', error instanceof Error ? error : undefined);
       return {

@@ -78,6 +78,7 @@ export function AgenticThinking({ events, isActive, className }: AgenticThinking
   const [summary, setSummary] = useState<string | null>(null);
   const [totalTokens, setTotalTokens] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const devMode = typeof window !== 'undefined' && localStorage.getItem('glinr-dev-mode') === 'true';
 
   // Process events into structured state
   useEffect(() => {
@@ -216,8 +217,8 @@ export function AgenticThinking({ events, isActive, className }: AgenticThinking
       <button
         onClick={() => setExpanded(!expanded)}
         className={cn(
-          'w-full flex items-center gap-3 p-3 text-left hover:bg-muted/30 transition-colors',
-          isActive && 'animate-pulse'
+          'w-full flex items-center gap-3 text-left hover:bg-muted/30 transition-colors',
+          isActive ? 'p-3 animate-pulse' : devMode ? 'p-3' : 'px-3 py-2'
         )}
       >
         {expanded ? (
@@ -241,6 +242,11 @@ export function AgenticThinking({ events, isActive, className }: AgenticThinking
                 Execution failed
               </span>
             </>
+          ) : !devMode ? (
+            <>
+              <div className="h-2 w-2 rounded-full bg-green-500 shrink-0" />
+              <span className="text-xs text-muted-foreground">Done</span>
+            </>
           ) : (
             <>
               <Sparkles className="h-4 w-4 text-green-400 shrink-0" />
@@ -251,20 +257,22 @@ export function AgenticThinking({ events, isActive, className }: AgenticThinking
           )}
         </div>
 
-        {/* Stats badge */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-          {totalToolCalls > 0 && (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted/50">
-              <Wrench className="h-3 w-3" />
-              {totalToolCalls}
-            </span>
-          )}
-          {totalTokens > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-muted/50">
-              {totalTokens.toLocaleString()} tokens
-            </span>
-          )}
-        </div>
+        {/* Stats badge — only in dev mode or while active */}
+        {(devMode || isActive) && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+            {totalToolCalls > 0 && (
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted/50">
+                <Wrench className="h-3 w-3" />
+                {totalToolCalls}
+              </span>
+            )}
+            {totalTokens > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-muted/50">
+                {totalTokens.toLocaleString()} tokens
+              </span>
+            )}
+          </div>
+        )}
       </button>
 
       {/* Expanded content */}

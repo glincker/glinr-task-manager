@@ -7,44 +7,20 @@
  */
 
 import { Hono } from 'hono';
-import { randomUUID, createHash, randomBytes } from 'crypto';
+import { randomUUID, randomBytes } from 'crypto';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../storage/index.js';
 import { users, userPreferences } from '../storage/schema.js';
 import { getSettings, updateSettings, isGitHubOAuthConfigured } from '../settings/index.js';
 import { createSession } from '../auth/auth-service.js';
+import {
+  hashPassword,
+  generateRecoveryCodes,
+  hashRecoveryCodes,
+  hashRecoveryCode,
+} from '../auth/password.js';
 
 const setup = new Hono();
-
-// =============================================================================
-// HELPERS
-// =============================================================================
-
-function hashPassword(password: string, salt?: string): { hash: string; salt: string } {
-  const useSalt = salt || randomBytes(16).toString('hex');
-  const hash = createHash('sha256')
-    .update(password + useSalt)
-    .digest('hex');
-  return { hash, salt: useSalt };
-}
-
-function generateRecoveryCodes(count: number = 8): string[] {
-  const codes: string[] = [];
-  for (let i = 0; i < count; i++) {
-    // Generate 8-character alphanumeric code
-    const code = randomBytes(4).toString('hex').toUpperCase();
-    // Format as XXXX-XXXX
-    codes.push(`${code.slice(0, 4)}-${code.slice(4)}`);
-  }
-  return codes;
-}
-
-function hashRecoveryCodes(codes: string[]): string[] {
-  return codes.map((code) => {
-    const { hash } = hashPassword(code.replace('-', ''));
-    return hash;
-  });
-}
 
 // =============================================================================
 // ROUTES
@@ -330,9 +306,8 @@ setup.post('/admin', async (c) => {
     const recoveryCodes = generateRecoveryCodes(8);
     const hashedRecoveryCodes = hashRecoveryCodes(recoveryCodes);
 
-    // Hash password
-    const { hash, salt } = hashPassword(password);
-    const passwordHash = `${salt}:${hash}`;
+    // Hash password with scrypt
+    const passwordHash = hashPassword(password);
 
     // Create admin user
     const userId = randomUUID();
@@ -424,11 +399,11 @@ setup.post('/verify-recovery-code', async (c) => {
     }
 
     const storedHashes: string[] = JSON.parse(user.recoveryCodes);
-    const normalizedCode = code.replace('-', '').toUpperCase();
-    const { hash: codeHash } = hashPassword(normalizedCode);
+    const normalizedCode = code.replace(/-/g, '').toUpperCase();
+    const codeHash = hashRecoveryCode(normalizedCode);
 
     // Check if code matches any stored hash
-    const codeIndex = storedHashes.findIndex((h) => h === codeHash);
+    const codeIndex = storedHashes.findIndex((h: string) => h === codeHash);
 
     if (codeIndex === -1) {
       return c.json({ error: 'Invalid email or recovery code' }, 401);
@@ -505,9 +480,8 @@ setup.post('/reset-password', async (c) => {
       return c.json({ error: 'Reset token has expired' }, 401);
     }
 
-    // Hash new password
-    const { hash, salt } = hashPassword(newPassword);
-    const passwordHash = `${salt}:${hash}`;
+    // Hash new password with scrypt
+    const passwordHash = hashPassword(newPassword);
 
     // Update password and clear reset token
     await db

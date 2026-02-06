@@ -20,7 +20,10 @@ export type {
   AgentConfig,
   AgentEvents,
   StepContext,
+  ThinkingEffort,
 } from './types.js';
+
+export { EFFORT_BUDGET_MAP } from './types.js';
 
 // =============================================================================
 // Executor
@@ -41,6 +44,7 @@ export {
   hasAnyToolCall,
   toolCallCount,
   totalToolCalls,
+  sameToolRepeated,
   // Budget conditions
   budgetExceeded,
   budgetBelowThreshold,

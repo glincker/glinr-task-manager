@@ -8,10 +8,10 @@ import type { Task, TaskResult, TaskArtifact } from "../types/task.js";
 
 // Regex patterns for artifact extraction
 // Defined at module scope to avoid recompilation
-const COMMIT_PATTERN = /commit\s+([a-f0-9]{6,40})/gi;
+const COMMIT_PATTERN = /(?:commit|committed(?: as)?|sha)[:\s]+([a-f0-9]{6,40})/gi;
 const PR_PATTERN = /https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/g;
 const FILE_PATTERN =
-  /(?:created|modified|edited|wrote)\s+(?:file\s+)?[`"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`"]?/gi;
+  /(?:created|modified|edited|wrote|updated|deleted)[:\s]+(?:file\s+)?[`"]?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)[`"]?/gi;
 
 /**
  * OpenClaw Agent Adapter
@@ -191,7 +191,7 @@ ${task.description ? `\n### Description\n${task.description}` : ""}
 ### Source
 ${task.sourceUrl ? `- Issue: ${task.sourceUrl}` : ""}
 ${task.repository ? `- Repository: ${task.repository}` : ""}
-${task.labels.length > 0 ? `- Labels: ${task.labels.join(", ")}` : ""}
+${task.labels && task.labels.length > 0 ? `- Labels: ${task.labels.join(", ")}` : ""}
 
 ### Instructions
 ${task.prompt}

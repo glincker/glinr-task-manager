@@ -246,7 +246,7 @@ export const ANTHROPIC_MODELS: ModelDefinition[] = [
     provider: 'anthropic',
     capabilities: ['text', 'vision', 'code', 'reasoning', 'function_calling', 'streaming'],
     contextWindow: 1000000,
-    maxOutputTokens: 32000,
+    maxOutputTokens: 128000,
     supportsStreaming: true,
     supportsVision: true,
     cost: { inputPerMillion: 5, outputPerMillion: 25, cacheReadPerMillion: 0.5, cacheWritePerMillion: 1.25 },

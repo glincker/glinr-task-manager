@@ -216,14 +216,22 @@ export async function createChatToolHandler(
           };
         }
 
-        // Return the result
+        // Return clean data for AI SDK (avoids ModelMessage[] schema errors)
+        // The AI only sees `result` — `output` is preserved for UI rendering
+        if (result.result.success) {
+          // Extract clean data for the AI model
+          const aiResult = result.result.data ?? { success: true };
+          return {
+            result: aiResult,
+            output: result.result.output,  // Sidecar for UI display
+          };
+        }
+
         return {
-          result: result.result.success
-            ? result.result.data ?? result.result.output ?? { success: true }
-            : {
-                success: false,
-                error: result.result.error?.message || 'Tool execution failed',
-              },
+          result: {
+            success: false,
+            error: result.result.error?.message || 'Tool execution failed',
+          },
         };
       } catch (error) {
         logger.error(`[ChatToolHandler] Tool execution error: ${toolName}`, error instanceof Error ? error : undefined);
@@ -270,13 +278,19 @@ export async function createChatToolHandler(
           return null;
         }
 
+        if (result.result.success) {
+          const aiResult = result.result.data ?? { success: true };
+          return {
+            result: aiResult,
+            output: result.result.output,
+          };
+        }
+
         return {
-          result: result.result.success
-            ? result.result.data ?? result.result.output ?? { success: true }
-            : {
-                success: false,
-                error: result.result.error?.message || 'Tool execution failed',
-              },
+          result: {
+            success: false,
+            error: result.result.error?.message || 'Tool execution failed',
+          },
         };
       } catch (error) {
         logger.error(`[ChatToolHandler] Approval handling error`, error instanceof Error ? error : undefined);

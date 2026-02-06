@@ -40,12 +40,7 @@ function DropdownMenuContent({
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
-          // Glass effect with proper backdrop blur
-          "z-[100] min-w-[8rem] overflow-hidden rounded-xl p-1",
-          "bg-[var(--popover)]/95 backdrop-blur-xl backdrop-saturate-150",
-          "border border-white/20 dark:border-white/10",
-          "text-[var(--popover-foreground)]",
-          "shadow-xl shadow-black/10 dark:shadow-black/30",
+          "z-[100] min-w-[8rem] overflow-hidden rounded-xl p-1 modal-glass",
           // Animations
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           // Sizing
@@ -242,11 +237,7 @@ function DropdownMenuSubContent({
     <DropdownMenuPrimitive.SubContent
       data-slot="dropdown-menu-sub-content"
       className={cn(
-        "z-[100] min-w-[8rem] overflow-hidden rounded-xl p-1",
-        "bg-[var(--popover)]/95 backdrop-blur-xl backdrop-saturate-150",
-        "border border-white/20 dark:border-white/10",
-        "text-[var(--popover-foreground)]",
-        "shadow-xl shadow-black/10 dark:shadow-black/30",
+        "z-[100] min-w-[8rem] overflow-hidden rounded-xl p-1 modal-glass",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
         "origin-(--radix-dropdown-menu-content-transform-origin)",
         className

@@ -215,9 +215,9 @@ h2 { font-weight: 700; letter-spacing: -0.025em; }
 }
 
 @utility glass {
-  background: hsl(var(--card) / 0.75);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background: color-mix(in srgb, hsl(var(--card)), transparent 25%);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
   border: 1px solid hsl(var(--foreground) / 0.05);
   box-shadow: 
     inset 0 1px 1px 0 oklch(1 0 0 / 0.05),
@@ -225,13 +225,23 @@ h2 { font-weight: 700; letter-spacing: -0.025em; }
 }
 
 @utility glass-heavy {
-  background: hsl(var(--card) / 0.85);
-  backdrop-filter: blur(40px) saturate(200%);
-  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  background: color-mix(in srgb, hsl(var(--card)), transparent 15%);
+  backdrop-filter: blur(40px) saturate(250%);
+  -webkit-backdrop-filter: blur(40px) saturate(250%);
   border: none;
   box-shadow: 
     0 0 0 1px oklch(from var(--primary) l c h / 0.1) inset,
     var(--shadow-elevated);
+}
+
+@utility modal-glass {
+  background: color-mix(in srgb, hsl(var(--card)), transparent 10%);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: none;
+  box-shadow: 
+    0 25px 50px -12px oklch(0 0 0 / 0.35),
+    inset 0 1px 1px 0 oklch(1 0 0 / 0.15);
 }
 
 @utility field-recessed {
@@ -1119,6 +1129,11 @@ h2 { font-weight: 700; letter-spacing: -0.025em; }
   writing-mode: vertical-rl;
   text-orientation: mixed;
 }
+
+/* Chat fullscreen mode — hide global layout elements */
+.chat-fullscreen .global-sidebar { display: none !important; }
+.chat-fullscreen .global-header { display: none !important; }
+.chat-fullscreen .global-content { padding-left: 0 !important; padding: 0 !important; }
 
 /* ===== React Day Picker v9 Custom Styles ===== */
 /* Custom styling that works in both light and dark mode */

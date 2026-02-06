@@ -232,7 +232,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     const artifacts: TaskArtifact[] = [];
 
     // Parse for commits
-    const commitPattern = /commit\s+([a-f0-9]{6,40})/gi;
+    const commitPattern = /(?:commit|committed(?: as)?|sha)[:\s]+([a-f0-9]{6,40})/gi;
     let match;
     while ((match = commitPattern.exec(output)) !== null) {
       artifacts.push({ type: "commit", sha: match[1] });

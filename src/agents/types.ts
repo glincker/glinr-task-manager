@@ -63,6 +63,10 @@ export interface AgentState {
   maxBudget: number;
   /** Tokens used so far */
   usedBudget: number;
+  /** Input tokens used so far */
+  inputTokensUsed: number;
+  /** Output tokens used so far */
+  outputTokensUsed: number;
   /** History of all tool calls */
   toolCallHistory: ToolCallRecord[];
   /** Tool calls waiting for approval */
@@ -140,6 +144,10 @@ export interface AgentResult {
   totalSteps: number;
   /** Total tokens used */
   totalTokens: number;
+  /** Input tokens used */
+  inputTokens?: number;
+  /** Output tokens used */
+  outputTokens?: number;
 }
 
 // =============================================================================
@@ -157,6 +165,17 @@ export interface StopCondition {
 // Agent Configuration
 // =============================================================================
 
+/** Thinking effort level for Anthropic models (Opus 4.6+) */
+export type ThinkingEffort = 'low' | 'medium' | 'high' | 'max';
+
+/** Map effort levels to thinking budget tokens */
+export const EFFORT_BUDGET_MAP: Record<ThinkingEffort, number> = {
+  low: 1024,
+  medium: 5000,
+  high: 12000,
+  max: 32000,
+};
+
 export interface AgentConfig {
   /** Maximum steps before forced stop (safety limit) */
   maxSteps?: number;
@@ -170,6 +189,8 @@ export interface AgentConfig {
   stepTimeoutMs?: number;
   /** Enable streaming responses */
   enableStreaming?: boolean;
+  /** Thinking effort level for Anthropic models (low saves cost, max for complex reasoning) */
+  effort?: ThinkingEffort;
 }
 
 // =============================================================================

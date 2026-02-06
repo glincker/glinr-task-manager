@@ -218,7 +218,7 @@ export class OllamaAdapter implements AgentAdapter {
     if (task.branch) {
       prompt += `- Branch: ${task.branch}\n`;
     }
-    if (task.labels.length > 0) {
+    if (task.labels && task.labels.length > 0) {
       prompt += `- Labels: ${task.labels.join(", ")}\n`;
     }
 
@@ -292,7 +292,7 @@ Provide clear explanations and well-structured output.`;
    * Infer task type from labels and content
    */
   private inferTaskType(task: Task): string {
-    const labels = task.labels.map((l) => l.toLowerCase());
+    const labels = (task.labels || []).map((l) => l.toLowerCase());
     const labelSet = new Set(labels);
     const content =
       `${task.title} ${task.description || ""} ${task.prompt}`.toLowerCase();

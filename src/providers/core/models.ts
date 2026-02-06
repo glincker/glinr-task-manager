@@ -92,7 +92,7 @@ export const MODEL_CATALOG: ModelInfo[] = [
     name: 'Claude Opus 4.6',
     provider: 'anthropic',
     contextWindow: 1000000,
-    maxOutput: 32000,
+    maxOutput: 128000,
     supportsVision: true,
     supportsStreaming: true,
     supportsTools: true,
@@ -357,7 +357,7 @@ export const MODEL_CATALOG: ModelInfo[] = [
     maxOutput: 8192,
     supportsVision: false,
     supportsStreaming: true,
-    supportsTools: true,
+    supportsTools: false, // Reverted: Native tool calling flaky for local models
     costPer1MInput: 0,
     costPer1MOutput: 0,
   },
