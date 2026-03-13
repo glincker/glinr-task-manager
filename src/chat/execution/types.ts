@@ -29,14 +29,113 @@ export interface SecurityPolicy {
   allowlist?: AllowlistEntry[];
   askTimeout?: number; // ms to wait for user approval
   sandboxConfig?: SandboxConfig;
+  dmPairing?: DMPairingConfig;
+  channelAllowlist?: ChannelAllowlistEntry[];
+  execPolicies?: ExecApprovalPolicy[];
+  pluginAllowlist?: PluginAllowlistEntry[];
+  channelPolicies?: ChannelPolicy[];
 }
 
 export interface AllowlistEntry {
   pattern: string; // glob pattern or regex
-  type: 'command' | 'path' | 'url';
+  type: 'command' | 'path' | 'url' | 'plugin';
   description?: string;
   addedAt: string;
   addedBy?: string;
+}
+
+// DM pairing - require approval code for unknown senders
+export interface DMPairingConfig {
+  enabled: boolean;
+  codeLength: number; // default 6
+  codeExpiryMs: number; // default 5 minutes
+  maxAttempts: number; // default 3
+  trustedSenders: string[]; // pre-approved user IDs
+}
+
+export interface DMPairingSession {
+  code: string;
+  senderId: string;
+  channelProvider: string;
+  createdAt: number;
+  expiresAt: number;
+  attempts: number;
+  verified: boolean;
+}
+
+// Channel allowlisting
+export interface ChannelAllowlistEntry {
+  channelId: string;
+  provider: string; // slack, discord, telegram, etc.
+  name?: string;
+  enabled: boolean;
+  addedAt: string;
+  addedBy?: string;
+}
+
+// Granular exec approval policies
+export interface ExecApprovalPolicy {
+  id: string;
+  name: string;
+  match: {
+    tools?: string[]; // tool names to match
+    commands?: string[]; // command glob patterns
+    paths?: string[]; // path glob patterns
+    users?: string[]; // user IDs
+    channels?: string[]; // channel IDs
+  };
+  action: 'allow' | 'deny' | 'ask' | 'sandbox';
+  priority: number; // higher = checked first
+  enabled: boolean;
+}
+
+// Plugin allowlisting
+export interface PluginAllowlistEntry {
+  pluginId: string;
+  name: string;
+  version?: string; // semver range
+  permissions: PluginPermission[];
+  addedAt: string;
+  addedBy?: string;
+  trusted: boolean;
+}
+
+export type PluginPermission =
+  | 'exec' // shell execution
+  | 'filesystem' // file read/write
+  | 'network' // HTTP requests
+  | 'system' // system info
+  | 'browser' // browser automation
+  | 'memory' // memory access
+  | 'tools'; // register new tools
+
+// Per-channel retry/timeout policies
+export interface ChannelPolicy {
+  channelId: string;
+  provider: string;
+  retryAttempts: number; // default 3
+  retryDelayMs: number; // default 1000
+  timeoutMs: number; // default 300000 (5 min)
+  maxTokens?: number; // per-channel token limit
+  rateLimit?: { requests: number; windowMs: number };
+}
+
+// Security risk analysis
+export type SecurityRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface SecurityRiskAnalysis {
+  level: SecurityRiskLevel;
+  score: number; // 0-100
+  factors: SecurityRiskFactor[];
+  recommendation: 'allow' | 'review' | 'deny';
+  explanation: string;
+}
+
+export interface SecurityRiskFactor {
+  name: string;
+  weight: number;
+  detected: boolean;
+  detail?: string;
 }
 
 export interface SandboxConfig {

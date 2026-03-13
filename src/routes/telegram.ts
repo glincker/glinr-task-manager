@@ -26,6 +26,7 @@ import {
 import { getChatRegistry } from '../chat/providers/registry.js';
 import type { TelegramAccountConfig } from '../chat/providers/types.js';
 import { logger } from '../utils/logger.js';
+import { isDuplicateWebhookEvent } from './webhook-dedup.js';
 
 // Re-export formatToolResult for channel response formatting
 // Usage: formatToolResult(toolName, result, 'html') → { summary, detail }
@@ -113,6 +114,10 @@ telegram.post('/webhook', async (c) => {
   } catch {
     logger.error('[Telegram] Invalid JSON in webhook request');
     return c.json({ error: 'Invalid JSON' }, 400);
+  }
+
+  if (isDuplicateWebhookEvent('telegram:update', update.update_id)) {
+    return c.json({ ok: true });
   }
 
   // Extract sender info for allowlist check

@@ -13,7 +13,6 @@ import {
   createScheduledJob,
   getScheduledJob,
   listScheduledJobs,
-  updateScheduledJob,
   pauseScheduledJob,
   resumeScheduledJob,
   deleteScheduledJob,
@@ -46,11 +45,11 @@ const CronCreateParamsSchema = z.object({
     .describe('For HTTP jobs: HTTP method (default: GET)'),
   headers: z.record(z.string()).optional()
     .describe('For HTTP jobs: Headers to include'),
-  body: z.any().optional()
+  body: z.unknown().optional()
     .describe('For HTTP jobs: Request body (will be JSON-encoded)'),
   tool: z.string().optional()
     .describe('For tool jobs: Name of the tool to execute'),
-  toolParams: z.record(z.any()).optional()
+  toolParams: z.record(z.unknown()).optional()
     .describe('For tool jobs: Parameters to pass to the tool'),
   command: z.string().optional()
     .describe('For script jobs: Shell command to run'),
@@ -128,7 +127,7 @@ Or use \`interval\` for fixed millisecond intervals.`,
       }
 
       // Build payload based on type
-      let payload: Record<string, any> = {};
+      let payload: Record<string, unknown> = {};
 
       switch (params.type) {
         case 'http':

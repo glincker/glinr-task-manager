@@ -7,8 +7,6 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from 'next-themes';
 import {
   Zap,
@@ -20,8 +18,6 @@ import {
   EyeOff,
   Loader2,
   AlertCircle,
-  Github,
-  Shield,
   Sun,
   Moon,
   Eclipse,
@@ -849,10 +845,6 @@ function StepTracker({
 // =============================================================================
 
 export function OOBEWizard() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { resolvedTheme } = useTheme();
-
   const [path, setPath] = useState<SetupPath>('quick');
   const [step, setStep] = useState(0);
   const [data, setData] = useState<SetupData>({ name: '' });

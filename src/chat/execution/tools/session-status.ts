@@ -7,7 +7,8 @@
 
 import { z } from 'zod';
 import type { ToolDefinition, ToolResult, ToolExecutionContext } from '../types.js';
-import { MODEL_ALIASES, MODEL_CATALOG, type ModelInfo } from '../../../providers/ai-sdk.js';
+import { MODEL_ALIASES, MODEL_CATALOG } from '../../../providers/core/models.js';
+import type { ModelInfo } from '../../../providers/core/types.js';
 
 // =============================================================================
 // Schema
@@ -55,6 +56,14 @@ export interface SessionStatusResult {
   message: string;
 }
 
+type ToolRuntimeInfo = {
+  runtimeInfo?: {
+    model?: string;
+    provider?: string;
+    defaultModel?: string;
+  };
+};
+
 export const sessionStatusTool: ToolDefinition<SessionStatusParams, SessionStatusResult> = {
   name: 'session_status',
   description: `Show current session status including model, usage, and configuration.
@@ -81,9 +90,10 @@ Use this tool when users ask "what model is this", "which AI am I talking to", o
     switch (params.action) {
       case 'status': {
         // Get runtime info from context if available
-        const runtimeModel = (context as any).runtimeInfo?.model || 'unknown';
-        const runtimeProvider = (context as any).runtimeInfo?.provider || 'unknown';
-        const defaultModel = (context as any).runtimeInfo?.defaultModel || 'anthropic/claude-sonnet-4-5';
+        const runtimeInfo = (context as ToolExecutionContext & ToolRuntimeInfo).runtimeInfo;
+        const runtimeModel = runtimeInfo?.model || 'unknown';
+        const runtimeProvider = runtimeInfo?.provider || 'unknown';
+        const defaultModel = runtimeInfo?.defaultModel || 'anthropic/claude-sonnet-4-5';
 
         return {
           success: true,

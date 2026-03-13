@@ -86,6 +86,8 @@ export interface VoiceService {
   isTTSAvailable(): boolean;
   /** Returns the active TTS provider name, or null if none configured. */
   getTTSProvider(): string | null;
+  /** Returns the active STT provider name, or null if none configured. */
+  getSTTProvider(): string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +135,10 @@ class VoiceServiceImpl implements VoiceService {
 
   getTTSProvider(): string | null {
     return this.ttsProvider;
+  }
+
+  getSTTProvider(): string | null {
+    return this.sttProvider;
   }
 
   async listVoices(): Promise<VoiceInfo[]> {

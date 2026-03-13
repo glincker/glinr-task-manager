@@ -17,7 +17,8 @@ import { tool as createTool, jsonSchema } from 'ai';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { z } from 'zod';
 import { AgentExecutor, type AgentState, type AgentConfig, type ToolCallRecord } from '../agents/index.js';
-import { aiProvider, MODEL_ALIASES, type ChatMessage, type ProviderType } from '../providers/index.js';
+import { MODEL_ALIASES } from '../providers/core/models.js';
+import type { ChatMessage, ProviderType } from '../providers/core/types.js';
 import { normalizeToolSchema } from '../providers/schema-utils.js';
 import { logger } from '../utils/logger.js';
 import type { ChatToolHandler } from './tool-handler.js';
@@ -32,6 +33,22 @@ import {
   type ModelResolver,
 } from './failover/index.js';
 
+type AIProviderManager = Awaited<
+  typeof import('../providers/ai-sdk.js')
+>['aiProvider'];
+
+let aiProviderPromise: Promise<AIProviderManager> | null = null;
+
+async function getAIProvider(): Promise<AIProviderManager> {
+  if (!aiProviderPromise) {
+    aiProviderPromise = import('../providers/ai-sdk.js').then(
+      ({ aiProvider }) => aiProvider,
+    );
+  }
+
+  return aiProviderPromise;
+}
+
 // =============================================================================
 // Model Resolution Helper
 // =============================================================================
@@ -40,7 +57,7 @@ import {
  * Create a model resolver that uses aiProvider to get configured models.
  * This ensures Azure deployments and other provider-specific configs are used.
  */
-function createModelResolver(): ModelResolver {
+function createModelResolver(aiProvider: AIProviderManager): ModelResolver {
   return (provider: ProviderType): string | undefined => {
     try {
       // Use resolveModel with the provider name to get the configured default model
@@ -218,6 +235,7 @@ export async function executeAgenticChat(
   request: AgenticChatRequest
 ): Promise<AgenticChatResponse> {
   const sessionId = randomUUID();
+  const aiProvider = await getAIProvider();
 
   // Extract the user's goal from the last user message
   const lastUserMessage = [...request.messages].reverse().find((m) => m.role === 'user');
@@ -295,10 +313,10 @@ export async function executeAgenticChat(
       primaryProvider,
       primaryModel,
       configuredProviders,
-      modelResolver: createModelResolver(),
+      modelResolver: createModelResolver(aiProvider),
       run: async (provider, model) => {
         // Get the model instance for this provider
-        const modelInstance = aiProvider.getModel(provider, model);
+        const modelInstance = await aiProvider.getModel(provider, model);
 
         // Convert tool definitions to AI SDK format with execute wrappers
         const aiSdkTools = convertToolsToAiSdk(toolDefinitions, provider, 'AgenticChat', onToolExecute);
@@ -489,6 +507,7 @@ export async function* streamAgenticChat(
   request: StreamAgenticChatRequest
 ): AsyncGenerator<AgenticStreamEvent> {
   const sessionId = randomUUID();
+  const aiProvider = await getAIProvider();
   const showThinking = request.showThinking ?? true;
 
   // Extract the user's goal from the last user message
@@ -623,7 +642,7 @@ export async function* streamAgenticChat(
         primaryProvider,
         primaryModel,
         configuredProviders,
-        modelResolver: createModelResolver(),
+        modelResolver: createModelResolver(aiProvider),
         run: async (provider, model) => {
           // Notify if we're using a fallback
           if (provider !== primaryProvider || model !== primaryModel) {
@@ -657,7 +676,7 @@ export async function* streamAgenticChat(
           actualModel = model;
 
           // Get the model instance for this provider
-          const modelInstance = aiProvider.getModel(provider, model);
+          const modelInstance = await aiProvider.getModel(provider, model);
 
           // Create the agent executor
           const agent = new AgentExecutor(sessionId, request.conversationId, goal, agentConfig);

@@ -27,6 +27,25 @@ export const ProviderType = z.enum([
   'cerebras',
   'fireworks',
   'copilot', // GitHub Copilot proxy (experimental)
+  'bedrock', // AWS Bedrock
+  'zhipu', // Zhipu AI (GLM-4 series)
+  'moonshot', // Moonshot AI (Kimi)
+  'qwen', // Qwen API (Alibaba Cloud)
+  'replicate', // Replicate (hosted open-source models)
+  'github-models', // GitHub Models (Azure-backed inference)
+  'volcengine', // Bytedance Doubao
+  'byteplus', // BytePlus (international Bytedance)
+  'qianfan', // Baidu Qianfan
+  'modelstudio', // ModelStudio (Alibaba DashScope)
+  'minimax', // Minimax Portal
+  'xiaomi', // Xiaomi MiLM
+  'huggingface', // HuggingFace Inference
+  'nvidia-nim', // NVIDIA NIM
+  'venice', // Venice AI
+  'kilocode', // Kilocode
+  'vercel-ai', // Vercel AI Gateway
+  'cloudflare-ai', // Cloudflare AI Gateway
+  'watsonx', // IBM Watsonx
 ]);
 export type ProviderType = z.infer<typeof ProviderType>;
 
@@ -66,6 +85,25 @@ export const PROVIDER_STATUS: Record<ProviderType, ProviderStatus> = {
   cerebras: 'experimental', // Hardware-specific
   fireworks: 'beta',
   copilot: 'experimental', // GitHub Copilot proxy - requires local proxy server
+  bedrock: 'stable', // AWS Bedrock - enterprise
+  zhipu: 'beta', // Zhipu AI (GLM-4 series)
+  moonshot: 'beta', // Moonshot AI (Kimi) - long context
+  qwen: 'beta', // Qwen API (Alibaba Cloud)
+  replicate: 'beta', // Replicate (hosted open-source models)
+  'github-models': 'beta', // GitHub Models (Azure-backed inference)
+  volcengine: 'beta', // Bytedance Doubao
+  byteplus: 'beta', // BytePlus (international Bytedance)
+  qianfan: 'beta', // Baidu Qianfan
+  modelstudio: 'experimental', // ModelStudio (Alibaba DashScope)
+  minimax: 'beta', // Minimax Portal
+  xiaomi: 'experimental', // Xiaomi MiLM
+  huggingface: 'beta', // HuggingFace Inference
+  'nvidia-nim': 'beta', // NVIDIA NIM
+  venice: 'experimental', // Venice AI
+  kilocode: 'experimental', // Kilocode
+  'vercel-ai': 'beta', // Vercel AI Gateway
+  'cloudflare-ai': 'beta', // Cloudflare AI Gateway
+  watsonx: 'stable', // IBM Watsonx
 };
 
 // =============================================================================

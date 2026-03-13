@@ -11,7 +11,7 @@ import { getClient } from '../storage/index.js';
 import { projects, tickets, sprints } from '../storage/schema.js';
 import { eq, sql, type InferSelectModel } from 'drizzle-orm';
 import { logger } from '../utils/logger.js';
-import { aiProvider } from '../providers/index.js';
+// aiProvider is lazily imported inside executeConfigureProvider to avoid loading AI SDKs at startup
 
 // Type aliases for schema models
 type Project = InferSelectModel<typeof projects>;
@@ -170,7 +170,8 @@ async function executeConfigureProvider(input: ConfigureProviderInput): Promise<
       };
     }
 
-    // Configure the provider
+    // Configure the provider (lazy import to avoid loading AI SDKs at startup)
+    const { aiProvider } = await import('../providers/index.js');
     aiProvider.configure(provider, {
       type: provider,
       apiKey,

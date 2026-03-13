@@ -12,7 +12,6 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
 import { eq } from 'drizzle-orm';
 import {
   signUpWithEmail,
@@ -21,10 +20,10 @@ import {
   validateSession,
   deleteSession,
   getGitHubAuthUrl,
-  getUserById,
   updateUser,
   getUserConnectedAccounts,
   getUserGitHubToken,
+  type User,
 } from '../auth/auth-service.js';
 import {
   redirectToJira,
@@ -75,7 +74,11 @@ const updateProfileSchema = z.object({
   onboardingCompleted: z.boolean().optional(),
 });
 
-export const authRoutes = new Hono();
+type AuthVariables = {
+  user: User;
+};
+
+export const authRoutes = new Hono<{ Variables: AuthVariables }>();
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -352,7 +355,7 @@ authRoutes.post('/github/token', async (c) => {
       return parsed.response;
     }
 
-    const { code } = parsed.body;
+    const code = typeof parsed.body.code === 'string' ? parsed.body.code : undefined;
 
     if (!code) {
       return c.json({ error: 'Code is required' }, 400);

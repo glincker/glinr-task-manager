@@ -17,7 +17,6 @@ import {
   validatePasswordStrength,
   generateRecoveryCodes,
   hashRecoveryCodes,
-  hashRecoveryCode,
   generateInviteCode,
   hashInviteCode,
 } from '../auth/password.js';
@@ -29,6 +28,8 @@ type Variables = {
 };
 
 export const userRoutes = new Hono<{ Variables: Variables }>();
+
+type UserPreferencesUpdate = Partial<typeof userPreferences.$inferInsert>;
 
 // Middleware to require authentication
 async function requireAuth(c: Context<{ Variables: Variables }>, next: () => Promise<void>) {
@@ -376,8 +377,9 @@ userRoutes.put('/me/primary-email', async (c) => {
     }
 
     // Verify email matches provider data (if available)
-    const providerData = providerAccount.providerData as Record<string, any> | null;
-    if (providerData?.email && providerData.email.toLowerCase() !== email.toLowerCase()) {
+    const providerData = providerAccount.providerData as Record<string, unknown> | null;
+    const providerEmail = typeof providerData?.email === 'string' ? providerData.email : undefined;
+    if (providerEmail && providerEmail.toLowerCase() !== email.toLowerCase()) {
       return c.json({ error: 'Email does not match connected account' }, 400);
     }
   }
@@ -481,10 +483,10 @@ userRoutes.patch('/me/preferences', async (c) => {
   ];
 
   // Filter to allowed fields only
-  const updates: Record<string, any> = {};
+  const updates: UserPreferencesUpdate = {};
   for (const field of allowedFields) {
     if (body[field] !== undefined) {
-      updates[field] = body[field];
+      (updates as Record<string, unknown>)[field] = body[field];
     }
   }
 
@@ -1194,4 +1196,3 @@ userRoutes.delete('/admin/:userId', requireAdmin, async (c) => {
     return c.json({ error: 'Failed to delete user' }, 500);
   }
 });
-

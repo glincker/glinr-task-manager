@@ -28,12 +28,44 @@ import {
   redactSecrets,
 } from "../chat/execution/secrets.js";
 
-// Initialize on module load (async)
-initializeToolExecution({ registerBuiltins: true }).catch((err) => {
-  logger.error("[ToolRoutes] Failed to initialize tool execution", err);
-});
-
 const tools = new Hono();
+let toolExecutionInitPromise: Promise<void> | null = null;
+
+async function ensureToolExecutionInitialized(): Promise<void> {
+  if (!toolExecutionInitPromise) {
+    toolExecutionInitPromise = initializeToolExecution({
+      registerBuiltins: true,
+    }).catch((error) => {
+      toolExecutionInitPromise = null;
+      logger.error(
+        "[ToolRoutes] Failed to initialize tool execution",
+        error instanceof Error ? error : undefined,
+      );
+      throw error;
+    });
+  }
+
+  await toolExecutionInitPromise;
+}
+
+tools.use("*", async (c, next) => {
+  try {
+    await ensureToolExecutionInitialized();
+  } catch (error) {
+    return c.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Tool execution initialization failed",
+      },
+      500,
+    );
+  }
+
+  await next();
+});
 
 // =============================================================================
 // Schemas

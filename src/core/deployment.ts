@@ -103,6 +103,14 @@ export function hasCapability(cap: Capability): boolean {
   return MODE_CAPABILITIES[getMode()].has(cap);
 }
 
+/** Check if an explicit mode has a specific capability. */
+export function hasCapabilityForMode(
+  mode: DeploymentMode,
+  cap: Capability,
+): boolean {
+  return MODE_CAPABILITIES[mode].has(cap);
+}
+
 /** Get all capabilities for the current mode. */
 export function getCapabilities(): Capability[] {
   return [...MODE_CAPABILITIES[getMode()]];

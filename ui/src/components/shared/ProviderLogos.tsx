@@ -5,10 +5,12 @@
  * Uses SVG for crisp rendering at any size.
  */
 
+import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 
 interface LogoProps {
   className?: string;
+  style?: CSSProperties;
 }
 
 export function AnthropicLogo({ className }: LogoProps) {
@@ -261,6 +263,272 @@ export function CopilotLogo({ className }: LogoProps) {
   );
 }
 
+// AWS Bedrock Logo
+export function BedrockLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="AWS Bedrock"
+    >
+      <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18l7.12 3.56L12 11.3 4.88 7.74 12 4.18zM4 8.96l7 3.5v7.58l-7-3.5V8.96zm9 11.08V12.46l7-3.5v7.58l-7 3.5z" />
+    </svg>
+  );
+}
+
+// Zhipu AI Logo
+export function ZhipuLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Zhipu AI"
+    >
+      <path d="M4 4h16v3.2H9.6L20 17.6V20H4v-3.2h10.4L4 6.4V4z" />
+    </svg>
+  );
+}
+
+// Moonshot AI (Kimi) Logo
+export function MoonshotLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Moonshot AI"
+    >
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10c1.82 0 3.53-.49 5-1.35-1.59-1.34-2.6-3.34-2.6-5.58 0-3.87 3.01-7.02 6.8-7.26A9.96 9.96 0 0 0 12 2z" />
+    </svg>
+  );
+}
+
+// Qwen (Alibaba Cloud) Logo
+export function QwenLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Qwen"
+    >
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 17c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7zm2-4l3 3-1.41 1.41L12 15.83l-1.59 1.58L9 16l3-3z" />
+    </svg>
+  );
+}
+
+// Replicate Logo
+export function ReplicateLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Replicate"
+    >
+      <path d="M.672 0v24H4.77V8.295h13.236V4.2H4.77V0zm18.46 8.295v4.098H5.896v3.762h13.236v4.058H5.896V24h18.108V8.295z" />
+    </svg>
+  );
+}
+
+// GitHub Models Logo
+export function GitHubModelsLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="GitHub Models"
+    >
+      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+    </svg>
+  );
+}
+
+// Volcengine (Bytedance Doubao) - stylized V
+export function VolcengineLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Volcengine"
+    >
+      <path d="M12 2L3 7.5v9L12 22l9-5.5v-9L12 2zm0 2.5l6.5 4v7.5L12 19.5 5.5 16V8.5L12 4.5z" />
+    </svg>
+  );
+}
+
+// Qianfan (Baidu) - stylized cloud
+export function QianfanLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Qianfan"
+    >
+      <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" />
+    </svg>
+  );
+}
+
+// Minimax - stylized M
+export function MinimaxLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Minimax"
+    >
+      <path d="M2 4h4v16H2V4zm5 0h3l3 8 3-8h3v16h-4V11l-2 5h-2l-2-5v9H7V4z" />
+    </svg>
+  );
+}
+
+// HuggingFace - stylized face
+export function HuggingFaceLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="HuggingFace"
+    >
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-3l-2 1v-5l2 1V7.5l4 2v1l2-1v5l-2-1v3l-4-2z" />
+    </svg>
+  );
+}
+
+// NVIDIA NIM - stylized N
+export function NvidiaNimLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="NVIDIA NIM"
+    >
+      <path d="M4 3h2.5l7 12V3H16v18h-2.5L6.5 9v12H4V3zm11 0h5v2h-3v5h3v2h-3v7h-2V3z" />
+    </svg>
+  );
+}
+
+// Venice AI - stylized gondola/wave
+export function VeniceLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Venice AI"
+    >
+      <path d="M2 14c1.5 0 2.5-1 4-1s2.5 1 4 1 2.5-1 4-1 2.5 1 4 1v2c-1.5 0-2.5-1-4-1s-2.5 1-4 1-2.5-1-4-1-2.5 1-4 1v-2zm2-7l2 3h2L5 6l6 8h2L7 5h3l4 9h2l-5-11H4v1l.2-.7L4 7z" />
+    </svg>
+  );
+}
+
+// Kilocode - stylized brackets
+export function KilocodeLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Kilocode"
+    >
+      <path d="M8 3L4 12l4 9H6L2 12l4-9h2zm8 0h2l4 9-4 9h-2l4-9-4-9zm-4 4l-2 5 2 5h-2l-2-5 2-5h2z" />
+    </svg>
+  );
+}
+
+// Vercel AI Gateway
+export function VercelAILogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Vercel AI"
+    >
+      <path d="M24 22.525H0L12.508 1.375z" />
+    </svg>
+  );
+}
+
+// Cloudflare AI Gateway
+export function CloudflareAILogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Cloudflare AI"
+    >
+      <path fill="#F38020" d="M16.5 14.5c.2-.7.1-1.3-.2-1.8-.3-.4-.8-.7-1.4-.8l-7.3-.1c-.1 0-.1 0-.2-.1 0-.1 0-.1.1-.2.2-.4.7-.7 1.2-.7h.1c.4-1.8 1.9-3.1 3.8-3.1 1.5 0 2.8.8 3.5 2 .2 0 .4-.1.6-.1 1.4 0 2.5 1.1 2.5 2.5 0 .2 0 .3-.1.5h.2c1.1 0 2 .9 2 2s-.9 2-2 2H8c-1.4 0-2.5-1.1-2.5-2.5 0-1.3 1-2.4 2.3-2.5l8.7.9z" />
+    </svg>
+  );
+}
+
+// IBM Watsonx
+export function WatsonxLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="IBM Watsonx"
+    >
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.93 0 3.68.79 4.95 2.05L5.05 16.95A6.973 6.973 0 0 1 5 15c0-3.87 3.13-7 7-7zm0 14c-1.93 0-3.68-.79-4.95-2.05l11.9-11.9C18.21 6.32 19 8.07 19 10c0 3.87-3.13 7-7 7z" />
+    </svg>
+  );
+}
+
+// BytePlus - stylized B (uses same logo style as Volcengine)
+export function BytePlusLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="BytePlus"
+    >
+      <path d="M4 3h7.5c2.5 0 4 1.2 4 3.2 0 1.3-.7 2.3-1.8 2.8 1.4.4 2.3 1.6 2.3 3.1C16 14.5 14.3 16 11.5 16H4V3zm3 2.5v3h3.5c1 0 1.5-.6 1.5-1.5S11.5 5.5 10.5 5.5H7zm0 5.5v3.5h4c1.1 0 1.7-.7 1.7-1.75S12.1 11 11 11H7zm9 3l2 2-2 2h2l2-2-2-2h-2z" />
+    </svg>
+  );
+}
+
+// Xiaomi MiLM - stylized Mi
+export function XiaomiLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="Xiaomi"
+    >
+      <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm2 4v8h2V8H6zm4 0v8h2v-5l3 5h2V8h-2v5l-3-5h-2z" />
+    </svg>
+  );
+}
+
+// ModelStudio (Alibaba DashScope) - uses Qwen logo styling but distinct
+export function ModelStudioLogo({ className }: LogoProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={cn('h-6 w-6', className)}
+      aria-label="ModelStudio"
+    >
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+    </svg>
+  );
+}
+
 // =============================================================================
 // MESSAGING PROVIDER LOGOS
 // =============================================================================
@@ -387,6 +655,25 @@ export const PROVIDER_LOGOS: Record<string, React.ComponentType<LogoProps>> = {
   cerebras: CerebrasLogo,
   fireworks: FireworksLogo,
   copilot: CopilotLogo, // GitHub Copilot proxy
+  bedrock: BedrockLogo, // AWS Bedrock
+  zhipu: ZhipuLogo, // Zhipu AI (GLM series)
+  moonshot: MoonshotLogo, // Moonshot AI (Kimi)
+  qwen: QwenLogo, // Qwen (Alibaba Cloud)
+  replicate: ReplicateLogo, // Replicate
+  'github-models': GitHubModelsLogo, // GitHub Models
+  volcengine: VolcengineLogo, // Bytedance Doubao
+  byteplus: BytePlusLogo, // BytePlus
+  qianfan: QianfanLogo, // Baidu Qianfan
+  modelstudio: ModelStudioLogo, // ModelStudio
+  minimax: MinimaxLogo, // Minimax
+  xiaomi: XiaomiLogo, // Xiaomi MiLM
+  huggingface: HuggingFaceLogo, // HuggingFace
+  'nvidia-nim': NvidiaNimLogo, // NVIDIA NIM
+  venice: VeniceLogo, // Venice AI
+  kilocode: KilocodeLogo, // Kilocode
+  'vercel-ai': VercelAILogo, // Vercel AI Gateway
+  'cloudflare-ai': CloudflareAILogo, // Cloudflare AI Gateway
+  watsonx: WatsonxLogo, // IBM Watsonx
   // Messaging providers
   telegram: TelegramLogo,
   discord: DiscordLogo,

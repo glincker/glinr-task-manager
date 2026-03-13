@@ -5,25 +5,21 @@
  * Supports both PAT and OAuth authentication.
  */
 
+import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { randomUUID } from 'crypto';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { getDb } from '../storage/index.js';
-import { githubTokens, projects, projectExternalLinks, tickets, sprints } from '../storage/schema.js';
+import { githubTokens, oauthAccounts, tickets, ticketExternalLinks } from '../storage/schema.js';
 import {
   validateGitHubToken,
   listGitHubProjects,
   listGitHubRepos,
   getGitHubProjectPreview,
-  type GitHubProject,
-  type GitHubProjectPreview,
-  type GitHubRepo,
 } from '../integrations/github-projects.js';
 import { getCookie } from 'hono/cookie';
 import { validateSession } from '../auth/auth-service.js';
-import { oauthAccounts } from '../storage/schema.js';
-import { createProject, createProjectExternalLink } from '../projects/index.js';
-import { createSprint } from '../projects/index.js';
+import { createProject, createProjectExternalLink, createSprint } from '../projects/index.js';
 
 export const importRoutes = new Hono();
 
@@ -52,6 +48,19 @@ interface DryRunRequest {
     type: Record<string, string>;
   };
   selectedItemIds?: string[];
+}
+
+type TicketInsert = typeof tickets.$inferInsert;
+type TicketExternalLinkInsert = typeof ticketExternalLinks.$inferInsert;
+type CreatedSprint = Awaited<ReturnType<typeof createSprint>>;
+
+interface CreatedImportTicket {
+  id: string;
+  sequence: number;
+  title: string;
+  githubUrl: string;
+  githubIssueNumber?: number;
+  originalCreatedAt: string;
 }
 
 // Token storage helpers
@@ -109,7 +118,7 @@ async function getStoredToken(userId?: string): Promise<string | null> {
 }
 
 // Get user from session cookie
-async function getUserFromCookie(c: any): Promise<{ id: string; email: string } | null> {
+async function getUserFromCookie(c: Context): Promise<{ id: string; email: string } | null> {
   const token = getCookie(c, 'profclaw_session');
   if (!token) return null;
 
@@ -483,7 +492,7 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
     });
 
     // Import iterations as sprints
-    const createdSprints: any[] = [];
+    const createdSprints: CreatedSprint[] = [];
     const iterationToSprintMap = new Map<string, string>();
 
     if (importIterations && preview.iterations.length > 0) {
@@ -502,7 +511,7 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
     const db = getDb();
     if (!db) throw new Error('Database not initialized');
 
-    const createdTickets: any[] = [];
+    const createdTickets: CreatedImportTicket[] = [];
     const now = new Date();
     const importedAt = now;
 
@@ -521,7 +530,7 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
         .where(eq(tickets.projectId, profclawProject.id))
         .orderBy(desc(tickets.sequence))
         .limit(1);
-      const nextSequence = ((sequenceResult[0]?.sequence as number) || 0) + 1;
+      const nextSequence = (sequenceResult[0]?.sequence || 0) + 1;
 
       // Preserve original timestamps or use current time
       const createdAt = preserveTimestamps && item.createdAt
@@ -531,7 +540,7 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
         ? new Date(item.updatedAt)
         : now;
 
-      await db.insert(tickets).values({
+      const ticketRecord: TicketInsert = {
         id: ticketId,
         sequence: nextSequence,
         projectId: profclawProject.id,
@@ -545,7 +554,9 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
         createdAt,
         updatedAt,
         createdBy: 'github-import', // Mark as imported
-      } as any);
+      };
+
+      await db.insert(tickets).values(ticketRecord);
 
       createdTickets.push({
         id: ticketId,
@@ -558,7 +569,7 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
 
       // Create external link for the ticket (for bidirectional sync)
       if (item.issueNumber && item.repoOwner && item.repoName) {
-        await db.insert(await import('../storage/schema.js').then(m => m.ticketExternalLinks)).values({
+        const externalLinkRecord: TicketExternalLinkInsert = {
           id: randomUUID(),
           ticketId,
           platform: 'github',
@@ -567,7 +578,8 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
           syncEnabled: enableSync,
           syncDirection: 'bidirectional',
           createdAt: importedAt,
-        });
+        };
+        await db.insert(ticketExternalLinks).values(externalLinkRecord);
       }
     }
 
@@ -584,11 +596,11 @@ importRoutes.post('/github/projects/:projectId/execute', async (c) => {
       },
       tickets: createdTickets.slice(0, 10), // First 10 for preview
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Import] Execute error:', error);
 
     // Check for unique constraint violation
-    if (error.message?.includes('UNIQUE constraint failed')) {
+    if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
       return c.json({
         error: 'Project key already exists. Please choose a different key.',
       }, 409);

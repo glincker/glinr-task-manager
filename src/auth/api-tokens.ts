@@ -1,4 +1,5 @@
 import { randomBytes, createHash } from 'crypto';
+import type { Context } from 'hono';
 import { getStorage } from '../storage/index.js';
 
 /**
@@ -89,17 +90,17 @@ export async function initApiTokensTable(): Promise<void> {
   // Migration for existing tables
   try {
     await storage.execute(`ALTER TABLE api_tokens ADD COLUMN token_prefix TEXT`);
-  } catch (e) {
+  } catch {
     // Column already exists
   }
   try {
     await storage.execute(`ALTER TABLE api_tokens ADD COLUMN rate_limit INTEGER DEFAULT 60`);
-  } catch (e) {
+  } catch {
     // Column already exists
   }
   try {
     await storage.execute(`ALTER TABLE api_tokens ADD COLUMN enabled INTEGER DEFAULT 1`);
-  } catch (e) {
+  } catch {
     // Column already exists
   }
 }
@@ -314,7 +315,7 @@ export async function revokeApiToken(id: string): Promise<boolean> {
  * Hono middleware for token authentication
  */
 export function tokenAuthMiddleware(requiredScopes: TokenScope[] = []) {
-  return async (c: any, next: () => Promise<void>) => {
+  return async (c: Context, next: () => Promise<void>) => {
     const authHeader = c.req.header('Authorization');
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

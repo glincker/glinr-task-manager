@@ -14,10 +14,11 @@ import { getAgentSessionManager } from '../session-spawn/manager.js';
 import { getSessionSpawnConfig } from '../session-spawn/config.js';
 import type {
   AgentSession,
-  SessionMessage,
   MessageType,
 } from '../session-spawn/types.js';
 import { logger } from '../../../utils/logger.js';
+
+type SessionScopedToolContext = ToolExecutionContext & { sessionId?: string };
 
 // =============================================================================
 // spawn_session Tool
@@ -137,9 +138,10 @@ export const spawnSessionTool: ToolDefinition<SpawnSessionParams, SpawnSessionRe
   ): Promise<ToolResult<SpawnSessionResult>> {
     try {
       const manager = getAgentSessionManager();
+      const scopedContext = context as SessionScopedToolContext;
 
       // Get or create a root session for this conversation
-      let parentSessionId = (context as any).sessionId;
+      let parentSessionId = scopedContext.sessionId;
 
       if (!parentSessionId) {
         // Create a root session if none exists
@@ -150,7 +152,7 @@ export const spawnSessionTool: ToolDefinition<SpawnSessionParams, SpawnSessionRe
         );
         parentSessionId = rootSession.id;
         // Store for future tool calls
-        (context as any).sessionId = parentSessionId;
+        scopedContext.sessionId = parentSessionId;
       }
 
       const session = await manager.spawn({
@@ -210,7 +212,7 @@ const SendMessageParamsSchema = z.object({
     .describe('Message type'),
   subject: z.string().max(200).optional().describe('Optional message subject'),
   content: z
-    .record(z.any())
+    .record(z.unknown())
     .describe('Message content (JSON object with your data)'),
   priority: z
     .number()
@@ -301,7 +303,7 @@ export const sendMessageTool: ToolDefinition<SendMessageParams, SendMessageResul
   ): Promise<ToolResult<SendMessageResult>> {
     try {
       const manager = getAgentSessionManager();
-      const sessionId = (context as any).sessionId;
+      const sessionId = (context as SessionScopedToolContext).sessionId;
 
       if (!sessionId) {
         return {
@@ -390,7 +392,7 @@ interface ReceiveMessagesResult {
     fromSessionId: string;
     type: string;
     subject?: string;
-    content: Record<string, any>;
+    content: Record<string, unknown>;
     priority: number;
     createdAt: string;
   }>;
@@ -448,7 +450,7 @@ Returns messages sorted by priority (highest first), then by creation time.`,
   ): Promise<ToolResult<ReceiveMessagesResult>> {
     try {
       const manager = getAgentSessionManager();
-      const sessionId = (context as any).sessionId;
+      const sessionId = (context as SessionScopedToolContext).sessionId;
 
       if (!sessionId) {
         return {
@@ -587,7 +589,7 @@ export const listSessionsTool: ToolDefinition<ListSessionsParams, ListSessionsRe
   ): Promise<ToolResult<ListSessionsResult>> {
     try {
       const manager = getAgentSessionManager();
-      const sessionId = (context as any).sessionId;
+      const sessionId = (context as SessionScopedToolContext).sessionId;
 
       if (!sessionId) {
         return {
@@ -671,9 +673,9 @@ export const listSessionsTool: ToolDefinition<ListSessionsParams, ListSessionsRe
 // Export all tools
 // =============================================================================
 
-export const sessionSpawnTools: ToolDefinition<any, any>[] = [
+export const sessionSpawnTools = [
   spawnSessionTool,
   sendMessageTool,
   receiveMessagesTool,
   listSessionsTool,
-];
+] as unknown as ToolDefinition[];

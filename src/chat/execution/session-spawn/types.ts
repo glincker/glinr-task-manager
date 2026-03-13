@@ -42,7 +42,7 @@ export interface AgentSession {
   maxBudget: number; // token limit
 
   // Result
-  finalResult?: Record<string, any>;
+  finalResult?: Record<string, unknown>;
   stopReason?: SessionStopReason;
 
   // Tool restrictions
@@ -56,7 +56,7 @@ export interface AgentSession {
   updatedAt: Date;
 
   // Metadata
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 // =============================================================================
@@ -75,7 +75,7 @@ export interface SessionMessage {
   // Content
   type: MessageType;
   subject?: string;
-  content: Record<string, any>;
+  content: Record<string, unknown>;
 
   // Priority 1-10 (10 = highest)
   priority: number;
@@ -108,18 +108,18 @@ export interface SpawnSessionParams {
   maxBudget?: number;
   allowedTools?: string[];
   disallowedTools?: string[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface UpdateSessionParams {
   currentStep?: number;
   usedBudget?: number;
   status?: SessionStatus;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface CompleteSessionParams {
-  finalResult: Record<string, any>;
+  finalResult: Record<string, unknown>;
   stopReason: SessionStopReason;
 }
 
@@ -128,7 +128,7 @@ export interface SendMessageParams {
   target: 'parent' | 'children' | 'siblings' | string; // string = specific session ID
   type: MessageType;
   subject?: string;
-  content: Record<string, any>;
+  content: Record<string, unknown>;
   priority?: number;
   replyToMessageId?: string;
   ttlMs?: number;

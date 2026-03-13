@@ -90,7 +90,6 @@ export interface AuditStats {
 // Constants
 // =============================================================================
 
-const MAX_ENTRIES = 10_000;
 const OUTPUT_PREVIEW_LENGTH = 500;
 const CLEANUP_THRESHOLD = 11_000;
 const ENTRIES_TO_REMOVE = 2_000;

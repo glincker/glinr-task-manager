@@ -462,8 +462,6 @@ export class SandboxManager {
 
       // Demultiplex stdout/stderr from Docker stream
       await new Promise<void>((resolve, reject) => {
-        const chunks: { type: 'stdout' | 'stderr'; data: Buffer }[] = [];
-
         stream.on('data', (chunk: Buffer) => {
           // Docker stream format: [type(1)][0][0][0][size(4)][data]
           let offset = 0;
@@ -526,7 +524,7 @@ export class SandboxManager {
       await container.stop({ t: 5 });
       await container.remove({ force: true });
       logger.debug(`[Sandbox] Stopped container ${containerId}`, { component: 'Sandbox' });
-    } catch (error) {
+    } catch {
       // Container might already be stopped
       logger.debug(`[Sandbox] Failed to stop container ${containerId}`, { component: 'Sandbox' });
     }

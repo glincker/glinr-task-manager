@@ -190,8 +190,9 @@ oobe.post('/setup', async (c) => {
     }
 
     // Set auth mode to local
+    const settings = await getSettingsRaw();
     await updateSettings({
-      system: { authMode: 'local' as const },
+      system: { ...settings.system, authMode: 'local' as const },
     });
 
     // Create session (for cookie-based auth fallback)
@@ -433,8 +434,9 @@ oobe.post('/enable-multiuser', async (c) => {
       .where(eq(users.id, admin.id));
 
     // Switch auth mode to multi
+    const settings = await getSettingsRaw();
     await updateSettings({
-      system: { authMode: 'multi' as const },
+      system: { ...settings.system, authMode: 'multi' as const },
     });
 
     // Invalidate cached admin

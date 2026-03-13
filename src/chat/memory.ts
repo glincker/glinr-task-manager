@@ -12,7 +12,7 @@
  * - Sliding window with importance scoring
  */
 
-import { aiProvider } from '../providers/index.js';
+import { MODEL_CATALOG } from '../providers/core/models.js';
 import type { ConversationMessage, ToolCallRecord } from './conversations.js';
 
 // === Configuration ===
@@ -68,9 +68,7 @@ export function getContextWindow(model?: string): number {
   // Default to 128k if model not specified
   if (!model) return 128000;
 
-  // Check model catalog for exact value
-  const models = aiProvider.getAllModels();
-  const modelInfo = models.find(
+  const modelInfo = MODEL_CATALOG.find(
     (m) => m.id === model || m.id.includes(model) || model.includes(m.id)
   );
 
@@ -289,6 +287,7 @@ ${content}
 SUMMARY:`;
 
   try {
+    const { aiProvider } = await import('../providers/ai-sdk.js');
     const response = await aiProvider.chat({
       messages: [
         {

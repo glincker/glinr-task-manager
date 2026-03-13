@@ -11,7 +11,12 @@ import { Hono } from "hono";
 import { createHmac, timingSafeEqual, randomUUID } from "crypto";
 import { getDb } from "../storage/index.js";
 import { tickets, projects } from "../storage/schema.js";
-import { eq, desc, and, like } from "drizzle-orm";
+import { eq, desc, like } from "drizzle-orm";
+import {
+  getWebhookDedupValue,
+  isDuplicateWebhookEvent,
+  setWebhookDedupValue,
+} from "./webhook-dedup.js";
 
 const slack = new Hono();
 
@@ -145,7 +150,6 @@ function parseCommand(text: string): ParsedCommand {
   // Parse named args like --title="My Task" or key=value
   const args: Record<string, string> = {};
   let currentKey = "";
-  const currentValue = "";
 
   for (const part of rawArgs) {
     if (part.startsWith("--")) {
@@ -946,6 +950,12 @@ slack.post("/commands", async (c) => {
     return c.json({ error: "Unknown command" }, 404);
   }
 
+  const dedupEventId = command.trigger_id || `${timestamp}:${rawBody}`;
+  const cachedResponse = getWebhookDedupValue<SlackResponse>("slack:command", dedupEventId);
+  if (cachedResponse) {
+    return c.json(cachedResponse);
+  }
+
   if (
     !isAllowedSlackSender({
       userId: command.user_id,
@@ -1039,6 +1049,7 @@ slack.post("/commands", async (c) => {
     };
   }
 
+  setWebhookDedupValue("slack:command", dedupEventId, response);
   return c.json(response);
 });
 
@@ -1068,6 +1079,15 @@ slack.post("/interactive", async (c) => {
   const params = new URLSearchParams(rawBody);
   const payloadStr = params.get("payload") || "{}";
   const payload = JSON.parse(payloadStr);
+  const dedupEventId =
+    payload.trigger_id ||
+    payload.actions?.[0]?.action_ts ||
+    payload.callback_id ||
+    `${timestamp}:${payloadStr}`;
+  const cachedResponse = getWebhookDedupValue<Record<string, unknown>>("slack:interactive", dedupEventId);
+  if (cachedResponse) {
+    return c.json(cachedResponse);
+  }
 
   console.log(
     `[Slack] Interactive: ${payload.type} - ${payload.actions?.[0]?.action_id}`,
@@ -1079,19 +1099,25 @@ slack.post("/interactive", async (c) => {
     if (action?.action_id === "open_ticket") {
       const ticketId = String(action.value || "");
       if (!ticketId) {
-        return c.json({
+        const response = {
           response_type: resolveDefaultResponseType(),
           text: "❌ Missing ticket reference",
-        });
+        };
+        setWebhookDedupValue("slack:interactive", dedupEventId, response);
+        return c.json(response);
       }
-      return c.json({
+      const response = {
         response_type: resolveDefaultResponseType(),
         text: `🔗 <${SLACK_APP_URL}/tickets/${ticketId}|Open ticket in profClaw>`,
-      });
+      };
+      setWebhookDedupValue("slack:interactive", dedupEventId, response);
+      return c.json(response);
     }
   }
 
-  return c.json({ ok: true });
+  const response = { ok: true };
+  setWebhookDedupValue("slack:interactive", dedupEventId, response);
+  return c.json(response);
 });
 
 /**
@@ -1115,7 +1141,7 @@ slack.post("/events", async (c) => {
     }
   }
 
-  let payload: { type?: string; challenge?: string } | null = null;
+  let payload: { type?: string; challenge?: string; event_id?: string } | null = null;
   try {
     payload = JSON.parse(rawBody) as { type?: string; challenge?: string };
   } catch {
@@ -1124,6 +1150,10 @@ slack.post("/events", async (c) => {
 
   if (payload?.type === "url_verification" && payload.challenge) {
     return c.json({ challenge: payload.challenge });
+  }
+
+  if (payload?.event_id && isDuplicateWebhookEvent("slack:event", payload.event_id)) {
+    return c.json({ ok: true });
   }
 
   if (payload?.type === "event_callback") {

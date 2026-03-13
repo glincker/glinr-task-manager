@@ -20,8 +20,10 @@ import {
   ChatSidebar,
   ProviderSetupDialog,
   AgenticThinking,
+  TalkModeOverlay,
   type AgenticEvent,
 } from '../components';
+import { useTalkMode } from '@/core/hooks/useTalkMode';
 import {
   ToolApprovalDialog,
   type PendingApproval,
@@ -89,6 +91,9 @@ export function ChatView() {
   const urlConversationIdRef = useRef<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  // Track the last assistant message ID to avoid re-triggering TTS
+  const lastSpokenMessageIdRef = useRef<string | null>(null);
 
   // URL sync for conversation persistence
   const setConversationId = useCallback((id: string | null) => {
@@ -568,6 +573,79 @@ export function ChatView() {
     }
   };
 
+  // ============================================================================
+  // Talk Mode
+  // ============================================================================
+
+  const handleTalkModeSend = useCallback(async (text: string): Promise<void> => {
+    const isPendingAny = sendConversationMessage.isPending || sendMessageWithTools.isPending || isAgenticRunning;
+    if (!text.trim() || isPendingAny) return;
+
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: text.trim(),
+      timestamp: new Date().toISOString(),
+    };
+
+    const loadingMessage: Message = {
+      id: 'loading',
+      role: 'assistant',
+      content: '',
+      isLoading: true,
+      timestamp: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMessage, loadingMessage]);
+
+    const sendMutation = agentMode ? sendMessageWithTools : sendConversationMessage;
+
+    if (conversationId) {
+      sendMutation.mutate({
+        conversationId,
+        content: text.trim(),
+        model: selectedModel || undefined,
+      });
+    } else {
+      const result = await createConversation.mutateAsync({
+        presetId: selectedPreset,
+      });
+      sendMutation.mutate({
+        conversationId: result.conversation.id,
+        content: text.trim(),
+        model: selectedModel || undefined,
+      });
+    }
+  }, [
+    sendConversationMessage.isPending, sendMessageWithTools.isPending,
+    isAgenticRunning, agentMode, conversationId, selectedModel, selectedPreset,
+    sendConversationMessage, sendMessageWithTools, createConversation,
+  ]);
+
+  const talkMode = useTalkMode({
+    onTranscription: useCallback((text: string) => {
+      setInput((prev) => (prev ? `${prev} ${text}` : text));
+    }, []),
+    onSend: handleTalkModeSend,
+  });
+
+  // Auto-TTS: speak new assistant messages when Talk Mode is active with autoTts
+  useEffect(() => {
+    if (talkMode.state === 'idle' || !talkMode.config.autoTts) return;
+
+    const lastMessage = messages[messages.length - 1];
+    if (
+      lastMessage &&
+      lastMessage.role === 'assistant' &&
+      !lastMessage.isLoading &&
+      lastMessage.content &&
+      lastMessage.id !== lastSpokenMessageIdRef.current
+    ) {
+      lastSpokenMessageIdRef.current = lastMessage.id;
+      void talkMode.speakResponse(lastMessage.content);
+    }
+  }, [messages, talkMode.state, talkMode.config.autoTts, talkMode.speakResponse]);
+
   const handleNewChat = () => {
     setConversationId(null);
     setMessages([]);
@@ -875,6 +953,20 @@ export function ChatView() {
         onOpenProviderSetup={() => setShowProviderSetup(true)}
       />
 
+      {/* Talk Mode Overlay */}
+      {talkMode.state !== 'idle' && (
+        <TalkModeOverlay
+          state={talkMode.state}
+          energy={talkMode.energy}
+          lastTranscription={talkMode.lastTranscription}
+          isCalibrating={talkMode.isCalibrating}
+          noiseFloor={talkMode.noiseFloor}
+          selectedVoice={talkMode.selectedVoice}
+          onVoiceChange={talkMode.setSelectedVoice}
+          onStop={talkMode.stop}
+        />
+      )}
+
       {/* Input */}
       <ChatInput
         value={input}
@@ -897,6 +989,8 @@ export function ChatView() {
         onStopRecording={stopRecording}
         agentMode={agentMode}
         onToggleAgentMode={handleToggleAgentMode}
+        talkModeState={talkMode.state}
+        onToggleTalkMode={talkMode.toggle}
       />
       </div>
 

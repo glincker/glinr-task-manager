@@ -10,57 +10,127 @@ import { streamText } from "hono/streaming";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import {
-  aiProvider,
-  MODEL_ALIASES,
-  type ChatMessage,
-  type NativeToolCall,
-  type NativeToolResult,
-  type ProviderConfig,
+import type {
+  ChatMessage,
+  NativeToolCall,
+  NativeToolResult,
+  ProviderConfig,
+  ProviderType,
 } from "../providers/index.js";
-import {
-  saveProviderConfig,
-  loadAllProviderConfigs,
-} from "../storage/index.js";
+import { ProviderType as ProviderTypeSchema } from "../providers/index.js";
 import { logger } from "../utils/logger.js";
-import {
-  CHAT_PRESETS,
-  QUICK_ACTIONS,
-  buildSystemPrompt,
-  createConversation,
-  getConversation,
-  listConversations,
-  deleteConversation,
-  addMessage,
-  getConversationMessages,
-  getRecentConversationsWithPreview,
-  compactMessages,
-  getMemoryStats,
-  needsCompaction,
-  // Skills
-  CHAT_SKILLS,
-  MODEL_TIERS,
-  detectIntent,
-  selectModel,
-  buildSkillPrompt,
-  // Tool handler
-  createChatToolHandler,
-  getDefaultChatTools,
-  getAllChatTools,
-  getSessionModel,
-  // Agentic executor
-  streamAgenticChat,
-  // Group chat
-  getGroupChatManager,
-  type ChatContext,
-  type RuntimeInfo,
-  type ConversationMessage,
-  type AgenticStreamEvent,
+import type {
+  ChatContext,
+  ConversationMessage,
 } from "../chat/index.js";
-import { getClient } from "../storage/index.js";
-import { trackChatUsage } from "../costs/token-tracker.js";
 
 const chatRoutes = new Hono();
+let chatRuntimePromise: Promise<void> | null = null;
+
+let aiProvider: typeof import("../providers/index.js")["aiProvider"];
+let MODEL_ALIASES: typeof import("../providers/index.js")["MODEL_ALIASES"];
+let saveProviderConfig: typeof import("../storage/index.js")["saveProviderConfig"];
+let getClient: typeof import("../storage/index.js")["getClient"];
+let CHAT_PRESETS: typeof import("../chat/index.js")["CHAT_PRESETS"];
+let QUICK_ACTIONS: typeof import("../chat/index.js")["QUICK_ACTIONS"];
+let buildSystemPrompt: typeof import("../chat/index.js")["buildSystemPrompt"];
+let createConversation: typeof import("../chat/index.js")["createConversation"];
+let getConversation: typeof import("../chat/index.js")["getConversation"];
+let listConversations: typeof import("../chat/index.js")["listConversations"];
+let deleteConversation: typeof import("../chat/index.js")["deleteConversation"];
+let addMessage: typeof import("../chat/index.js")["addMessage"];
+let getConversationMessages: typeof import("../chat/index.js")["getConversationMessages"];
+let getRecentConversationsWithPreview: typeof import("../chat/index.js")["getRecentConversationsWithPreview"];
+let compactMessages: typeof import("../chat/index.js")["compactMessages"];
+let getMemoryStats: typeof import("../chat/index.js")["getMemoryStats"];
+let needsCompaction: typeof import("../chat/index.js")["needsCompaction"];
+let CHAT_SKILLS: typeof import("../chat/index.js")["CHAT_SKILLS"];
+let MODEL_TIERS: typeof import("../chat/index.js")["MODEL_TIERS"];
+let detectIntent: typeof import("../chat/index.js")["detectIntent"];
+let selectModel: typeof import("../chat/index.js")["selectModel"];
+let createChatToolHandler: typeof import("../chat/index.js")["createChatToolHandler"];
+let getDefaultChatTools: typeof import("../chat/index.js")["getDefaultChatTools"];
+let getAllChatTools: typeof import("../chat/index.js")["getAllChatTools"];
+let getSessionModel: typeof import("../chat/index.js")["getSessionModel"];
+let streamAgenticChat: typeof import("../chat/index.js")["streamAgenticChat"];
+let getGroupChatManager: typeof import("../chat/index.js")["getGroupChatManager"];
+let trackChatUsage: typeof import("../costs/token-tracker.js")["trackChatUsage"];
+
+async function ensureChatRuntime(): Promise<void> {
+  if (!chatRuntimePromise) {
+    chatRuntimePromise = Promise.all([
+      import("../providers/index.js"),
+      import("../storage/index.js"),
+      import("../chat/index.js"),
+      import("../costs/token-tracker.js"),
+    ])
+      .then(([providersModule, storageModule, chatModule, costsModule]) => {
+        aiProvider = providersModule.aiProvider;
+        MODEL_ALIASES = providersModule.MODEL_ALIASES;
+        saveProviderConfig = storageModule.saveProviderConfig;
+        getClient = storageModule.getClient;
+        CHAT_PRESETS = chatModule.CHAT_PRESETS;
+        QUICK_ACTIONS = chatModule.QUICK_ACTIONS;
+        buildSystemPrompt = chatModule.buildSystemPrompt;
+        createConversation = chatModule.createConversation;
+        getConversation = chatModule.getConversation;
+        listConversations = chatModule.listConversations;
+        deleteConversation = chatModule.deleteConversation;
+        addMessage = chatModule.addMessage;
+        getConversationMessages = chatModule.getConversationMessages;
+        getRecentConversationsWithPreview =
+          chatModule.getRecentConversationsWithPreview;
+        compactMessages = chatModule.compactMessages;
+        getMemoryStats = chatModule.getMemoryStats;
+        needsCompaction = chatModule.needsCompaction;
+        CHAT_SKILLS = chatModule.CHAT_SKILLS;
+        MODEL_TIERS = chatModule.MODEL_TIERS;
+        detectIntent = chatModule.detectIntent;
+        selectModel = chatModule.selectModel;
+        createChatToolHandler = chatModule.createChatToolHandler;
+        getDefaultChatTools = chatModule.getDefaultChatTools;
+        getAllChatTools = chatModule.getAllChatTools;
+        getSessionModel = chatModule.getSessionModel;
+        streamAgenticChat = chatModule.streamAgenticChat;
+        getGroupChatManager = chatModule.getGroupChatManager;
+        trackChatUsage = costsModule.trackChatUsage;
+      })
+      .catch((error) => {
+        chatRuntimePromise = null;
+        throw error;
+      });
+  }
+
+  await chatRuntimePromise;
+}
+
+function parseProviderType(value: string): ProviderType | null {
+  const parsed = ProviderTypeSchema.safeParse(value);
+
+  return parsed.success ? parsed.data : null;
+}
+
+chatRoutes.use("*", async (c, next) => {
+  try {
+    await ensureChatRuntime();
+  } catch (error) {
+    logger.error(
+      "[Chat] Failed to initialize runtime",
+      error instanceof Error ? error : undefined,
+    );
+    return c.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Chat runtime unavailable",
+      },
+      500,
+    );
+  }
+
+  await next();
+});
 
 // === Schemas ===
 
@@ -220,11 +290,15 @@ chatRoutes.post(
  * List available models
  */
 chatRoutes.get("/models", async (c) => {
-  const provider = c.req.query("provider") as string | undefined;
+  const provider = c.req.query("provider");
 
   let models;
   if (provider) {
-    models = aiProvider.getModelsForProvider(provider as any);
+    const providerType = parseProviderType(provider);
+    if (!providerType) {
+      return c.json({ error: "Invalid provider" }, 400);
+    }
+    models = aiProvider.getModelsForProvider(providerType);
   } else {
     models = aiProvider.getAllModels();
   }
@@ -273,8 +347,12 @@ chatRoutes.post(
   "/providers/:type/configure",
   zValidator("json", ProviderConfigSchema),
   async (c) => {
-    const type = c.req.param("type") as any;
+    const type = parseProviderType(c.req.param("type"));
     const config = c.req.valid("json");
+
+    if (!type) {
+      return c.json({ error: "Invalid provider" }, 400);
+    }
 
     try {
       // Build provider config (include Azure-specific fields)
@@ -329,7 +407,11 @@ chatRoutes.post(
  * Check provider health
  */
 chatRoutes.post("/providers/:type/health", async (c) => {
-  const type = c.req.param("type") as any;
+  const type = parseProviderType(c.req.param("type"));
+
+  if (!type) {
+    return c.json({ error: "Invalid provider" }, 400);
+  }
 
   const results = await aiProvider.healthCheck(type);
   const result = results[0];
@@ -425,7 +507,11 @@ chatRoutes.get("/providers/:type/models", async (c) => {
     }
 
     // For other providers, return static catalog
-    const models = aiProvider.getModelsForProvider(type as any);
+    const providerType = parseProviderType(type);
+    if (!providerType) {
+      return c.json({ error: "Invalid provider" }, 400);
+    }
+    const models = aiProvider.getModelsForProvider(providerType);
     return c.json({ provider: type, models });
   } catch (error) {
     logger.error(

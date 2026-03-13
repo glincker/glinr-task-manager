@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { validateFileUpload, FILE_SIZE_LIMITS, sanitizeFilename } from "../utils/security.js";
+import { validateFileUpload, sanitizeFilename } from "../utils/security.js";
 import {
   createTicket,
   getTicket,
@@ -35,7 +35,6 @@ import {
   UpdateTicketSchema,
   BulkUpdateTicketsSchema,
   BulkDeleteTicketsSchema,
-  TicketQuerySchema,
   TicketRelationType,
 } from "../tickets/index.js";
 

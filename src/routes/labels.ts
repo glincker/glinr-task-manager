@@ -6,6 +6,7 @@
 
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { z } from 'zod';
 import {
   createLabel,
   getLabel,
@@ -19,6 +20,25 @@ import {
 } from '../labels/index.js';
 
 export const labelsRoutes = new Hono();
+
+function getErrorMessage(error: unknown): string | undefined {
+  return error instanceof Error ? error.message : undefined;
+}
+
+const createLabelBodySchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  color: z.string().optional(),
+  parentId: z.string().optional(),
+});
+
+const updateLabelBodySchema = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  color: z.string().optional(),
+  parentId: z.string().nullable().optional(),
+  sortOrder: z.number().optional(),
+});
 
 async function parseJsonBody(c: Context): Promise<
   { ok: true; body: Record<string, unknown> } | { ok: false; response: Response }
@@ -79,11 +99,12 @@ labelsRoutes.post('/projects/:projectId/labels', async (c) => {
       return parsed.response;
     }
 
-    const body = parsed.body;
-
-    if (!body.name) {
+    const bodyParse = createLabelBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
       return c.json({ error: 'name is required' }, 400);
     }
+
+    const body = bodyParse.data;
 
     const label = await createLabel({
       projectId,
@@ -94,15 +115,15 @@ labelsRoutes.post('/projects/:projectId/labels', async (c) => {
     });
 
     return c.json(label, 201);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Labels] Create error:', error);
 
-    if (error.message?.includes('UNIQUE constraint')) {
+    if (getErrorMessage(error)?.includes('UNIQUE constraint')) {
       return c.json({ error: 'A label with this name already exists' }, 409);
     }
 
     return c.json(
-      { error: error instanceof Error ? error.message : 'Failed to create label' },
+      { error: getErrorMessage(error) ?? 'Failed to create label' },
       500
     );
   }
@@ -143,7 +164,12 @@ labelsRoutes.patch('/labels/:id', async (c) => {
       return parsed.response;
     }
 
-    const body = parsed.body;
+    const bodyParse = updateLabelBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
+      return c.json({ error: 'Invalid label update' }, 400);
+    }
+
+    const body = bodyParse.data;
 
     const label = await updateLabel(id, {
       name: body.name,
@@ -154,15 +180,15 @@ labelsRoutes.patch('/labels/:id', async (c) => {
     });
 
     return c.json(label);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Labels] Update error:', error);
 
-    if (error.message?.includes('not found')) {
+    if (getErrorMessage(error)?.includes('not found')) {
       return c.json({ error: 'Label not found' }, 404);
     }
 
     return c.json(
-      { error: error instanceof Error ? error.message : 'Failed to update label' },
+      { error: getErrorMessage(error) ?? 'Failed to update label' },
       500
     );
   }

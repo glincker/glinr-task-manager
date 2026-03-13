@@ -83,8 +83,15 @@ statsRoutes.get('/dashboard', async (c) => {
     };
 
     // Helper to safely parse date
-    const safeGetDateStr = (dateValue: any): string | null => {
+    const safeGetDateStr = (dateValue: unknown): string | null => {
       if (!dateValue) return null;
+      if (
+        !(dateValue instanceof Date) &&
+        typeof dateValue !== 'string' &&
+        typeof dateValue !== 'number'
+      ) {
+        return null;
+      }
       try {
         const date = new Date(dateValue);
         if (isNaN(date.getTime())) return null;
@@ -247,7 +254,7 @@ statsRoutes.get('/sprints/:id/burndown', async (c) => {
     // Generate day-by-day burndown
     const startDate = new Date(sprint.startDate);
     const endDate = new Date(sprint.endDate);
-    const burndown: Array<{ date: string; remaining: number; ideal: number }> = [];
+    const burndown: Array<{ date: string; remaining?: number; ideal: number }> = [];
 
     // Calculate sprint duration in days
     const sprintDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -283,7 +290,7 @@ statsRoutes.get('/sprints/:id/burndown', async (c) => {
         date: dateStr,
         remaining: remaining >= 0 ? remaining : undefined,
         ideal: Math.round(idealRemaining * 10) / 10,
-      } as any);
+      });
     }
 
     return c.json({

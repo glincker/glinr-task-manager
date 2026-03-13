@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { ToolDefinition, ToolResult, ToolExecutionContext, ToolAvailability } from '../types.js';
 import { getDb } from '../../../storage/index.js';
-import { projects, tickets, sprints, ticketComments, ticketHistory } from '../../../storage/schema.js';
+import { projects, tickets } from '../../../storage/schema.js';
 import { eq, sql, desc, and, like, or } from 'drizzle-orm';
 import { logger } from '../../../utils/logger.js';
 
@@ -39,7 +39,7 @@ function checkDatabaseAvailability(): ToolAvailability {
     getDb();
     dbAvailabilityCache = { available: true };
     lastDbCheck = now;
-  } catch (error) {
+  } catch {
     dbAvailabilityCache = {
       available: false,
       reason: 'Database not initialized',
@@ -98,23 +98,6 @@ const UpdateTicketParamsSchema = z.object({
 
 const GetTicketParamsSchema = z.object({
   ticketKey: z.string().describe('Ticket key (e.g., "PC-123")'),
-});
-
-const AddCommentParamsSchema = z.object({
-  ticketKey: z.string().describe('Ticket key (e.g., "PC-123")'),
-  content: z.string().min(1).describe('Comment content (supports markdown)'),
-});
-
-const MoveTicketParamsSchema = z.object({
-  ticketKey: z.string().describe('Ticket key (e.g., "PC-123")'),
-  targetProjectKey: z.string().describe('Target project key (e.g., "MOBILE")'),
-});
-
-const AssignTicketParamsSchema = z.object({
-  ticketKey: z.string().describe('Ticket key (e.g., "PC-123")'),
-  assignee: z.string().optional().describe('Human assignee name or email'),
-  assigneeAgent: z.enum(['claude', 'openclaw', 'ollama', 'gemini']).optional().describe('AI agent to assign'),
-  unassign: z.boolean().optional().describe('Set to true to remove assignment'),
 });
 
 export type CreateTicketParams = z.infer<typeof CreateTicketParamsSchema>;

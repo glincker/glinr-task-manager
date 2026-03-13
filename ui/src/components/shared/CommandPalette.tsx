@@ -2,8 +2,9 @@ import * as React from "react"
 import { Command } from "cmdk"
 import {
   Search, ListTodo, FileText, Bot,
-  Settings, Home, Plus, Moon, Sun,
-  Terminal, Sparkles, Activity, Coins, RotateCcw, BarChart3
+  Settings, Plus, Moon, Sun,
+  Terminal, Sparkles, Activity, Coins, RotateCcw, BarChart3,
+  AudioLines,
 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useTheme } from "next-themes"
@@ -139,6 +140,19 @@ export function CommandPalette() {
                 </CommandItem>
                 <CommandItem onSelect={() => runCommand(() => setTheme('midnight'))} icon={Sparkles}>
                   Switch to Midnight Black
+                </CommandItem>
+              </div>
+            </Command.Group>
+
+            <Command.Group heading="Voice" className="px-3 py-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/60">
+              <div className="space-y-1 mt-2">
+                <CommandItem
+                  onSelect={() => runCommand(() => {
+                    window.dispatchEvent(new CustomEvent('profclaw:talk-mode-toggle'))
+                  })}
+                  icon={AudioLines}
+                >
+                  Toggle Talk Mode
                 </CommandItem>
               </div>
             </Command.Group>

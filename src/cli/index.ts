@@ -14,6 +14,27 @@ import { authCommands } from './commands/auth.js';
 import { setupCommand } from './commands/setup.js';
 import { onboardCommand } from './commands/onboard.js';
 import { pluginCommands } from './commands/plugin.js';
+import { chatCommands } from './commands/chat.js';
+import { tunnelCommands } from './commands/tunnel.js';
+import { skillCommands } from './commands/skill.js';
+import { memoryCommands } from './commands/memory.js';
+import { statusCommand } from './commands/status.js';
+import { sessionCommands } from './commands/session.js';
+import { doctorCommand } from './commands/doctor.js';
+import { providerCommands } from './commands/provider.js';
+import { mcpCommands } from './commands/mcp.js';
+import { browserCommands } from './commands/browser.js';
+import { devicesCommands } from './commands/devices.js';
+import { daemonCommand } from './commands/daemon.js';
+import { completionCommands } from './commands/completion.js';
+import { canvasCommands } from './commands/canvas.js';
+import { webhooksCommands } from './commands/webhooks.js';
+import { channelsCommands } from './commands/channels.js';
+import { securityCommands } from './commands/security.js';
+import { logsCommand } from './commands/logs.js';
+import { modelsCommands } from './commands/models.js';
+import { nodesCommands } from './commands/nodes.js';
+import { tuiCommand } from './commands/tui.js';
 
 const VERSION = '2.0.0';
 
@@ -52,6 +73,28 @@ program.addCommand(authCommands());
 program.addCommand(setupCommand());
 program.addCommand(onboardCommand());
 program.addCommand(pluginCommands());
+program.addCommand(chatCommands());
+program.addCommand(tunnelCommands());
+program.addCommand(skillCommands());
+program.addCommand(memoryCommands());
+program.addCommand(statusCommand());
+program.addCommand(sessionCommands());
+program.addCommand(doctorCommand());
+program.addCommand(providerCommands());
+program.addCommand(mcpCommands());
+// Phase 9 - OpenClaw parity commands
+program.addCommand(browserCommands());
+program.addCommand(devicesCommands());
+program.addCommand(daemonCommand());
+program.addCommand(completionCommands());
+program.addCommand(canvasCommands());
+program.addCommand(webhooksCommands());
+program.addCommand(channelsCommands());
+program.addCommand(securityCommands());
+program.addCommand(logsCommand());
+program.addCommand(modelsCommands());
+program.addCommand(nodesCommands());
+program.addCommand(tuiCommand());
 
 // Default action (no command) - show banner and help
 program.action(() => {
@@ -75,6 +118,14 @@ program.action(() => {
   console.log('  profclaw tools run <cmd>  Execute a shell command');
   console.log('  profclaw tools sysinfo    Show system information');
   console.log('  profclaw tools git-status Show git status');
+  console.log('');
+  console.log(chalk.yellow('Infrastructure:'));
+  console.log('  profclaw tui              Terminal dashboard');
+  console.log('  profclaw logs -f          Follow server logs');
+  console.log('  profclaw models list      List AI models');
+  console.log('  profclaw channels list    List messaging channels');
+  console.log('  profclaw daemon install   Install as system service');
+  console.log('  profclaw completion zsh   Generate shell completions');
   console.log('');
   console.log(chalk.dim('Run `profclaw --help` for all commands'));
 });

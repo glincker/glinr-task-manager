@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { z } from 'zod';
 import {
   createApiToken,
   listApiTokens,
@@ -8,6 +9,13 @@ import {
 } from '../auth/api-tokens.js';
 
 const tokens = new Hono();
+
+const createTokenBodySchema = z.object({
+  name: z.string().min(1),
+  scopes: z.array(z.string()).min(1),
+  expiresInDays: z.number().optional(),
+  rateLimit: z.number().optional(),
+});
 
 async function parseJsonBody(c: Context): Promise<
   { ok: true; body: Record<string, unknown> } | { ok: false; response: Response }
@@ -38,11 +46,12 @@ tokens.post('/', async (c) => {
       return parsed.response;
     }
 
-    const { name, scopes, expiresInDays, rateLimit } = parsed.body;
-
-    if (!name || !scopes || !Array.isArray(scopes)) {
+    const bodyParse = createTokenBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
       return c.json({ error: 'name and scopes are required' }, 400);
     }
+
+    const { name, scopes, expiresInDays, rateLimit } = bodyParse.data;
 
     const result = await createApiToken(name, scopes as TokenScope[], {
       expiresInDays,

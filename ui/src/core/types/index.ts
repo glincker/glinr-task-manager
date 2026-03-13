@@ -682,6 +682,9 @@ export interface Settings {
     telemetry: boolean;
     debugMode: boolean;
     maxConcurrentTasks: number;
+    registrationMode: 'open' | 'invite';
+    showForgotPassword: boolean;
+    authMode: 'local' | 'multi';
   };
 }
 

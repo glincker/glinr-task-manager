@@ -61,55 +61,31 @@ import { webSearchTool } from './web-search.js';
 import { completeTaskTool } from './complete-task.js';
 
 // Cron tools
-import {
-  cronCreateTool,
-  cronListTool,
-  cronTriggerTool,
-  cronPauseTool,
-  cronArchiveTool,
-  cronDeleteTool,
-  cronHistoryTool,
-  cronTools,
-} from './cron-tool.js';
+import { cronTools } from './cron-tool.js';
 
 // profClaw ops tools (ticket, project management)
-import {
-  createTicketTool,
-  createProjectTool,
-  listTicketsTool,
-  listProjectsTool,
-  updateTicketTool,
-  getTicketTool,
-  profclawTools,
-} from './profclaw-ops.js';
+import { profclawTools } from './profclaw-ops.js';
 
 // Browser tools
-import {
-  browserNavigateTool,
-  browserSnapshotTool,
-  browserClickTool,
-  browserTypeTool,
-  browserSearchTool,
-  browserScreenshotTool,
-  browserPagesTool,
-  browserCloseTool,
-  browserTools,
-} from './browser.js';
+import { browserTools } from './browser.js';
 
 // Canvas tools
 import { canvasRenderTool } from './canvas.js';
 
 // Session spawn tools (hierarchical agent sessions)
-import {
-  spawnSessionTool,
-  sendMessageTool,
-  receiveMessagesTool,
-  listSessionsTool,
-  sessionSpawnTools,
-} from './session-spawn.js';
+import { sessionSpawnTools } from './session-spawn.js';
 
 // Integration tools (screen capture, clipboard, notifications)
 import { screenCaptureTool, clipboardReadTool, clipboardWriteTool, notifyTool } from './integrations.js';
+
+// Phase 3 parity tools
+import { openaiImageGenTool } from './openai-image-gen.js';
+import { ttsSpeakTool } from './tts-speak.js';
+import { linkUnderstandTool } from './link-understand.js';
+import { subagentOrchestrateTool } from './subagent-orchestrate.js';
+import { discordActionsTool } from './discord-actions.js';
+import { slackActionsTool } from './slack-actions.js';
+import { telegramActionsTool } from './telegram-actions.js';
 
 // Export individual tools
 export { execTool } from './exec.js';
@@ -218,6 +194,22 @@ export { getArtifact, listArtifacts, clearArtifacts } from './canvas.js';
 export { screenCaptureTool, clipboardReadTool, clipboardWriteTool, notifyTool } from './integrations.js';
 export type { ScreenCaptureResult, ClipboardReadResult, ClipboardWriteResult, NotifyResult } from './integrations.js';
 
+// Phase 3 parity tools exports
+export { openaiImageGenTool, setImageGenConfig, getImageGenConfig } from './openai-image-gen.js';
+export type { ImageGenResult } from './openai-image-gen.js';
+export { ttsSpeakTool } from './tts-speak.js';
+export type { TtsSpeakResult } from './tts-speak.js';
+export { linkUnderstandTool } from './link-understand.js';
+export type { LinkUnderstandResult } from './link-understand.js';
+export { subagentOrchestrateTool } from './subagent-orchestrate.js';
+export type { SubagentOrchestrateResult, SubtaskResult } from './subagent-orchestrate.js';
+export { discordActionsTool } from './discord-actions.js';
+export type { DiscordActionsResult } from './discord-actions.js';
+export { slackActionsTool } from './slack-actions.js';
+export type { SlackActionsResult } from './slack-actions.js';
+export { telegramActionsTool } from './telegram-actions.js';
+export type { TelegramActionsResult } from './telegram-actions.js';
+
 // Session spawn tools exports (hierarchical agent sessions)
 export {
   spawnSessionTool,
@@ -257,7 +249,7 @@ export type {
 } from './browser.js';
 
 // All built-in tools (typed as generic ToolDefinition array)
-export const builtinTools: ToolDefinition<any, any>[] = [
+export const builtinTools = [
   // Core tools (11)
   execTool,
   webFetchTool,
@@ -318,7 +310,15 @@ export const builtinTools: ToolDefinition<any, any>[] = [
   clipboardReadTool,
   clipboardWriteTool,
   notifyTool,
-];
+  // Phase 3 parity tools (7)
+  openaiImageGenTool,
+  ttsSpeakTool,
+  linkUnderstandTool,
+  subagentOrchestrateTool,
+  discordActionsTool,
+  slackActionsTool,
+  telegramActionsTool,
+] as unknown as ToolDefinition[];
 
 /**
  * Register all built-in tools
@@ -326,6 +326,6 @@ export const builtinTools: ToolDefinition<any, any>[] = [
 export function registerBuiltinTools(): void {
   const registry = getToolRegistry();
   for (const tool of builtinTools) {
-    registry.register(tool);
+    registry.register(tool as unknown as ToolDefinition<never, unknown>);
   }
 }

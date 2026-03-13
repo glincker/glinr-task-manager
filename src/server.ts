@@ -3,67 +3,17 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 
-// Route modules
-import {
-  tasksRoutes,
-  dlqRoutes,
-  agentsRoutes,
-  webhooksRoutes,
-  hooksRoutes,
-  summariesRoutes,
-  costsRoutes,
-  settingsRoutes,
-  tokensRoutes,
-  authRoutes,
-  gatewayRoutes,
-  searchRoutes,
-  ticketsRoutes,
-  projectsRoutes,
-  statsRoutes,
-  syncRoutes,
-  chatRoutes,
-  importRoutes,
-  userRoutes,
-  toolsRoutes,
-  setupRoutes,
-  labelsRoutes,
-  cronRoutes,
-  devicesRoutes,
-  memoryRoutes,
-  skillsRoutes,
-  telegramRoutes,
-  whatsappRoutes,
-  discordRoutes,
-  openApiRoutes,
-  notificationsRoutes,
-  oobeRoutes,
-  pluginsRoutes,
-  clawhubRoutes,
-  pushRoutes,
-  tunnelsRoutes,
-  voiceRoutes,
-} from './routes/index.js';
-
-// Core imports
-import { initQueue, getTasks, registerSSEBroadcaster, closeQueue, addTask, getQueueType } from './queue/index.js';
-import { getTaskSummaries } from './summaries/index.js';
-import { getAgentRegistry } from './adapters/registry.js';
-import { startAllCronJobs, stopAllCronJobs, getHealthStatus } from './cron/index.js';
-import { initTokenTracker } from './costs/token-tracker.js';
+// Core imports - keep static only for lifecycle essentials (init/close/broadcast)
+import { initQueue, registerSSEBroadcaster, closeQueue } from './queue/index.js';
 import { loadConfig } from './utils/config-loader.js';
 import { validateEnvironment, getConfiguredIntegrations, getConfiguredAIProviders } from './utils/env-validator.js';
-import { initStorage, getDb } from './storage/index.js';
-import { users } from './storage/schema.js';
-import { eq } from 'drizzle-orm';
+import { initStorage } from './storage/index.js';
 import { initApiTokensTable, tokenAuthMiddleware } from './auth/api-tokens.js';
 import { authMiddleware } from './auth/middleware.js';
-import { getGateway, type GatewayRequest, type WorkflowType } from './gateway/index.js';
+import type { GatewayRequest, WorkflowType } from './gateway/index.js';
 import { CreateTaskSchema } from './types/task.js';
-import { initSyncIntegration } from './sync/index.js';
-import { aiProvider } from './providers/index.js';
-import { loadAllProviderConfigs } from './storage/index.js';
 import { getMode, getModeLabel, hasCapability } from './core/deployment.js';
-import { webchatRoutes } from './routes/webchat.js';
+import { registerRouteModules } from './server/route-loader.js';
 
 interface SettingsYaml {
   server: {
@@ -78,11 +28,26 @@ interface SettingsYaml {
   };
 }
 
-const appSettings = loadConfig<SettingsYaml>('settings.yml');
-const PORT = parseInt(process.env.PORT || appSettings.server?.port?.toString() || '3000');
-const ENABLE_CRON = process.env.ENABLE_CRON !== undefined
-  ? process.env.ENABLE_CRON !== 'false'
-  : (appSettings.server?.enableCron !== undefined ? appSettings.server.enableCron : true);
+let cachedSettings: SettingsYaml | null = null;
+
+function getAppSettings(): SettingsYaml {
+  if (!cachedSettings) {
+    cachedSettings = loadConfig<SettingsYaml>('settings.yml');
+  }
+  return cachedSettings;
+}
+
+function getPort(): number {
+  const appSettings = getAppSettings();
+  return parseInt(process.env.PORT || appSettings.server?.port?.toString() || '3000');
+}
+
+function isCronEnabled(): boolean {
+  const appSettings = getAppSettings();
+  return process.env.ENABLE_CRON !== undefined
+    ? process.env.ENABLE_CRON !== 'false'
+    : (appSettings.server?.enableCron !== undefined ? appSettings.server.enableCron : true);
+}
 
 const app = new Hono();
 export { app };
@@ -100,8 +65,6 @@ app.use('*', (c, next) => {
 // CORS configuration
 // When credentials: true, origin cannot be "*" - must be explicit or dynamic
 // Priority: CORS_ORIGIN env var > settings.yml > dynamic localhost fallback
-const configuredOrigin = process.env.CORS_ORIGIN || appSettings.server?.cors?.origin;
-
 // Default safe origins for development (localhost on common ports)
 const DEFAULT_ORIGINS = [
   'http://localhost:3000',
@@ -115,22 +78,27 @@ const DEFAULT_ORIGINS = [
 app.use(
   '*',
   cors({
-    origin: configuredOrigin && configuredOrigin !== '*'
-      ? configuredOrigin
-      : (origin) => {
-          // In development: allow localhost origins
-          // In production without CORS_ORIGIN: only allow same-origin
-          if (!origin) return '';
-          if (DEFAULT_ORIGINS.includes(origin)) return origin;
-          // Allow any *.localhost or 127.0.0.1 origin for dev flexibility
-          try {
-            const url = new URL(origin);
-            if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return origin;
-          } catch { /* invalid origin */ }
-          // Production: require explicit CORS_ORIGIN config
-          if (process.env.NODE_ENV === 'production') return '';
-          return origin; // Dev fallback: allow all (only in non-production)
-        },
+    origin: (origin) => {
+      const configuredOrigin = process.env.CORS_ORIGIN || getAppSettings().server?.cors?.origin;
+      if (configuredOrigin && configuredOrigin !== '*') {
+        return configuredOrigin;
+      }
+
+      // In development: allow localhost origins
+      // In production without CORS_ORIGIN: only allow same-origin
+      if (!origin) return '';
+      if (DEFAULT_ORIGINS.includes(origin)) return origin;
+      // Allow any *.localhost or 127.0.0.1 origin for dev flexibility
+      try {
+        const url = new URL(origin);
+        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return origin;
+      } catch {
+        // invalid origin
+      }
+      // Production: require explicit CORS_ORIGIN config
+      if (process.env.NODE_ENV === 'production') return '';
+      return origin; // Dev fallback: allow all (only in non-production)
+    },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'Cookie'],
     credentials: true,
@@ -144,7 +112,9 @@ app.use('/api/*', authMiddleware());
 // === Core Routes ===
 
 // Health check
-app.get('/health', (c) => {
+app.get('/health', async (c) => {
+  const { getHealthStatus } = await import('./cron/index.js');
+  const { getQueueType } = await import('./queue/index.js');
   const agentHealth = getHealthStatus();
   return c.json({
     status: 'ok',
@@ -272,7 +242,8 @@ app.get('/', (c) => {
 });
 
 // Task statistics
-app.get('/api/stats', (c) => {
+app.get('/api/stats', async (c) => {
+  const { getTasks } = await import('./queue/index.js');
   const allTasks = getTasks({ limit: 10000 });
   const stats = {
     pending: 0,
@@ -299,6 +270,7 @@ app.get('/api/stats', (c) => {
 
 // Get summaries for a task (nested route that spans two domains)
 app.get('/api/tasks/:taskId/summaries', async (c) => {
+  const { getTaskSummaries } = await import('./summaries/index.js');
   const taskId = c.req.param('taskId');
   const summaries = await getTaskSummaries(taskId);
 
@@ -311,7 +283,7 @@ app.get('/api/tasks/:taskId/summaries', async (c) => {
 
 // Integration status
 app.get('/api/integrations/status', (c) => {
-  const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
+  const baseUrl = process.env.BASE_URL || `http://localhost:${getPort()}`;
 
   const integrations = {
     github: {
@@ -355,7 +327,7 @@ app.get('/api/integrations/status', (c) => {
 
 const sseConnections = new Set<ReadableStreamDefaultController<Uint8Array>>();
 
-export function broadcastEvent(eventType: string, data: any) {
+export function broadcastEvent(eventType: string, data: unknown) {
   const message = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
   const encoder = new TextEncoder();
   const bytes = encoder.encode(message);
@@ -422,6 +394,7 @@ app.get('/api/events', (c) => {
 app.post('/api/gateway/execute-secure', tokenAuthMiddleware(['gateway:execute']), async (c) => {
   try {
     const body = await c.req.json();
+    const { getGateway } = await import('./gateway/index.js');
     const gateway = getGateway();
 
     const request: GatewayRequest = {
@@ -439,82 +412,20 @@ app.post('/api/gateway/execute-secure', tokenAuthMiddleware(['gateway:execute'])
       if (!parsed.success) {
         return c.json({ error: 'Invalid task', details: parsed.error.flatten() }, 400);
       }
+      const { addTask } = await import('./queue/index.js');
       const createdTask = await addTask(parsed.data);
       request.task = createdTask;
     }
 
     const response = await gateway.execute(request);
     return c.json(response);
-  } catch (error) {
+  } catch {
     return c.json({ error: 'Gateway execution failed' }, 500);
   }
 });
 
-// === Mount Route Modules (mode-aware) ===
-
-// Core routes -- always available
-app.route('/api/tasks', tasksRoutes);
-app.route('/api/agents', agentsRoutes);
-app.route('/api/chat', chatRoutes);
-app.route('/api/gateway', gatewayRoutes);
-app.route('/api/hook', hooksRoutes);
-app.route('/api/tools', toolsRoutes);
-app.route('/api/setup', setupRoutes);
-app.route('/api/oobe', oobeRoutes);
-app.route('/api/memory', memoryRoutes);
-app.route('/api/skills', skillsRoutes);
-app.route('/api/plugins', pluginsRoutes);
-app.route('/api/clawhub', clawhubRoutes);
-app.route('/api/push', pushRoutes);
-app.route('/api/tunnels', tunnelsRoutes);
-app.route('/api/voice', voiceRoutes);
-app.route('/api/costs', costsRoutes);
-app.route('/api/settings', settingsRoutes);
-app.route('/api/docs', openApiRoutes);
-app.route('/auth', authRoutes);
-app.route('/api/auth', authRoutes);
-
-// Mini+ routes -- dashboard, users, search, stats, notifications
-if (hasCapability('web_ui')) {
-  app.route('/api/dlq', dlqRoutes);
-  app.route('/api/summaries', summariesRoutes);
-  app.route('/api/tokens', tokensRoutes);
-  app.route('/api/search', searchRoutes);
-  app.route('/api/stats', statsRoutes);
-  app.route('/api/users', userRoutes);
-  app.route('/api/devices', devicesRoutes);
-  app.route('/api/notifications', notificationsRoutes);
-}
-
-// Mini+ routes -- cron, tickets, projects
-if (hasCapability('cron')) {
-  app.route('/api/cron', cronRoutes);
-}
-
-if (hasCapability('integrations')) {
-  app.route('/api/tickets', ticketsRoutes);
-  app.route('/api/projects', projectsRoutes);
-  app.route('/api', labelsRoutes); // /api/projects/:id/labels and /api/tickets/:id/labels
-  app.route('/webhooks', webhooksRoutes);
-}
-
-// Pro routes -- sync, import, full integrations
-if (hasCapability('sync_engine')) {
-  app.route('/api/sync', syncRoutes);
-  app.route('/api/import', importRoutes);
-}
-
-// WebChat routes -- always available (mini+ has UI, pico has API-only)
-app.route('/api/chat/webchat', webchatRoutes);
-
-// Chat channel routes -- based on channel capability
-if (hasCapability('chat_channels')) {
-  app.route('/api/telegram', telegramRoutes);
-  app.route('/api/whatsapp', whatsappRoutes);
-  app.route('/api/discord', discordRoutes);
-}
-
-// Static UI serving is set up in main() after mode detection
+// === Mount Route Modules (mode-aware, lazy-loaded) ===
+await registerRouteModules(app, getMode());
 
 // Alias /api/plugins to /api/settings/plugins for backwards compat
 app.get('/api/plugins/health', async (c) => {
@@ -535,6 +446,9 @@ async function main() {
     return;
   }
   const mode = getMode();
+  const appSettings = getAppSettings();
+  const PORT = getPort();
+  const ENABLE_CRON = isCronEnabled();
   console.log(`[profClaw] Starting in ${getModeLabel()} mode...`);
 
   // Validate environment variables (fail fast if critical vars missing)
@@ -567,25 +481,42 @@ async function main() {
     console.log('[OK] API tokens table initialized');
 
     // Initialize conversation tables for chat history
-    const { initConversationTables } = await import('./chat/conversations.js');
-    await initConversationTables();
-    console.log('[OK] Chat conversations initialized');
-
-    // Load saved AI provider configurations from database
-    const loadedProviders = await aiProvider.loadSavedConfigs(loadAllProviderConfigs);
-    if (loadedProviders > 0) {
-      console.log(`[OK] Loaded ${loadedProviders} saved AI provider configs`);
+    if (hasCapability('chat_channels') || hasCapability('web_ui')) {
+      const { initConversationTables } = await import('./chat/conversations.js');
+      await initConversationTables();
+      console.log('[OK] Chat conversations initialized');
     }
 
-    // Initialize skills registry
-    try {
-      const { initializeSkillsRegistry } = await import('./skills/index.js');
-      const skillsRegistry = await initializeSkillsRegistry({
-        workspaceDir: process.cwd(),
-      });
-      console.log(`[OK] Skills loaded: ${skillsRegistry.getLoadedSkillNames().length} skills`);
-    } catch (error) {
-      console.error('[WARN] Skills initialization failed:', error);
+    // Register messenger-to-AI pipeline (only if chat channels enabled)
+    if (hasCapability('chat_channels')) {
+      const { registerMessageHandler } = await import('./chat/message-handler.js');
+      registerMessageHandler();
+      console.log('[OK] Messenger AI handler registered');
+    }
+
+    // Load saved AI provider configurations from database (skip in pico - loaded on first use)
+    if (hasCapability('chat_channels') || hasCapability('web_ui')) {
+      const [{ aiProvider }, { loadAllProviderConfigs }] = await Promise.all([
+        import('./providers/index.js'),
+        import('./storage/index.js'),
+      ]);
+      const loadedProviders = await aiProvider.loadSavedConfigs(loadAllProviderConfigs);
+      if (loadedProviders > 0) {
+        console.log(`[OK] Loaded ${loadedProviders} saved AI provider configs`);
+      }
+    }
+
+    // Initialize skills registry (only if web UI enabled)
+    if (hasCapability('web_ui')) {
+      try {
+        const { initializeSkillsRegistry } = await import('./skills/index.js');
+        const skillsRegistry = await initializeSkillsRegistry({
+          workspaceDir: process.cwd(),
+        });
+        console.log(`[OK] Skills loaded: ${skillsRegistry.getLoadedSkillNames().length} skills`);
+      } catch (error) {
+        console.error('[WARN] Skills initialization failed:', error);
+      }
     }
   } catch (error) {
     console.error('[ERROR] Failed to initialize storage:', error);
@@ -596,6 +527,7 @@ async function main() {
   try {
     await initQueue();
     registerSSEBroadcaster(broadcastEvent);
+    const { getQueueType } = await import('./queue/index.js');
     console.log(`[OK] Task queue initialized (${getQueueType()})`);
     console.log('[OK] SSE event stream registered');
   } catch (error) {
@@ -606,6 +538,7 @@ async function main() {
   // Initialize sync engine (pro mode or if explicitly configured)
   if (hasCapability('sync_engine')) {
     try {
+      const { initSyncIntegration } = await import('./sync/index.js');
       const syncEngine = await initSyncIntegration();
       if (syncEngine) {
         console.log('[OK] Sync engine initialized');
@@ -618,10 +551,12 @@ async function main() {
   }
 
   // Initialize cost tracking
+  const { initTokenTracker } = await import('./costs/token-tracker.js');
   initTokenTracker();
   console.log('[OK] Token tracker initialized');
 
   // Initialize agents from config
+  const { getAgentRegistry } = await import('./adapters/registry.js');
   const registry = getAgentRegistry();
 
   interface AgentsYaml {
@@ -666,10 +601,12 @@ async function main() {
     }
   }
 
-  // Auto-discover agents if enabled
-  const autoDiscover = process.env.AUTO_DISCOVER_AGENTS !== undefined
-    ? process.env.AUTO_DISCOVER_AGENTS === 'true'
-    : (appSettings.agents?.autoDiscover ?? false);
+  // Auto-discover agents if enabled (skip in pico mode to save startup time/memory)
+  const autoDiscover = mode !== 'pico' && (
+    process.env.AUTO_DISCOVER_AGENTS !== undefined
+      ? process.env.AUTO_DISCOVER_AGENTS === 'true'
+      : (appSettings.agents?.autoDiscover ?? false)
+  );
 
   if (autoDiscover && !registry.getActiveAdapters().some(a => a.type === 'claude-code')) {
     try {
@@ -719,6 +656,7 @@ async function main() {
 
   // Start cron jobs (if mode supports it and enabled)
   if (ENABLE_CRON && hasCapability('cron')) {
+    const { startAllCronJobs } = await import('./cron/index.js');
     startAllCronJobs();
     console.log('[OK] Cron jobs started (autonomous mode)');
   } else if (!hasCapability('cron')) {
@@ -793,6 +731,11 @@ async function main() {
 
   // First-time setup banner
   try {
+    const [{ getDb }, { users }, { eq }] = await Promise.all([
+      import('./storage/index.js'),
+      import('./storage/schema.js'),
+      import('drizzle-orm'),
+    ]);
     const db = getDb();
     if (db) {
       const adminCount = await db
@@ -815,6 +758,7 @@ async function main() {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n[SHUTDOWN] Shutting down...');
+  const { stopAllCronJobs } = await import('./cron/index.js');
   stopAllCronJobs();
   await closeQueue();
   process.exit(0);
@@ -822,6 +766,7 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('\n[SHUTDOWN] Shutting down...');
+  const { stopAllCronJobs } = await import('./cron/index.js');
   stopAllCronJobs();
   await closeQueue();
   process.exit(0);

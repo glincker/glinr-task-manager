@@ -14,14 +14,12 @@ import {
   Zap,
   Sparkles,
   ArrowRight,
-  MessageSquare,
   GitBranch,
   ChevronRight,
   ArrowUpRight,
   ArrowDownRight,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { formatDistanceToNow } from 'date-fns';
 import { api } from '@/core/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

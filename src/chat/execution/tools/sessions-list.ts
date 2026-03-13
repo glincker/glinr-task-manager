@@ -10,8 +10,6 @@ import type { ToolDefinition, ToolResult, ToolExecutionContext } from '../types.
 import {
   listConversations,
   getRecentConversationsWithPreview,
-  getConversationMessages,
-  type Conversation,
 } from '../../conversations.js';
 
 // Chat mode type (for future use)
@@ -139,7 +137,7 @@ Returns session IDs that can be used with other session tools.`,
           createdAt: s.createdAt,
           updatedAt: s.updatedAt,
         }));
-        total = result.total;
+        total = filtered.length;
       }
 
       // Build human-readable output

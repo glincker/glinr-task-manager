@@ -18,7 +18,10 @@ vi.mock('../../utils/logger.js', () => ({
   },
 }));
 
-vi.mock('../../providers/index.js', () => ({
+vi.mock('../../providers/index.js', async () => {
+  const { z } = await vi.importActual<typeof import('zod')>('zod');
+  return {
+  ProviderType: z.enum(['anthropic', 'openai', 'azure', 'google', 'ollama', 'openrouter', 'groq', 'xai', 'mistral', 'cohere', 'perplexity', 'deepseek', 'together', 'cerebras', 'fireworks', 'copilot', 'bedrock', 'zhipu', 'moonshot', 'qwen', 'replicate', 'github-models', 'volcengine', 'byteplus', 'qianfan', 'modelstudio', 'minimax', 'xiaomi', 'huggingface', 'nvidia-nim', 'venice', 'kilocode', 'vercel-ai', 'cloudflare-ai', 'watsonx']),
   aiProvider: {
     chat: vi.fn(),
     chatStream: vi.fn(),
@@ -36,7 +39,8 @@ vi.mock('../../providers/index.js', () => ({
     'fast': { provider: 'anthropic', model: 'claude-haiku-4-5' },
     'smart': { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   },
-}));
+};
+});
 
 vi.mock('../../storage/index.js', () => ({
   saveProviderConfig: vi.fn(() => Promise.resolve()),
@@ -93,6 +97,7 @@ vi.mock('../../chat/index.js', () => ({
   getAllChatTools: vi.fn(() => []),
   getSessionModel: vi.fn(() => null),
   streamAgenticChat: vi.fn(async function* () { /* yields nothing */ }),
+  getGroupChatManager: vi.fn(),
 }));
 
 vi.mock('../../costs/token-tracker.js', () => ({

@@ -12,3 +12,4 @@ export { ToolApprovalDialog, InlineApprovalPrompt } from './ToolApprovalDialog';
 export type { PendingApproval } from './ToolApprovalDialog';
 export { AgenticThinking } from './AgenticThinking';
 export type { AgenticEvent, AgenticThinkingProps } from './AgenticThinking';
+export { TalkModeOverlay } from './TalkModeOverlay';

@@ -7,6 +7,7 @@
 
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { z } from 'zod';
 import {
   loadOrCreateDeviceIdentity,
   getDeviceIdentity,
@@ -29,6 +30,45 @@ import {
 import { getStorage } from '../storage/index.js';
 
 const app = new Hono();
+
+const attestBodySchema = z.object({
+  data: z.record(z.string(), z.unknown()).optional(),
+});
+
+const verifyAttestationBodySchema = z.object({
+  attestation: z.object({
+    deviceId: z.string(),
+    publicKey: z.string(),
+    attestation: z.object({
+      timestamp: z.string(),
+      nonce: z.string(),
+      data: z.record(z.string(), z.unknown()).optional(),
+      signature: z.string(),
+    }),
+  }),
+  maxAgeMs: z.number().optional(),
+  expectedDeviceId: z.string().optional(),
+});
+
+const pairingRequestBodySchema = z.object({
+  requesterId: z.string().optional(),
+  meta: z.record(z.string(), z.string()).optional(),
+});
+
+const pairingApproveBodySchema = z.object({
+  code: z.string().min(1),
+  approvedBy: z.string().optional(),
+});
+
+const pairingRejectBodySchema = z.object({
+  code: z.string().min(1),
+  rejectedBy: z.string().optional(),
+  reason: z.string().optional(),
+});
+
+const pairingValidateBodySchema = z.object({
+  token: z.string().min(1),
+});
 
 async function parseJsonBody(c: Context): Promise<
   { ok: true; body: Record<string, unknown> } | { ok: false; response: Response }
@@ -89,9 +129,13 @@ app.post('/attest', async (c) => {
       return parsed.response;
     }
 
-    const body = parsed.body;
+    const bodyParse = attestBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
+      return c.json({ success: false, error: 'Invalid attestation payload' }, 400);
+    }
+
     const identity = loadOrCreateDeviceIdentity();
-    const attestation = createDeviceAttestation(identity, body.data);
+    const attestation = createDeviceAttestation(identity, bodyParse.data.data);
 
     return c.json({
       success: true,
@@ -120,15 +164,14 @@ app.post('/verify', async (c) => {
       return parsed.response;
     }
 
-    const body = parsed.body;
-
-    if (!body.attestation) {
+    const bodyParse = verifyAttestationBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
       return c.json({ success: false, error: 'Missing attestation' }, 400);
     }
 
-    const result = verifyDeviceAttestation(body.attestation, {
-      maxAgeMs: body.maxAgeMs,
-      expectedDeviceId: body.expectedDeviceId,
+    const result = verifyDeviceAttestation(bodyParse.data.attestation, {
+      maxAgeMs: bodyParse.data.maxAgeMs,
+      expectedDeviceId: bodyParse.data.expectedDeviceId,
     });
 
     return c.json({
@@ -165,16 +208,22 @@ app.post('/pairing/request', async (c) => {
       return parsed.response;
     }
 
-    const body = parsed.body;
+    const bodyParse = pairingRequestBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
+      return c.json({ success: false, error: 'Invalid pairing request payload' }, 400);
+    }
     const identity = loadOrCreateDeviceIdentity();
+    const identityMeta = {
+      deviceId: identity.deviceId,
+      ...(identity.displayName ? { displayName: identity.displayName } : {}),
+      ...(identity.platform ? { platform: identity.platform } : {}),
+    };
 
     const result = await requestPairingCode({
-      requesterId: body.requesterId || identity.deviceId,
+      requesterId: bodyParse.data.requesterId || identity.deviceId,
       meta: {
-        deviceId: identity.deviceId,
-        displayName: identity.displayName,
-        platform: identity.platform,
-        ...body.meta,
+        ...identityMeta,
+        ...bodyParse.data.meta,
       },
     });
 
@@ -237,14 +286,13 @@ app.post('/pairing/approve', async (c) => {
       return parsed.response;
     }
 
-    const body = parsed.body;
-
-    if (!body.code) {
+    const bodyParse = pairingApproveBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
       return c.json({ success: false, error: 'Missing code' }, 400);
     }
 
-    const code = parsePairingCode(body.code);
-    const approvedBy = body.approvedBy || 'admin';
+    const code = parsePairingCode(bodyParse.data.code);
+    const approvedBy = bodyParse.data.approvedBy || 'admin';
 
     const result = await approvePairingCode({ code, approvedBy });
 
@@ -295,19 +343,18 @@ app.post('/pairing/reject', async (c) => {
       return parsed.response;
     }
 
-    const body = parsed.body;
-
-    if (!body.code) {
+    const bodyParse = pairingRejectBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
       return c.json({ success: false, error: 'Missing code' }, 400);
     }
 
-    const code = parsePairingCode(body.code);
-    const rejectedBy = body.rejectedBy || 'admin';
+    const code = parsePairingCode(bodyParse.data.code);
+    const rejectedBy = bodyParse.data.rejectedBy || 'admin';
 
     const success = await rejectPairingCode({
       code,
       rejectedBy,
-      reason: body.reason,
+      reason: bodyParse.data.reason,
     });
 
     if (!success) {
@@ -377,13 +424,12 @@ app.post('/pairing/validate', async (c) => {
       return parsed.response;
     }
 
-    const body = parsed.body;
-
-    if (!body.token) {
+    const bodyParse = pairingValidateBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
       return c.json({ success: false, error: 'Missing token' }, 400);
     }
 
-    const result = await validatePairingToken(body.token);
+    const result = await validatePairingToken(bodyParse.data.token);
 
     return c.json({
       success: true,

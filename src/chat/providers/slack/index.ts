@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { logger } from '../../../utils/logger.js';
+import { chunkForPlatform } from '../../format/chunk.js';
 import type {
   ChatProvider,
   SlackAccountConfig,
@@ -220,50 +221,63 @@ const outboundAdapter: OutboundAdapter = {
     }
 
     try {
-      const payload: Record<string, unknown> = {
-        channel: message.to,
-      };
+      const textChunks = message.text
+        ? chunkForPlatform(message.text, 'slack', { mode: 'newline' }).chunks
+        : [];
+      const chunks = textChunks.length > 0 ? textChunks : [undefined];
+      let firstResponse: SlackApiResponse | undefined;
+      let firstMessageId: string | undefined;
+      let threadId = message.threadId;
 
-      // Add text content
-      if (message.text) {
-        payload.text = message.text;
-      }
+      for (const [index, chunk] of chunks.entries()) {
+        const payload: Record<string, unknown> = {
+          channel: message.to,
+        };
 
-      // Add blocks
-      if (message.blocks) {
-        payload.blocks = message.blocks;
-      }
+        if (chunk !== undefined) {
+          payload.text = chunk;
+        }
+        if (message.blocks && index === 0) {
+          payload.blocks = message.blocks;
+        }
+        if (threadId) {
+          payload.thread_ts = threadId;
+        }
 
-      // Add thread
-      if (message.threadId) {
-        payload.thread_ts = message.threadId;
-      }
+        const endpoint = message.ephemeral
+          ? `${SLACK_API_BASE}/chat.postEphemeral`
+          : `${SLACK_API_BASE}/chat.postMessage`;
 
-      // Ephemeral messages use different endpoint
-      const endpoint = message.ephemeral
-        ? `${SLACK_API_BASE}/chat.postEphemeral`
-        : `${SLACK_API_BASE}/chat.postMessage`;
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${botToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${botToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+        const data = (await response.json()) as SlackApiResponse;
 
-      const data = (await response.json()) as SlackApiResponse;
+        if (!data.ok) {
+          return { success: false, error: data.error, raw: data };
+        }
 
-      if (!data.ok) {
-        return { success: false, error: data.error, raw: data };
+        if (!firstResponse) {
+          firstResponse = data;
+          firstMessageId = data.ts;
+          threadId = data.message?.thread_ts || data.ts || threadId;
+        }
       }
 
       return {
         success: true,
-        messageId: data.ts,
-        threadId: data.message?.thread_ts,
-        raw: data,
+        messageId: firstMessageId,
+        threadId,
+        raw: {
+          ...(firstResponse ?? {}),
+          chunkCount: chunks.length,
+        },
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

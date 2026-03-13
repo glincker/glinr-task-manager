@@ -87,12 +87,15 @@ vi.mock('zod-to-json-schema', () => ({
   zodToJsonSchema: mocks.mockZodToJsonSchema,
 }));
 
-vi.mock('../../providers/index.js', () => ({
+vi.mock('../../providers/ai-sdk.js', () => ({
   aiProvider: {
     resolveModel: mocks.mockResolveModel,
     getModel: mocks.mockGetModel,
     getConfiguredProviders: mocks.mockGetConfiguredProviders,
   },
+}));
+
+vi.mock('../../providers/core/models.js', () => ({
   MODEL_ALIASES: {
     sonnet: { provider: 'anthropic', model: 'claude-sonnet-4-5' },
     haiku: { provider: 'anthropic', model: 'claude-haiku-3-5' },

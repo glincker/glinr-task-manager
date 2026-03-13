@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { randomUUID, randomBytes } from 'crypto';
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
 import { getDb } from '../storage/index.js';
 import { users, userPreferences } from '../storage/schema.js';
 import { getSettings, updateSettings, isGitHubOAuthConfigured } from '../settings/index.js';
@@ -29,6 +30,28 @@ const setup = new Hono();
 const adminCreateLimiter = rateLimit({ windowMs: 60_000, max: 3, message: 'Too many admin creation attempts. Try again in a minute.' });
 const recoveryLimiter = rateLimit({ windowMs: 60_000, max: 5, message: 'Too many recovery attempts. Try again in a minute.' });
 const resetLimiter = rateLimit({ windowMs: 60_000, max: 5, message: 'Too many reset attempts. Try again in a minute.' });
+
+const githubOAuthBodySchema = z.object({
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
+  redirectUri: z.string().optional(),
+});
+
+const adminSetupBodySchema = z.object({
+  email: z.string().min(1),
+  password: z.string().min(1),
+  name: z.string().min(1),
+});
+
+const verifyRecoveryCodeBodySchema = z.object({
+  email: z.string().min(1),
+  code: z.string().min(1),
+});
+
+const resetPasswordBodySchema = z.object({
+  resetToken: z.string().min(1),
+  newPassword: z.string().min(1),
+});
 
 async function parseJsonBody(c: Context): Promise<
   { ok: true; body: Record<string, unknown> } | { ok: false; response: Response }
@@ -138,14 +161,15 @@ setup.post('/github-oauth/validate', async (c) => {
       return parsed.response;
     }
 
-    const { clientId, clientSecret } = parsed.body;
-
-    if (!clientId || !clientSecret) {
+    const bodyParse = githubOAuthBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
       return c.json({
         valid: false,
         error: 'Client ID and Client Secret are required',
       }, 400);
     }
+
+    const { clientId, clientSecret } = bodyParse.data;
 
     // Validate Client ID format
     // GitHub OAuth App Client IDs are typically 20 characters alphanumeric
@@ -253,11 +277,12 @@ setup.post('/github-oauth', async (c) => {
       return parsed.response;
     }
 
-    const { clientId, clientSecret, redirectUri } = parsed.body;
-
-    if (!clientId || !clientSecret) {
+    const bodyParse = githubOAuthBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
       return c.json({ error: 'Client ID and Client Secret are required' }, 400);
     }
+
+    const { clientId, clientSecret, redirectUri } = bodyParse.data;
 
     // Calculate default redirect URI based on current origin
     const defaultRedirectUri = redirectUri || 'http://localhost:5173/api/auth/github/callback';
@@ -301,11 +326,12 @@ setup.post('/admin', adminCreateLimiter, async (c) => {
       return parsed.response;
     }
 
-    const { email, password, name } = parsed.body;
-
-    if (!email || !password || !name) {
+    const bodyParse = adminSetupBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
       return c.json({ error: 'Email, password, and name are required' }, 400);
     }
+
+    const { email, password, name } = bodyParse.data;
 
     // Validate email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -407,11 +433,12 @@ setup.post('/verify-recovery-code', recoveryLimiter, async (c) => {
       return parsed.response;
     }
 
-    const { email, code } = parsed.body;
-
-    if (!email || !code) {
+    const bodyParse = verifyRecoveryCodeBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
       return c.json({ error: 'Email and recovery code are required' }, 400);
     }
+
+    const { email, code } = bodyParse.data;
 
     // Find user
     const result = await db
@@ -488,11 +515,12 @@ setup.post('/reset-password', resetLimiter, async (c) => {
       return parsed.response;
     }
 
-    const { resetToken, newPassword } = parsed.body;
-
-    if (!resetToken || !newPassword) {
+    const bodyParse = resetPasswordBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
       return c.json({ error: 'Reset token and new password are required' }, 400);
     }
+
+    const { resetToken, newPassword } = bodyParse.data;
 
     const passwordError = validatePasswordStrength(newPassword);
     if (passwordError) {

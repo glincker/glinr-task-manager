@@ -493,7 +493,7 @@ export async function signInWithGitHub(
         accessToken: tokenResult.accessToken,
         scope: tokenResult.scope,
         providerUsername: githubUser.login,
-        providerData: githubUser as unknown as Record<string, any>,
+        providerData: githubUser as unknown as Record<string, unknown>,
         updatedAt: now,
       })
       .where(eq(oauthAccounts.id, existingOAuth[0].id));
@@ -503,7 +503,7 @@ export async function signInWithGitHub(
     const currentEmail = existingUser[0]?.email || '';
 
     // Update user's last login and email if we now have a real one
-    const updateData: Record<string, any> = {
+    const updateData: Partial<typeof users.$inferInsert> = {
       lastLoginAt: now,
       updatedAt: now,
       avatarUrl: githubUser.avatar_url,
@@ -573,7 +573,7 @@ export async function signInWithGitHub(
       providerUsername: githubUser.login,
       accessToken: tokenResult.accessToken,
       scope: tokenResult.scope,
-      providerData: githubUser as unknown as Record<string, any>,
+      providerData: githubUser as unknown as Record<string, unknown>,
       createdAt: now,
       updatedAt: now,
     });

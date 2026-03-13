@@ -244,7 +244,7 @@ export async function initMemoryTables(): Promise<void> {
         end_line UNINDEXED
       )
     `);
-  } catch (error) {
+  } catch {
     // FTS5 might not be available in all SQLite builds
     logger.warn('[Memory] FTS5 not available, text search will be slower');
   }
@@ -365,7 +365,7 @@ export async function syncMemoryFiles(
     args: [],
   });
   const existingFiles = new Map(
-    existingResult.rows.map((row: any) => [row.path as string, row.hash as string])
+    existingResult.rows.map((row: SqlRow) => [String(row.path), String(row.hash)])
   );
 
   // Process each file
@@ -478,7 +478,7 @@ async function indexFile(
     let embedding: number[] | null = null;
     try {
       embedding = await embeddingService.generateEmbedding(chunk.text);
-    } catch (error) {
+    } catch {
       logger.warn(`[Memory] Failed to generate embedding for chunk ${chunkId}`);
     }
 
@@ -547,7 +547,7 @@ async function reindexFile(
     let embedding: number[] | null = null;
     try {
       embedding = await embeddingService.generateEmbedding(chunk.text);
-    } catch (error) {
+    } catch {
       logger.warn(`[Memory] Failed to generate embedding for chunk ${chunkId}`);
     }
 
@@ -636,7 +636,6 @@ export async function searchMemory(
   query: string,
   config: MemoryConfig = DEFAULT_MEMORY_CONFIG
 ): Promise<SearchResult> {
-  const client = getClient();
   const embeddingService = getEmbeddingService();
   const { maxResults, minScore, hybrid } = config.query;
 
@@ -798,17 +797,7 @@ async function ftsSearch(query: string, limit: number): Promise<MemoryChunk[]> {
       args: [`%${query}%`, limit],
     });
 
-    return result.rows.map((row: any) => ({
-      id: row.id as string,
-      path: row.path as string,
-      source: row.source as string,
-      startLine: row.start_line as number,
-      endLine: row.end_line as number,
-      hash: row.hash as string,
-      text: row.text as string,
-      model: row.model as string,
-      score: 0.5, // Default score for LIKE matches
-    }));
+    return result.rows.map((row: SqlRow) => rowToMemoryChunk(row, 0.5));
   }
 }
 
@@ -883,7 +872,7 @@ export async function getMemoryContent(
   }
 
   // Combine chunks and extract requested lines
-  const allText = chunksResult.rows.map((r: any) => r.text as string).join('\n');
+  const allText = chunksResult.rows.map((row: SqlRow) => String(row.text)).join('\n');
   const allLines = allText.split('\n');
 
   const fromLine = options?.fromLine || 1;
@@ -954,13 +943,7 @@ export async function listMemoryFiles(): Promise<MemoryFile[]> {
     args: [],
   });
 
-  return result.rows.map((row: any) => ({
-    path: row.path as string,
-    source: row.source as string,
-    hash: row.hash as string,
-    mtime: row.mtime as number,
-    size: row.size as number,
-  }));
+  return result.rows.map((row: SqlRow) => rowToMemoryFile(row));
 }
 
 /**
@@ -975,16 +958,7 @@ export async function listFileChunks(path: string): Promise<MemoryChunk[]> {
     args: [path],
   });
 
-  return result.rows.map((row: any) => ({
-    id: row.id as string,
-    path: row.path as string,
-    source: row.source as string,
-    startLine: row.start_line as number,
-    endLine: row.end_line as number,
-    hash: row.hash as string,
-    text: row.text as string,
-    model: row.model as string,
-  }));
+  return result.rows.map((row: SqlRow) => rowToMemoryChunk(row));
 }
 
 /**
@@ -1068,6 +1042,51 @@ export interface MemorySession {
   lastActiveAt: number;
 }
 
+type SqlRow = Record<string, unknown>;
+
+function rowToMemoryChunk(row: SqlRow, score?: number): MemoryChunk {
+  return {
+    id: String(row.id),
+    path: String(row.path),
+    source: String(row.source),
+    startLine: Number(row.start_line),
+    endLine: Number(row.end_line),
+    hash: String(row.hash),
+    text: String(row.text),
+    model: String(row.model),
+    score,
+  };
+}
+
+function rowToMemoryFile(row: SqlRow): MemoryFile {
+  return {
+    path: String(row.path),
+    source: String(row.source),
+    hash: String(row.hash),
+    mtime: Number(row.mtime),
+    size: Number(row.size),
+  };
+}
+
+function rowToMemorySession(row: SqlRow): MemorySession {
+  return {
+    id: String(row.id),
+    name: row.name ? String(row.name) : undefined,
+    conversationId: row.conversation_id ? String(row.conversation_id) : undefined,
+    userId: row.user_id ? String(row.user_id) : undefined,
+    projectId: row.project_id ? String(row.project_id) : undefined,
+    memoryEnabled: Boolean(row.memory_enabled),
+    memoryLastSyncAt: row.memory_last_sync_at ? Number(row.memory_last_sync_at) : undefined,
+    totalTokens: Number(row.total_tokens),
+    totalMessages: Number(row.total_messages),
+    totalCost: Number(row.total_cost),
+    status: String(row.status) as MemorySession['status'],
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+    lastActiveAt: Number(row.last_active_at),
+  };
+}
+
 /**
  * Create a new memory session
  */
@@ -1135,22 +1154,7 @@ export async function listMemorySessions(params?: {
   });
 
   return {
-    sessions: result.rows.map((row: any) => ({
-      id: row.id as string,
-      name: row.name as string | undefined,
-      conversationId: row.conversation_id as string | undefined,
-      userId: row.user_id as string | undefined,
-      projectId: row.project_id as string | undefined,
-      memoryEnabled: Boolean(row.memory_enabled),
-      memoryLastSyncAt: row.memory_last_sync_at as number | undefined,
-      totalTokens: row.total_tokens as number,
-      totalMessages: row.total_messages as number,
-      totalCost: row.total_cost as number,
-      status: row.status as 'active' | 'archived' | 'deleted',
-      createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
-      lastActiveAt: row.last_active_at as number,
-    })),
+    sessions: result.rows.map((row: SqlRow) => rowToMemorySession(row)),
     total: Number(countResult.rows[0]?.total || 0),
   };
 }
@@ -1300,7 +1304,7 @@ export async function indexConversation(
     let embedding: number[] | null = null;
     try {
       embedding = await embeddingService.generateEmbedding(chunk.text);
-    } catch (error) {
+    } catch {
       logger.warn(`[Memory] Failed to generate embedding for chat chunk ${chunkId}`);
     }
 
@@ -1355,9 +1359,167 @@ export async function removeConversationFromMemory(conversationId: string): Prom
   logger.info(`[Memory] Removed conversation ${conversationId} from memory`);
 }
 
+// =============================================================================
+// Citation Tracking
+// =============================================================================
+
+export interface MemoryCitation {
+  id: string;
+  memoryId: string;
+  chunkId?: string;
+  sourceType: 'conversation' | 'document' | 'url' | 'file' | 'manual';
+  sourceId: string;
+  timestamp: string;
+  excerpt?: string;
+}
+
+/**
+ * Initialize citation tracking table
+ */
+export async function initCitationTable(): Promise<void> {
+  const client = getClient();
+  await client.execute({
+    sql: `CREATE TABLE IF NOT EXISTS memory_citations (
+      id TEXT PRIMARY KEY,
+      memory_id TEXT NOT NULL,
+      chunk_id TEXT,
+      source_type TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+      excerpt TEXT,
+      FOREIGN KEY (memory_id) REFERENCES memory_files(path) ON DELETE CASCADE
+    )`,
+    args: [],
+  });
+  await client.execute({
+    sql: `CREATE INDEX IF NOT EXISTS idx_citations_memory ON memory_citations(memory_id)`,
+    args: [],
+  });
+  await client.execute({
+    sql: `CREATE INDEX IF NOT EXISTS idx_citations_source ON memory_citations(source_type, source_id)`,
+    args: [],
+  });
+}
+
+/**
+ * Add a citation to a memory entry
+ */
+export async function addCitation(citation: Omit<MemoryCitation, 'id'>): Promise<MemoryCitation> {
+  const id = randomUUID();
+  const client = getClient();
+  await client.execute({
+    sql: `INSERT INTO memory_citations (id, memory_id, chunk_id, source_type, source_id, timestamp, excerpt)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, citation.memoryId, citation.chunkId ?? null, citation.sourceType, citation.sourceId, citation.timestamp ?? new Date().toISOString(), citation.excerpt ?? null],
+  });
+  return { id, ...citation };
+}
+
+/**
+ * Get citations for a memory entry
+ */
+export async function getCitations(memoryId: string): Promise<MemoryCitation[]> {
+  const client = getClient();
+  const result = await client.execute({
+    sql: `SELECT id, memory_id as memoryId, chunk_id as chunkId, source_type as sourceType,
+          source_id as sourceId, timestamp, excerpt
+          FROM memory_citations WHERE memory_id = ? ORDER BY timestamp DESC`,
+    args: [memoryId],
+  });
+  return result.rows.map((row: Record<string, unknown>) => ({
+    id: String(row.id),
+    memoryId: String(row.memoryId),
+    chunkId: row.chunkId ? String(row.chunkId) : undefined,
+    sourceType: String(row.sourceType) as MemoryCitation['sourceType'],
+    sourceId: String(row.sourceId),
+    timestamp: String(row.timestamp),
+    excerpt: row.excerpt ? String(row.excerpt) : undefined,
+  }));
+}
+
+/**
+ * Get citations by source (e.g., all citations from a conversation)
+ */
+export async function getCitationsBySource(sourceType: string, sourceId: string): Promise<MemoryCitation[]> {
+  const client = getClient();
+  const result = await client.execute({
+    sql: `SELECT id, memory_id as memoryId, chunk_id as chunkId, source_type as sourceType,
+          source_id as sourceId, timestamp, excerpt
+          FROM memory_citations WHERE source_type = ? AND source_id = ? ORDER BY timestamp DESC`,
+    args: [sourceType, sourceId],
+  });
+  return result.rows.map((row: Record<string, unknown>) => ({
+    id: String(row.id),
+    memoryId: String(row.memoryId),
+    chunkId: row.chunkId ? String(row.chunkId) : undefined,
+    sourceType: String(row.sourceType) as MemoryCitation['sourceType'],
+    sourceId: String(row.sourceId),
+    timestamp: String(row.timestamp),
+    excerpt: row.excerpt ? String(row.excerpt) : undefined,
+  }));
+}
+
+/**
+ * Delete a citation
+ */
+export async function deleteCitation(citationId: string): Promise<boolean> {
+  const client = getClient();
+  const result = await client.execute({
+    sql: `DELETE FROM memory_citations WHERE id = ?`,
+    args: [citationId],
+  });
+  return (result.rowsAffected ?? 0) > 0;
+}
+
+// =============================================================================
+// Multi-Backend Memory (Plugin Slot)
+// =============================================================================
+
+export interface MemoryBackendPlugin {
+  name: string;
+  type: 'sqlite' | 'lancedb' | 'pgvector' | 'qdrant' | 'custom';
+  initialize(): Promise<void>;
+  store(key: string, embedding: number[], metadata: Record<string, unknown>): Promise<void>;
+  search(query: number[], limit: number, filter?: Record<string, unknown>): Promise<BackendSearchResult[]>;
+  delete(key: string): Promise<boolean>;
+  stats(): Promise<{ totalEntries: number; sizeBytes: number }>;
+}
+
+export interface BackendSearchResult {
+  key: string;
+  score: number;
+  metadata: Record<string, unknown>;
+}
+
+// Backend registry
+const memoryBackends = new Map<string, MemoryBackendPlugin>();
+
+/**
+ * Register a memory backend plugin
+ */
+export function registerMemoryBackend(backend: MemoryBackendPlugin): void {
+  memoryBackends.set(backend.name, backend);
+  logger.info(`[Memory] Backend registered: ${backend.name} (${backend.type})`);
+}
+
+/**
+ * Get a registered memory backend
+ */
+export function getMemoryBackend(name: string): MemoryBackendPlugin | undefined {
+  return memoryBackends.get(name);
+}
+
+/**
+ * List registered memory backends
+ */
+export function listMemoryBackends(): string[] {
+  return Array.from(memoryBackends.keys());
+}
+
 export default {
   // Init
   initMemoryTables,
+  initCitationTable,
 
   // Sync
   syncMemoryFiles,
@@ -1385,6 +1547,17 @@ export default {
   // Chat indexing
   indexConversation,
   removeConversationFromMemory,
+
+  // Citations
+  addCitation,
+  getCitations,
+  getCitationsBySource,
+  deleteCitation,
+
+  // Multi-backend
+  registerMemoryBackend,
+  getMemoryBackend,
+  listMemoryBackends,
 
   // Config
   DEFAULT_MEMORY_CONFIG,

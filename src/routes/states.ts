@@ -6,9 +6,30 @@
 
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { z } from 'zod';
 import { listStates, createState, updateState, deleteState, getState } from '../states/index.js';
 
 export const statesRoutes = new Hono();
+
+const createStateBodySchema = z.object({
+  name: z.string().min(1),
+  slug: z.string().optional(),
+  color: z.string().optional(),
+  description: z.string().optional(),
+  stateGroup: z.enum(['backlog', 'unstarted', 'started', 'completed', 'cancelled']),
+  isDefault: z.boolean().optional(),
+  sequence: z.number().optional(),
+});
+
+const updateStateBodySchema = z.object({
+  name: z.string().optional(),
+  slug: z.string().optional(),
+  color: z.string().optional(),
+  description: z.string().optional(),
+  statusGroup: z.enum(['backlog', 'unstarted', 'started', 'completed', 'cancelled']).optional(),
+  isDefault: z.boolean().optional(),
+  sequence: z.number().optional(),
+});
 
 async function parseJsonBody(c: Context): Promise<
   { ok: true; body: Record<string, unknown> } | { ok: false; response: Response }
@@ -57,7 +78,11 @@ statesRoutes.post('/projects/:projectId/states', async (c) => {
       return parsed.response;
     }
 
-    const body = parsed.body;
+    const bodyParse = createStateBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
+      return c.json({ error: 'Invalid state payload' }, 400);
+    }
+    const body = bodyParse.data;
     const state = await createState({
       ...body,
       projectId,
@@ -80,7 +105,11 @@ statesRoutes.patch('/states/:id', async (c) => {
       return parsed.response;
     }
 
-    const body = parsed.body;
+    const bodyParse = updateStateBodySchema.safeParse(parsed.body);
+    if (!bodyParse.success) {
+      return c.json({ error: 'Invalid state update' }, 400);
+    }
+    const body = bodyParse.data;
     const state = await updateState(id, body);
     return c.json({ state });
   } catch (error) {

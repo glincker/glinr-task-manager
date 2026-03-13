@@ -675,7 +675,7 @@ function isBlockedPath(filePath: string): boolean {
 function buildDiffSnippet(oldContent: string, _newContent: string, oldStr: string, newStr: string): string {
   const oldLines = oldContent.split('\n');
   const firstIdx = oldContent.indexOf(oldStr);
-  let lineNum = oldContent.slice(0, firstIdx).split('\n').length;
+  const lineNum = oldContent.slice(0, firstIdx).split('\n').length;
 
   // Show 3 lines of context before and after
   const contextLines = 3;

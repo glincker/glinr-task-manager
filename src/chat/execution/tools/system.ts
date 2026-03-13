@@ -396,17 +396,12 @@ export const whichTool: ToolDefinition<WhichParams, WhichResult> = {
       });
 
       let stdout = '';
-      let stderr = '';
 
       proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString();
       });
 
-      proc.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString();
-      });
-
-      proc.on('close', (code) => {
+      proc.on('close', (_code) => {
         const paths = stdout.trim().split('\n').filter(Boolean);
         const found = paths.length > 0;
 

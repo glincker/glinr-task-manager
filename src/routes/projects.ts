@@ -30,7 +30,6 @@ import {
   cancelSprint,
   deleteSprint,
   querySprints,
-  getProjectSprints,
   getActiveSprint,
   // Sprint-Tickets
   addTicketsToSprint,
@@ -40,14 +39,29 @@ import {
   // Schemas
   CreateProjectSchema,
   UpdateProjectSchema,
-  ProjectQuerySchema,
   CreateSprintSchema,
   UpdateSprintSchema,
-  SprintQuerySchema,
   AddTicketsToSprintSchema,
 } from '../projects/index.js';
 
 const projectsRouter = new Hono();
+
+function getErrorMessage(error: unknown): string | undefined {
+  return error instanceof Error ? error.message : undefined;
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+
+  const code = Reflect.get(error, 'code');
+  return typeof code === 'string' ? code : undefined;
+}
+
+function errorMessageIncludes(error: unknown, snippet: string): boolean {
+  return getErrorMessage(error)?.includes(snippet) ?? false;
+}
 
 // =============================================================================
 // PROJECTS ROUTES
@@ -112,11 +126,11 @@ projectsRouter.post('/', async (c) => {
       message: 'Project created',
       project,
     }, 201);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[API] Error creating project:', error);
 
     // Check for unique constraint violation
-    if (error.message?.includes('UNIQUE constraint failed') || error.code === 'SQLITE_CONSTRAINT') {
+    if (errorMessageIncludes(error, 'UNIQUE constraint failed') || getErrorCode(error) === 'SQLITE_CONSTRAINT') {
       return c.json({
         error: 'Project key already exists',
         message: 'Please choose a different project key',
@@ -125,7 +139,7 @@ projectsRouter.post('/', async (c) => {
 
     return c.json({
       error: 'Failed to create project',
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: getErrorMessage(error) ?? 'Unknown error',
     }, 500);
   }
 });
@@ -242,16 +256,16 @@ projectsRouter.patch('/:id', async (c) => {
       message: 'Project updated',
       project,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[API] Error updating project:', error);
 
-    if (error.message?.includes('not found')) {
+    if (errorMessageIncludes(error, 'not found')) {
       return c.json({ error: 'Project not found' }, 404);
     }
 
     return c.json({
       error: 'Failed to update project',
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: getErrorMessage(error) ?? 'Unknown error',
     }, 500);
   }
 });
@@ -268,10 +282,10 @@ projectsRouter.post('/:id/archive', async (c) => {
       message: 'Project archived',
       project,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[API] Error archiving project:', error);
 
-    if (error.message?.includes('not found')) {
+    if (errorMessageIncludes(error, 'not found')) {
       return c.json({ error: 'Project not found' }, 404);
     }
 
@@ -402,16 +416,16 @@ projectsRouter.post('/:projectId/sprints', async (c) => {
       message: 'Sprint created',
       sprint,
     }, 201);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[API] Error creating sprint:', error);
 
-    if (error.message?.includes('not found')) {
+    if (errorMessageIncludes(error, 'not found')) {
       return c.json({ error: 'Project not found' }, 404);
     }
 
     return c.json({
       error: 'Failed to create sprint',
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: getErrorMessage(error) ?? 'Unknown error',
     }, 500);
   }
 });
@@ -480,16 +494,16 @@ projectsRouter.patch('/:projectId/sprints/:sprintId', async (c) => {
       message: 'Sprint updated',
       sprint,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[API] Error updating sprint:', error);
 
-    if (error.message?.includes('not found')) {
+    if (errorMessageIncludes(error, 'not found')) {
       return c.json({ error: 'Sprint not found' }, 404);
     }
 
     return c.json({
       error: 'Failed to update sprint',
-      message: error instanceof Error ? error.message : 'Unknown error',
+      message: getErrorMessage(error) ?? 'Unknown error',
     }, 500);
   }
 });
@@ -506,14 +520,14 @@ projectsRouter.post('/:projectId/sprints/:sprintId/start', async (c) => {
       message: 'Sprint started',
       sprint,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[API] Error starting sprint:', error);
 
-    if (error.message?.includes('not found')) {
+    if (errorMessageIncludes(error, 'not found')) {
       return c.json({ error: 'Sprint not found' }, 404);
     }
-    if (error.message?.includes('cannot be started')) {
-      return c.json({ error: error.message }, 400);
+    if (errorMessageIncludes(error, 'cannot be started')) {
+      return c.json({ error: getErrorMessage(error) }, 400);
     }
 
     return c.json({ error: 'Failed to start sprint' }, 500);
@@ -532,14 +546,14 @@ projectsRouter.post('/:projectId/sprints/:sprintId/complete', async (c) => {
       message: 'Sprint completed',
       sprint,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[API] Error completing sprint:', error);
 
-    if (error.message?.includes('not found')) {
+    if (errorMessageIncludes(error, 'not found')) {
       return c.json({ error: 'Sprint not found' }, 404);
     }
-    if (error.message?.includes('cannot be completed')) {
-      return c.json({ error: error.message }, 400);
+    if (errorMessageIncludes(error, 'cannot be completed')) {
+      return c.json({ error: getErrorMessage(error) }, 400);
     }
 
     return c.json({ error: 'Failed to complete sprint' }, 500);
@@ -558,10 +572,10 @@ projectsRouter.post('/:projectId/sprints/:sprintId/cancel', async (c) => {
       message: 'Sprint cancelled',
       sprint,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[API] Error cancelling sprint:', error);
 
-    if (error.message?.includes('not found')) {
+    if (errorMessageIncludes(error, 'not found')) {
       return c.json({ error: 'Sprint not found' }, 404);
     }
 
@@ -624,10 +638,10 @@ projectsRouter.post('/:projectId/sprints/:sprintId/tickets', async (c) => {
       message: 'Tickets added to sprint',
       assignments,
     }, 201);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[API] Error adding tickets to sprint:', error);
 
-    if (error.message?.includes('not found')) {
+    if (errorMessageIncludes(error, 'not found')) {
       return c.json({ error: 'Sprint not found' }, 404);
     }
 

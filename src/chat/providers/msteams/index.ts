@@ -258,10 +258,6 @@ async function getAccessToken(
     return { ok: true, token: cached.token };
   }
 
-  const tokenUrl = tenantId === 'botframework.com'
-    ? 'https://login.botframework.com/v1/.well-known/openidconfiguration'
-    : `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
-
   // For standard Bot Framework auth (not tenant-specific), use the BF token endpoint
   const endpoint = tenantId === 'botframework.com'
     ? 'https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token'
@@ -863,8 +859,6 @@ const inboundAdapter: InboundAdapter = {
     if (typeof verbValue === 'string' && verbValue.includes('select')) {
       actionType = 'select';
     }
-
-    const channelData = activity.channelData as TeamsChannelData | undefined;
 
     return {
       provider: 'msteams',

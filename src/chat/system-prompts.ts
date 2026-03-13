@@ -7,7 +7,7 @@
  * Inspired by OpenClaw's system prompt architecture.
  */
 
-import { MODEL_ALIASES } from '../providers/ai-sdk.js';
+import { MODEL_ALIASES } from '../providers/core/models.js';
 import { getSkillsRegistry } from '../skills/index.js';
 
 // === Runtime Info (injected per-request) ===

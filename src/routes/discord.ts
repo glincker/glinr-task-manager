@@ -20,7 +20,6 @@ import {
   buildPingResponse,
   isPingInteraction,
   buildDeferredResponse,
-  sendFollowupMessage,
   registerSlashCommands,
   InteractionType,
   type DiscordConfig,
@@ -29,6 +28,7 @@ import {
 import { getChatRegistry } from '../chat/providers/registry.js';
 import type { DiscordAccountConfig } from '../chat/providers/types.js';
 import { logger } from '../utils/logger.js';
+import { isDuplicateWebhookEvent } from './webhook-dedup.js';
 
 // Re-export formatToolResult for channel response formatting
 // Usage: formatToolResult(toolName, result, 'discord') → { summary, detail, fields }
@@ -43,7 +43,6 @@ const discord = new Hono();
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
 const DISCORD_APPLICATION_ID = process.env.DISCORD_APPLICATION_ID || '';
 const DISCORD_PUBLIC_KEY = process.env.DISCORD_PUBLIC_KEY || '';
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || '';
 const DISCORD_ALLOWED_GUILDS = (process.env.DISCORD_ALLOWED_GUILDS || '')
   .split(',')
   .map(v => v.trim())
@@ -146,6 +145,10 @@ discord.post('/interactions', async (c) => {
   if (isPingInteraction(interaction)) {
     logger.debug('[Discord] PING received, responding with PONG');
     return c.json(buildPingResponse());
+  }
+
+  if (isDuplicateWebhookEvent('discord:interaction', interaction.id)) {
+    return c.json(buildDeferredResponse());
   }
 
   // Check allowlists
@@ -521,7 +524,7 @@ discord.get('/commands', async (c) => {
 
     const commands = await response.json();
     return c.json({ commands, scope: guildId ? `guild:${guildId}` : 'global' });
-  } catch (error) {
+  } catch {
     return c.json({ error: 'Failed to fetch commands' }, 500);
   }
 });

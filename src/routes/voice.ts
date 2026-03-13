@@ -14,10 +14,19 @@ export const voiceRoutes = new Hono();
  */
 voiceRoutes.get('/status', async (c) => {
   const voice = await getVoiceService();
+  const sttProvider = voice.getSTTProvider();
+  const ttsProvider = voice.getTTSProvider();
+
   return c.json({
-    sttAvailable: voice.isSTTAvailable(),
-    ttsAvailable: voice.isTTSAvailable(),
-    ttsProvider: voice.getTTSProvider(),
+    available: voice.isSTTAvailable() || voice.isTTSAvailable(),
+    stt: {
+      provider: sttProvider,
+      model: sttProvider === 'whisper' ? 'whisper-1' : undefined,
+      languages: sttProvider ? ['en', 'es', 'fr', 'de', 'ja', 'zh', 'ko', 'pt', 'ru', 'it'] : [],
+    },
+    tts: {
+      provider: ttsProvider,
+    },
   });
 });
 
@@ -117,7 +126,7 @@ voiceRoutes.post('/synthesize', async (c) => {
     };
     c.header('Content-Type', mimeMap[result.format] || 'audio/mpeg');
     c.header('Content-Length', String(audioBuffer.length));
-    return c.body(audioBuffer);
+    return c.body(new Uint8Array(audioBuffer));
   } catch (error) {
     return c.json(
       { error: error instanceof Error ? error.message : 'Synthesis failed' },

@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import {
   createSummary,
   getSummary,
-  getTaskSummaries,
   querySummaries,
   searchSummaries,
   getSummaryStats,
@@ -20,9 +19,12 @@ import {
 } from '../summaries/templates.js';
 import { getEmbeddingService } from '../ai/embedding-service.js';
 import { getStorage } from '../storage/index.js';
+import type { StorageAdapter } from '../storage/adapter.js';
+import type { Summary } from '../types/summary.js';
 import { logger as systemLogger } from '../utils/logger.js';
 
 const summaries = new Hono();
+type SemanticSearchResult = Awaited<ReturnType<NonNullable<StorageAdapter['searchSimilar']>>>[number];
 
 // Sparse fieldset: default fields for list view (Phase 17 optimization)
 const SUMMARY_LIST_FIELDS = [
@@ -141,7 +143,7 @@ summaries.get('/semantic', async (c) => {
 
     const results = await storage.searchSimilar(type, vector, limit);
 
-    const enriched = await Promise.all(results.map(async (r: any) => ({
+    const enriched = await Promise.all(results.map(async (r: SemanticSearchResult) => ({
       ...r,
       summary: type === 'summary' ? await getSummary(r.entityId) : null
     })));
@@ -271,7 +273,7 @@ summaries.get('/', async (c) => {
   const result = await querySummaries(parsed.data);
 
   // Generate next cursor from full results (before sparse filtering)
-  const nextCursor = getNextCursor(result.summaries as any[], pageLimit);
+  const nextCursor = getNextCursor(result.summaries as Summary[], pageLimit);
 
   // Apply sparse fieldset - strip rawOutput and large fields by default
   const summaryList = !includeFull

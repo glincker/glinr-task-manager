@@ -14,7 +14,9 @@ import {
   X,
   Bot,
   MessageCircle,
+  AudioLines,
 } from 'lucide-react';
+import type { TalkModeState } from '@/core/hooks/useTalkMode';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -37,6 +39,9 @@ interface ChatInputProps {
   // Mode toggle
   agentMode?: boolean;
   onToggleAgentMode?: () => void;
+  // Talk Mode
+  talkModeState?: TalkModeState;
+  onToggleTalkMode?: () => void;
 }
 
 export function ChatInput({
@@ -54,6 +59,8 @@ export function ChatInput({
   onStopRecording,
   agentMode = false,
   onToggleAgentMode,
+  talkModeState = 'idle',
+  onToggleTalkMode,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -155,27 +162,49 @@ export function ChatInput({
             <ImagePlus className="h-5 w-5" aria-hidden="true" />
           </Button>
 
-          {/* Voice recording button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              'h-9 w-9 shrink-0 rounded-xl transition-all',
-              isRecording
-                ? 'bg-destructive/10 text-destructive animate-pulse'
-                : 'text-muted-foreground hover:bg-muted'
-            )}
-            onClick={isRecording ? onStopRecording : onStartRecording}
-            disabled={isPending || disabled}
-            aria-label={isRecording ? 'Stop recording' : 'Start recording'}
-            aria-pressed={isRecording}
-          >
-            {isRecording ? (
-              <MicOff className="h-5 w-5" aria-hidden="true" />
-            ) : (
-              <Mic className="h-5 w-5" aria-hidden="true" />
-            )}
-          </Button>
+          {/* Voice recording button - hidden when Talk Mode is active */}
+          {talkModeState === 'idle' && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                'h-9 w-9 shrink-0 rounded-xl transition-all',
+                isRecording
+                  ? 'bg-destructive/10 text-destructive animate-pulse'
+                  : 'text-muted-foreground hover:bg-muted'
+              )}
+              onClick={isRecording ? onStopRecording : onStartRecording}
+              disabled={isPending || disabled}
+              aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+              aria-pressed={isRecording}
+            >
+              {isRecording ? (
+                <MicOff className="h-5 w-5" aria-hidden="true" />
+              ) : (
+                <Mic className="h-5 w-5" aria-hidden="true" />
+              )}
+            </Button>
+          )}
+
+          {/* Talk Mode toggle button */}
+          {onToggleTalkMode && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                'h-9 w-9 shrink-0 rounded-xl transition-all',
+                talkModeState !== 'idle'
+                  ? 'bg-green-500/20 text-green-500'
+                  : 'text-muted-foreground hover:bg-muted'
+              )}
+              onClick={onToggleTalkMode}
+              disabled={isPending || disabled}
+              aria-label={talkModeState !== 'idle' ? 'Stop Talk Mode' : 'Start Talk Mode'}
+              aria-pressed={talkModeState !== 'idle'}
+            >
+              <AudioLines className="h-5 w-5" aria-hidden="true" />
+            </Button>
+          )}
         </div>
 
         {/* Text input */}

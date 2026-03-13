@@ -6,7 +6,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import { eq, and, desc, asc, like, sql, inArray, count } from 'drizzle-orm';
+import { eq, and, desc, asc, sql, inArray, count } from 'drizzle-orm';
 import { getDb } from '../storage/index.js';
 import {
   projects,
@@ -44,6 +44,10 @@ import {
 
 // Re-export types
 export * from './types.js';
+
+type ProjectRow = typeof projects.$inferSelect;
+type SprintRow = typeof sprints.$inferSelect;
+type ProjectExternalLinkRow = typeof projectExternalLinks.$inferSelect;
 
 // === Helpers ===
 
@@ -141,9 +145,41 @@ async function getNextSprintSequence(projectId: string): Promise<number> {
   return result[0]?.lastSequence ?? 1;
 }
 
+// === Enum Guards ===
+
+const PROJECT_STATUSES = ['active', 'archived'] as const;
+type ProjectStatusValue = (typeof PROJECT_STATUSES)[number];
+
+function toProjectStatus(value: string | null): ProjectStatusValue {
+  const v = value ?? 'active';
+  return (PROJECT_STATUSES as readonly string[]).includes(v)
+    ? (v as ProjectStatusValue)
+    : 'active';
+}
+
+const SPRINT_STATUSES = ['planning', 'active', 'completed', 'cancelled'] as const;
+type SprintStatusValue = (typeof SPRINT_STATUSES)[number];
+
+function toSprintStatus(value: string | null): SprintStatusValue {
+  const v = value ?? 'planning';
+  return (SPRINT_STATUSES as readonly string[]).includes(v)
+    ? (v as SprintStatusValue)
+    : 'planning';
+}
+
+const SYNC_DIRECTIONS = ['push', 'pull', 'bidirectional'] as const;
+type SyncDirectionValue = (typeof SYNC_DIRECTIONS)[number];
+
+function toSyncDirection(value: string | null): SyncDirectionValue {
+  const v = value ?? 'bidirectional';
+  return (SYNC_DIRECTIONS as readonly string[]).includes(v)
+    ? (v as SyncDirectionValue)
+    : 'bidirectional';
+}
+
 // === Row Converters ===
 
-function rowToProject(row: any): Project {
+function rowToProject(row: ProjectRow): Project {
   return {
     id: row.id,
     sequence: row.sequence,
@@ -159,14 +195,14 @@ function rowToProject(row: any): Project {
     cycleView: row.cycleView ?? true,
     boardView: row.boardView ?? true,
     lead: row.lead || undefined,
-    status: row.status || 'active',
+    status: toProjectStatus(row.status),
     createdAt: toISOString(row.createdAt),
     updatedAt: toISOString(row.updatedAt),
     archivedAt: toOptionalISOString(row.archivedAt),
   };
 }
 
-function rowToSprint(row: any): Sprint {
+function rowToSprint(row: SprintRow): Sprint {
   return {
     id: row.id,
     sequence: row.sequence,
@@ -174,7 +210,7 @@ function rowToSprint(row: any): Sprint {
     name: row.name,
     goal: row.goal || undefined,
     description: row.description || undefined,
-    status: row.status || 'planning',
+    status: toSprintStatus(row.status),
     startDate: toOptionalISOString(row.startDate),
     endDate: toOptionalISOString(row.endDate),
     capacity: row.capacity || undefined,
@@ -184,15 +220,15 @@ function rowToSprint(row: any): Sprint {
   };
 }
 
-function rowToExternalLink(row: any): ProjectExternalLink {
+function rowToExternalLink(row: ProjectExternalLinkRow): ProjectExternalLink {
   return {
     id: row.id,
     projectId: row.projectId,
-    platform: row.platform,
+    platform: row.platform as ProjectExternalLink['platform'],
     externalId: row.externalId,
     externalUrl: row.externalUrl || undefined,
     syncEnabled: row.syncEnabled ?? true,
-    syncDirection: row.syncDirection || 'bidirectional',
+    syncDirection: (row.syncDirection || 'bidirectional') as 'push' | 'bidirectional' | 'pull',
     lastSyncedAt: toOptionalISOString(row.lastSyncedAt),
     syncError: row.syncError || undefined,
     createdAt: toISOString(row.createdAt),
@@ -453,7 +489,7 @@ export async function queryProjects(query: ProjectQuery = {}): Promise<{ project
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   // Sorting
-  let orderBy: any = desc(projects.createdAt);
+  let orderBy = desc(projects.createdAt);
   if (parsed.sortBy === 'name') {
     orderBy = parsed.sortOrder === 'desc' ? desc(projects.name) : asc(projects.name);
   } else if (parsed.sortBy === 'key') {
@@ -511,7 +547,7 @@ export async function createProjectExternalLink(
   return {
     id,
     projectId,
-    platform: input.platform as any,
+    platform: input.platform as ProjectExternalLink['platform'],
     externalId: input.externalId,
     externalUrl: input.externalUrl,
     syncEnabled: true,
@@ -675,8 +711,9 @@ export async function updateSprint(id: string, input: UpdateSprintInput): Promis
 
   const now = new Date();
 
-  const updateData: any = {
-    ...parsed,
+  const { startDate: _sd, endDate: _ed, ...rest } = parsed;
+  const updateData: Partial<typeof sprints.$inferInsert> = {
+    ...rest,
     updatedAt: now,
   };
 
@@ -832,7 +869,7 @@ export async function querySprints(query: SprintQuery = {}): Promise<{ sprints: 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   // Sorting
-  let orderBy: any = desc(sprints.createdAt);
+  let orderBy = desc(sprints.createdAt);
   if (parsed.sortBy === 'startDate') {
     orderBy = parsed.sortOrder === 'desc' ? desc(sprints.startDate) : asc(sprints.startDate);
   } else if (parsed.sortBy === 'endDate') {
@@ -1013,7 +1050,7 @@ export async function migrateTicketsToDefaultProject(): Promise<{ migrated: numb
 
   const defaultProject = await getOrCreateDefaultProject();
 
-  const result = await db
+  await db
     .update(tickets)
     .set({ projectId: defaultProject.id })
     .where(sql`${tickets.projectId} IS NULL`);

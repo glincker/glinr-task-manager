@@ -71,7 +71,7 @@ describe('statesRoutes', () => {
     const response = await app.fetch(new Request('http://localhost/api/projects/proj-1/states', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Todo', color: '#fff' }),
+      body: JSON.stringify({ name: 'Todo', color: '#fff', stateGroup: 'unstarted' }),
     }));
 
     expect(response.status).toBe(201);

@@ -1,11 +1,39 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { getGateway, type GatewayRequest, type WorkflowType } from '../gateway/index.js';
+import type { GatewayRequest, WorkflowType } from '../gateway/index.js';
+import type { GatewayContext } from '../gateway/types.js';
 import { CreateTaskSchema } from '../types/task.js';
 import { addTask } from '../queue/index.js';
 import { tokenAuthMiddleware } from '../auth/api-tokens.js';
 
 const gateway = new Hono();
+let gatewayRuntimePromise: Promise<void> | null = null;
+let getGateway: typeof import('../gateway/index.js')['getGateway'];
+
+async function ensureGatewayRuntime(): Promise<void> {
+  if (!gatewayRuntimePromise) {
+    gatewayRuntimePromise = import('../gateway/index.js')
+      .then((gatewayModule) => {
+        getGateway = gatewayModule.getGateway;
+      })
+      .catch((error) => {
+        gatewayRuntimePromise = null;
+        throw error;
+      });
+  }
+
+  await gatewayRuntimePromise;
+}
+
+gateway.use('*', async (c, next) => {
+  try {
+    await ensureGatewayRuntime();
+  } catch {
+    return c.json({ error: 'Gateway runtime unavailable' }, 500);
+  }
+
+  await next();
+});
 
 async function parseJsonBody(c: Context): Promise<
   { ok: true; body: Record<string, unknown> } | { ok: false; response: Response }
@@ -28,6 +56,25 @@ async function parseJsonBody(c: Context): Promise<
   }
 }
 
+function buildGatewayRequest(body: Record<string, unknown>): GatewayRequest | null {
+  const task = body.task;
+  if (!task || typeof task !== 'object' || Array.isArray(task)) {
+    return null;
+  }
+
+  return {
+    task: task as GatewayRequest['task'],
+    preferredAgent: typeof body.preferredAgent === 'string' ? body.preferredAgent : undefined,
+    workflow: typeof body.workflow === 'string' ? body.workflow as WorkflowType : undefined,
+    timeoutMs: typeof body.timeoutMs === 'number' ? body.timeoutMs : undefined,
+    priority: typeof body.priority === 'number' ? body.priority : undefined,
+    autonomous: typeof body.autonomous === 'boolean' ? body.autonomous : false,
+    context: body.context && typeof body.context === 'object' && !Array.isArray(body.context)
+      ? body.context as GatewayContext
+      : undefined,
+  };
+}
+
 // Execute task through gateway (unified routing)
 gateway.post('/execute', async (c) => {
   try {
@@ -39,15 +86,10 @@ gateway.post('/execute', async (c) => {
     const body = parsed.body;
     const gw = getGateway();
 
-    const request: GatewayRequest = {
-      task: body.task,
-      preferredAgent: body.preferredAgent,
-      workflow: body.workflow as WorkflowType,
-      timeoutMs: body.timeoutMs,
-      priority: body.priority,
-      autonomous: body.autonomous ?? false,
-      context: body.context,
-    };
+    const request = buildGatewayRequest(body);
+    if (!request) {
+      return c.json({ error: 'Invalid task' }, 400);
+    }
 
     if (!request.task.id) {
       const parsed = CreateTaskSchema.safeParse(request.task);
@@ -89,15 +131,10 @@ gateway.post('/execute-secure', tokenAuthMiddleware(['gateway:execute']), async 
     const body = parsed.body;
     const gw = getGateway();
 
-    const request: GatewayRequest = {
-      task: body.task,
-      preferredAgent: body.preferredAgent,
-      workflow: body.workflow as WorkflowType,
-      timeoutMs: body.timeoutMs,
-      priority: body.priority,
-      autonomous: body.autonomous ?? false,
-      context: body.context,
-    };
+    const request = buildGatewayRequest(body);
+    if (!request) {
+      return c.json({ error: 'Invalid task' }, 400);
+    }
 
     if (!request.task.id) {
       const parsed = CreateTaskSchema.safeParse(request.task);

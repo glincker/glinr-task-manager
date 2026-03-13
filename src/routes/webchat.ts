@@ -136,7 +136,8 @@ webchatRoutes.post('/', async (c) => {
     return parsed.response;
   }
 
-  const { sessionId, text } = parsed.body;
+  const sessionId = typeof parsed.body.sessionId === 'string' ? parsed.body.sessionId : undefined;
+  const text = typeof parsed.body.text === 'string' ? parsed.body.text : undefined;
 
   if (!sessionId || !text) {
     return c.json({ error: 'sessionId and text are required' }, 400);

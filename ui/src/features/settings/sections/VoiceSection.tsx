@@ -3,6 +3,7 @@
  *
  * Configure speech-to-text and text-to-speech settings.
  * Shows STT status, TTS provider selection, voice dropdown, and a test button.
+ * When STT/TTS is unavailable, shows actionable setup guidance.
  */
 
 import { useState } from 'react';
@@ -16,6 +17,9 @@ import {
   Loader2,
   Play,
   RefreshCw,
+  AudioLines,
+  ExternalLink,
+  KeyRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,10 +30,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { SettingsCard } from '../components';
 import { API_BASE } from '../constants';
+import type { TalkModeConfig } from '@/core/hooks/useTalkMode';
 
 // =============================================================================
 // TYPES
@@ -38,12 +46,12 @@ import { API_BASE } from '../constants';
 interface VoiceStatus {
   available: boolean;
   stt: {
-    provider: string;
+    provider: string | null;
     model?: string;
     languages?: string[];
   };
   tts: {
-    provider: string;
+    provider: string | null;
     voices?: string[];
   };
 }
@@ -60,6 +68,53 @@ interface VoicesResponse {
   voices: VoiceEntry[];
   provider: string;
 }
+
+// =============================================================================
+// PROVIDER SETUP DATA
+// =============================================================================
+
+interface ProviderOption {
+  name: string;
+  envVar: string;
+  description: string;
+  icon: string;
+}
+
+const STT_PROVIDERS: ProviderOption[] = [
+  {
+    name: 'OpenAI Whisper',
+    envVar: 'OPENAI_API_KEY',
+    description: 'Most popular, supports 99 languages',
+    icon: 'W',
+  },
+  {
+    name: 'Deepgram',
+    envVar: 'DEEPGRAM_API_KEY',
+    description: 'Real-time streaming, lower latency',
+    icon: 'D',
+  },
+];
+
+const TTS_PROVIDERS: ProviderOption[] = [
+  {
+    name: 'ElevenLabs',
+    envVar: 'ELEVENLABS_API_KEY',
+    description: 'Natural, expressive voices',
+    icon: 'E',
+  },
+  {
+    name: 'OpenAI TTS',
+    envVar: 'OPENAI_API_KEY',
+    description: '6 voices, uses same key as chat',
+    icon: 'O',
+  },
+  {
+    name: 'System TTS',
+    envVar: 'none',
+    description: 'No key needed (macOS say / Linux espeak)',
+    icon: 'S',
+  },
+];
 
 // =============================================================================
 // SUB-COMPONENTS
@@ -86,13 +141,72 @@ function StatusBadge({ available }: { available: boolean }) {
   );
 }
 
+function ProviderSetupCard({ provider }: { provider: ProviderOption }) {
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-3 rounded-xl border border-border/50 p-3',
+        'bg-muted/30 transition-colors hover:bg-muted/50'
+      )}
+    >
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
+        {provider.icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">{provider.name}</p>
+        <p className="text-xs text-muted-foreground">{provider.description}</p>
+        {provider.envVar !== 'none' && (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <KeyRound className="h-3 w-3 text-muted-foreground" />
+            <code className="font-mono text-[11px] text-muted-foreground">
+              {provider.envVar}
+            </code>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
 
+const DEFAULT_TALK_MODE_CONFIG: TalkModeConfig = {
+  enabled: true,
+  autoSend: true,
+  autoTts: true,
+  continuous: true,
+  speechThreshold: 0.01,
+  silenceDuration: 1500,
+};
+
+function loadTalkModeConfig(): TalkModeConfig {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('profclaw-talk-mode-config');
+    if (saved) {
+      try {
+        return JSON.parse(saved) as TalkModeConfig;
+      } catch {
+        /* ignore malformed data */
+      }
+    }
+  }
+  return DEFAULT_TALK_MODE_CONFIG;
+}
+
 export function VoiceSection() {
   const [selectedVoice, setSelectedVoice] = useState<string>('');
   const [isPlayingTest, setIsPlayingTest] = useState(false);
+  const [talkModeConfig, setTalkModeConfig] = useState<TalkModeConfig>(loadTalkModeConfig);
+
+  const updateTalkModeConfig = (updates: Partial<TalkModeConfig>) => {
+    setTalkModeConfig((prev) => {
+      const next = { ...prev, ...updates };
+      localStorage.setItem('profclaw-talk-mode-config', JSON.stringify(next));
+      return next;
+    });
+  };
 
   // Fetch voice service status
   const {
@@ -121,7 +235,7 @@ export function VoiceSection() {
       if (!res.ok) throw new Error('Failed to fetch voices');
       return res.json() as Promise<VoicesResponse>;
     },
-    enabled: status?.available === true,
+    enabled: status?.tts?.provider != null,
     retry: 1,
   });
 
@@ -169,6 +283,8 @@ export function VoiceSection() {
   };
 
   const voices = voicesData?.voices ?? [];
+  const sttAvailable = status?.stt?.provider != null;
+  const ttsAvailable = status?.tts?.provider != null;
 
   return (
     <div className="space-y-6">
@@ -187,7 +303,7 @@ export function VoiceSection() {
               {statusError && (
                 <AlertCircle className="h-4 w-4 text-destructive" />
               )}
-              {status && <StatusBadge available={status.available} />}
+              {status && <StatusBadge available={sttAvailable} />}
               {status?.stt?.provider && (
                 <span className="text-sm text-muted-foreground">
                   Provider: <span className="font-medium text-foreground">{status.stt.provider}</span>
@@ -221,11 +337,31 @@ export function VoiceSection() {
             </div>
           )}
 
-          {!status?.available && !statusLoading && (
-            <p className="text-sm text-muted-foreground">
-              Speech-to-text is not configured. Set a transcription provider in your server
-              environment to enable voice input.
-            </p>
+          {/* Actionable setup guidance when STT unavailable */}
+          {!sttAvailable && !statusLoading && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Set up a transcription provider to enable voice input.
+                If you already set <code className="text-xs font-mono">OPENAI_API_KEY</code> for chat, STT is automatically available.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {STT_PROVIDERS.map((provider) => (
+                  <ProviderSetupCard key={provider.name} provider={provider} />
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => {
+                  const el = document.querySelector('[data-settings-section="ai-providers"]');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Go to AI Providers
+              </Button>
+            </div>
           )}
         </div>
       </SettingsCard>
@@ -243,62 +379,193 @@ export function VoiceSection() {
             </div>
           )}
 
-          {/* Voice Selection */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Voice</label>
-            {voicesLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading voices...
-              </div>
-            ) : voices.length > 0 ? (
-              <Select
-                value={selectedVoice}
-                onValueChange={setSelectedVoice}
-              >
-                <SelectTrigger className="w-full max-w-xs">
-                  <SelectValue placeholder="Default voice" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Default voice</SelectItem>
-                  {voices.map((voice) => (
-                    <SelectItem key={voice.id} value={voice.id}>
-                      <span>{voice.name}</span>
-                      {voice.language && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          {voice.language}
-                        </span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
+          {/* Actionable setup guidance when TTS unavailable */}
+          {!ttsAvailable && !statusLoading && (
+            <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                No voices available. Ensure a TTS provider is configured.
+                Set up a TTS provider to enable spoken responses.
               </p>
-            )}
-          </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {TTS_PROVIDERS.map((provider) => (
+                  <ProviderSetupCard key={provider.name} provider={provider} />
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => {
+                  const el = document.querySelector('[data-settings-section="ai-providers"]');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Go to AI Providers
+              </Button>
+            </div>
+          )}
+
+          {/* Voice Selection */}
+          {ttsAvailable && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Voice</label>
+              {voicesLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading voices...
+                </div>
+              ) : voices.length > 0 ? (
+                <Select
+                  value={selectedVoice}
+                  onValueChange={setSelectedVoice}
+                >
+                  <SelectTrigger className="w-full max-w-xs">
+                    <SelectValue placeholder="Default voice" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Default voice</SelectItem>
+                    {voices.map((voice) => (
+                      <SelectItem key={voice.id} value={voice.id}>
+                        <span>{voice.name}</span>
+                        {voice.language && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {voice.language}
+                          </span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No voices available. Ensure a TTS provider is configured.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Test Button */}
-          <div className="flex items-center gap-3 pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTestTts}
-              disabled={isPlayingTest || testTts.isPending || !status?.available}
-              className="gap-2"
-            >
-              {isPlayingTest || testTts.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              {isPlayingTest ? 'Playing...' : 'Test TTS'}
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              Plays a sample phrase using the selected voice
-            </span>
+          {ttsAvailable && (
+            <div className="flex items-center gap-3 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTestTts}
+                disabled={isPlayingTest || testTts.isPending}
+                className="gap-2"
+              >
+                {isPlayingTest || testTts.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {isPlayingTest ? 'Playing...' : 'Test TTS'}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Plays a sample phrase using the selected voice
+              </span>
+            </div>
+          )}
+        </div>
+      </SettingsCard>
+
+      {/* Talk Mode Configuration */}
+      <SettingsCard
+        title="Talk Mode"
+        description="Hands-free continuous conversation with voice activity detection"
+        icon={<AudioLines className="h-5 w-5" />}
+      >
+        <div className="space-y-5">
+          {/* Enable Talk Mode */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Enable Talk Mode</Label>
+              <p className="text-xs text-muted-foreground">Use Cmd+Shift+V to toggle in chat</p>
+            </div>
+            <Switch
+              checked={talkModeConfig.enabled}
+              onCheckedChange={(v) => updateTalkModeConfig({ enabled: v })}
+            />
+          </div>
+
+          {/* Auto-send transcription */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Auto-send</Label>
+              <p className="text-xs text-muted-foreground">Automatically send transcribed speech</p>
+            </div>
+            <Switch
+              checked={talkModeConfig.autoSend}
+              onCheckedChange={(v) => updateTalkModeConfig({ autoSend: v })}
+            />
+          </div>
+
+          {/* Auto-TTS responses */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Auto-speak responses</Label>
+              <p className="text-xs text-muted-foreground">Speak AI responses aloud</p>
+            </div>
+            <Switch
+              checked={talkModeConfig.autoTts}
+              onCheckedChange={(v) => updateTalkModeConfig({ autoTts: v })}
+            />
+          </div>
+
+          {/* Continuous mode */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Continuous mode</Label>
+              <p className="text-xs text-muted-foreground">Resume listening after AI speaks</p>
+            </div>
+            <Switch
+              checked={talkModeConfig.continuous}
+              onCheckedChange={(v) => updateTalkModeConfig({ continuous: v })}
+            />
+          </div>
+
+          {/* Sensitivity slider */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Sensitivity</Label>
+              <span className="font-mono text-xs text-muted-foreground">
+                {talkModeConfig.speechThreshold}
+              </span>
+            </div>
+            <Slider
+              value={[talkModeConfig.speechThreshold]}
+              onValueChange={([v]) => updateTalkModeConfig({ speechThreshold: v })}
+              min={0.005}
+              max={0.05}
+              step={0.005}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>More sensitive</span>
+              <span>Less sensitive</span>
+            </div>
+          </div>
+
+          {/* Silence duration slider */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Silence duration</Label>
+              <span className="font-mono text-xs text-muted-foreground">
+                {talkModeConfig.silenceDuration}ms
+              </span>
+            </div>
+            <Slider
+              value={[talkModeConfig.silenceDuration]}
+              onValueChange={([v]) => updateTalkModeConfig({ silenceDuration: v })}
+              min={500}
+              max={3000}
+              step={100}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Quick (500ms)</span>
+              <span>Patient (3s)</span>
+            </div>
           </div>
         </div>
       </SettingsCard>

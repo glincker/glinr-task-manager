@@ -126,7 +126,7 @@ export const completeTaskTool: ToolDefinition<CompleteTaskParams, CompleteTaskRe
     logger.info('[Agent] Task marked as complete:', {
       summary: params.summary,
       artifactCount: params.artifacts?.length ?? 0,
-      confidence: params.confidence,
+      confidence: params.confidence ?? 'high',
     });
 
     return {
